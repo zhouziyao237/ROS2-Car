@@ -4,9 +4,10 @@
 #          Designed to work with host's auto-fix-x11.sh script.
 
 # ========== Configuration (修改为你的实际值) ==========
-CONTAINER_NAME="ros2-gui"          # 容器名称
-IMAGE_NAME="my-ros2"               # 你的镜像名称
+CONTAINER_NAME="ros2-gui"           # 容器名称
+IMAGE_NAME="my-ros2"                # 你的镜像名称
 WORKSPACE_VOLUME="ros2_workspace"   # 数据卷名称，用于持久化工作区
+HOST_MOUNT_DIR="/home/ros2-server/ros2-car"              # 要挂载到容器的宿主机目录（默认家目录）
 # =====================================================
 
 # 检查 Docker 是否可用
@@ -58,6 +59,7 @@ start_container() {
             -v "$WORKSPACE_VOLUME:/root/workspace" \
             -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
             -v "$HOME/.Xauthority:/root/.Xauthority:ro" \
+            -v "$HOST_MOUNT_DIR:/host-home" \
             "$IMAGE_NAME" \
             bash -c "while true; do sleep 3600; done"
         echo "Container started."
