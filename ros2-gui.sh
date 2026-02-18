@@ -1,44 +1,47 @@
 #!/bin/bash
 # Filename: ros2-gui.sh
-# Purpose: Manage a persistent ROS2 GUI container with automatic X11 forwarding fix.
-#          Designed to work with host's auto-fix-x11.sh script.
+# Purpose: Manage a persistent ROS2 GUI container with dynamic X11 cookie injection.
+#          Creates a session-specific writable .Xauthority file inside container,
+#          completely bypassing mounted file permission issues.
 
-# ========== Configuration (修改为你的实际值) ==========
-CONTAINER_NAME="ros2-gui"           # 容器名称
-IMAGE_NAME="my-ros2"                # 你的镜像名称
-WORKSPACE_VOLUME="ros2_workspace"   # 数据卷名称，用于持久化工作区
-HOST_MOUNT_DIR="/home/ros2-server/ros2-car"              # 要挂载到容器的宿主机目录（默认家目录）
-# =====================================================
+# ========== Configuration (Modify these to match your setup) ==========
+CONTAINER_NAME="ros2-gui"           # Container name
+IMAGE_NAME="my-ros2"                # Your Docker image name
+WORKSPACE_VOLUME="ros2_workspace"   # Docker volume for persistent workspace
+HOST_MOUNT_DIR="/home/ros2-server/ros2-car"   # Host directory to mount into container
+# ======================================================================
 
-# 检查 Docker 是否可用
+# Check if Docker is available
 if ! command -v docker &> /dev/null; then
     echo "Error: docker command not found. Please install Docker first."
     exit 1
 fi
 
-# 每次执行脚本时确保宿主机允许 Docker 容器连接 X 服务器（只需一次）
+# Allow Docker containers to connect to the X server (needs to be done only once)
 xhost +local:docker &> /dev/null
 
-# 显示帮助信息
+# Display help
 show_help() {
     cat << EOF
 Usage: $0 {start|exec|stop|rm}
 
 Commands:
-  start   - Create and start the persistent container (if exists, start it)
-  exec    - Enter the container, automatically fix X11 auth and pass DISPLAY
+  start   - Create and start the persistent container (if exists, just start it)
+  exec    - Enter the container with dynamic X11 cookie injection
   stop    - Stop the container
   rm      - Remove the container
 
 Description:
   - Uses host networking (--net=host) so container shares host's network.
-  - Mounts host's .Xauthority and X11 socket for GUI forwarding.
-  - Before entering, runs host's ~/ros2-car/scripts/auto-fix-x11.sh to ensure correct X11 cookies.
-  - Forces DISPLAY to "localhost:display_number" inside container for compatibility.
+  - Mounts host's .Xauthority (read-only) and X11 socket as fallback.
+  - On 'exec', creates a session-specific temporary .Xauthority file inside container.
+  - Injects current X11 cookie for both original hostname and localhost.
+  - Sets DISPLAY=":$DISPLAY_NUM" for maximum compatibility.
+  - Each session gets its own authentication file, avoiding permission issues.
 EOF
 }
 
-# 启动容器（如果不存在则创建，已存在则启动）
+# Start the container (create if not exists, start if stopped)
 start_container() {
     if docker inspect "$CONTAINER_NAME" &> /dev/null; then
         echo "Container $CONTAINER_NAME already exists."
@@ -50,23 +53,26 @@ start_container() {
         fi
     else
         echo "Creating and starting new container $CONTAINER_NAME ..."
-        # 创建数据卷（如果不存在）
+        # Create volume if it doesn't exist
         docker volume inspect "$WORKSPACE_VOLUME" &> /dev/null || docker volume create "$WORKSPACE_VOLUME"
-        # 运行容器（后台，长期运行）
+        # Run container in background (keeps running)
         docker run -it -d \
             --name "$CONTAINER_NAME" \
             --net=host \
             -v "$WORKSPACE_VOLUME:/root/workspace" \
             -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
-            -v "$HOME/.Xauthority:/root/.Xauthority:ro" \
+            -v "$HOME/.Xauthority:/root/.Xauthority:ro" \   # Mount host's .Xauthority read-only (optional)
             -v "$HOST_MOUNT_DIR:/host-home" \
             "$IMAGE_NAME" \
             bash -c "while true; do sleep 3600; done"
         echo "Container started."
+
+        echo "Please ensure that 'xauth' is installed inside the container."
+        echo "If not, run: apt update && apt install -y xauth"
     fi
 }
 
-# 进入容器（自动修复 X11 并传递环境变量）
+# Enter the container with dynamic X11 cookie injection
 exec_container() {
     if ! docker inspect "$CONTAINER_NAME" &> /dev/null; then
         echo "Container $CONTAINER_NAME does not exist. Run '$0 start' first."
@@ -77,43 +83,87 @@ exec_container() {
         docker start "$CONTAINER_NAME"
     fi
 
-    # 第一步：在宿主机上运行 auto-fix-x11.sh（如果存在），确保 .Xauthority 包含 localhost 条目
+    # Step 1: Run auto-fix-x11.sh on host if available (optional, helps but not required)
     if [ -f "$HOME/ros2-car/scripts/auto-fix-x11.sh" ]; then
         echo "Updating host X11 authentication with auto-fix-x11.sh..."
         "$HOME/ros2-car/scripts/auto-fix-x11.sh"
     else
-        echo "Warning: $HOME/ros2-car/scripts/auto-fix-x11.sh not found. Make sure .Xauthority has correct entries."
+        echo "Note: $HOME/ros2-car/scripts/auto-fix-x11.sh not found. Continuing with direct injection."
     fi
 
-    # 第二步：从当前 DISPLAY 中提取显示编号（例如从 ros2-server:10.0 提取 10）
+    # Step 2: Extract display number from current DISPLAY (e.g., from ros2-server:10.0 -> 10)
     DISPLAY_NUM=$(echo "$DISPLAY" | sed -n 's/.*:\([0-9]*\)\..*/\1/p')
     if [ -z "$DISPLAY_NUM" ]; then
         echo "Error: Cannot extract display number from DISPLAY='$DISPLAY'"
         exit 1
     fi
 
-    # 第三步：使用 localhost 作为显示服务器地址，并明确传递 XAUTHORITY
-    echo "Entering container $CONTAINER_NAME with DISPLAY=localhost:$DISPLAY_NUM"
+    # Step 3: Retrieve the full xauth cookie entry for current DISPLAY from host
+    # First try exact match with current DISPLAY
+    COOKIE_ENTRY=$(xauth list "$DISPLAY" 2>/dev/null | head -1)
+    if [ -z "$COOKIE_ENTRY" ]; then
+        # Fallback: try to match by display number (ignore hostname)
+        COOKIE_ENTRY=$(xauth list 2>/dev/null | grep ":$DISPLAY_NUM" | grep -v unix | head -1)
+    fi
+    if [ -z "$COOKIE_ENTRY" ]; then
+        echo "Error: No xauth entry found for DISPLAY=$DISPLAY (display number :$DISPLAY_NUM)"
+        echo "Please run 'xauth list' on the host to verify."
+        exit 1
+    fi
+
+    # Extract the cookie value (third field)
+    COOKIE_VALUE=$(echo "$COOKIE_ENTRY" | awk '{print $3}')
+
+    echo "Injecting X11 cookie for display :$DISPLAY_NUM into container..."
+
+    # Step 4: Construct the command to run inside container
+    # Use a variable to hold the multi-line command, avoiding line continuation issues
+    INNER_CMD="
+        # Create session-specific temporary file using PID for uniqueness
+        SESSION_XAUTH=/tmp/.Xauthority_\$\$
+        touch \"\$SESSION_XAUTH\"
+        chmod 600 \"\$SESSION_XAUTH\"
+
+        # Inject the original hostname entry (e.g., ros2-server:11)
+        echo 'Adding entry: $COOKIE_ENTRY'
+        xauth -f \"\$SESSION_XAUTH\" add $COOKIE_ENTRY
+
+        # Inject localhost entry with the same cookie value
+        echo \"Adding entry: localhost:$DISPLAY_NUM MIT-MAGIC-COOKIE-1 $COOKIE_VALUE\"
+        xauth -f \"\$SESSION_XAUTH\" add localhost:$DISPLAY_NUM MIT-MAGIC-COOKIE-1 $COOKIE_VALUE
+
+        # Set XAUTHORITY to the session-specific file
+        export XAUTHORITY=\"\$SESSION_XAUTH\"
+
+        echo ''
+        echo 'Session-specific X11 authentication cookies (from \$XAUTHORITY):'
+        xauth -f \"\$XAUTHORITY\" list
+        echo ''
+
+        # Start interactive shell
+        exec bash
+    "
+
+    # Execute docker exec with the constructed command
     docker exec -it \
-        -e DISPLAY="localhost:$DISPLAY_NUM" \
-        -e XAUTHORITY=/root/.Xauthority \
+        -e DISPLAY=":$DISPLAY_NUM" \
         "$CONTAINER_NAME" \
-        bash
+        bash -c "$INNER_CMD"
 }
 
-# 停止容器
+# Stop the container
 stop_container() {
     echo "Stopping container $CONTAINER_NAME ..."
     docker stop "$CONTAINER_NAME"
 }
 
-# 删除容器
+# Remove the container
 rm_container() {
     echo "Removing container $CONTAINER_NAME ..."
     docker rm -f "$CONTAINER_NAME"
 }
 
-# 主命令解析
+# Main command parsing
 case "${1:-}" in
     start)
         start_container
