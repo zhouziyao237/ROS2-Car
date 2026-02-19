@@ -12,5 +12,9 @@ launch/gazebo.launch.py
 my_robot/__init__.py
 my_robot/my_teleop.py
 resource/my_robot
+rvizs/slam_view.rviz
+test/test_copyright.py
+test/test_flake8.py
+test/test_pep257.py
 urdf/MY-Robot.urdf
 worlds/my-world.world

@@ -1,0 +1,6 @@
+source;share/slam-nav/hook/pythonpath.ps1
+source;share/slam-nav/hook/pythonpath.dsv
+source;share/slam-nav/hook/pythonpath.sh
+source;share/slam-nav/hook/ament_prefix_path.ps1
+source;share/slam-nav/hook/ament_prefix_path.dsv
+source;share/slam-nav/hook/ament_prefix_path.sh

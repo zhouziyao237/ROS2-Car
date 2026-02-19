@@ -5,6 +5,7 @@
 /host-home/MY-Robot/install/my_robot/share/ament_index/resource_index/packages/my_robot
 /host-home/MY-Robot/install/my_robot/share/my_robot/package.xml
 /host-home/MY-Robot/install/my_robot/share/my_robot/launch/gazebo.launch.py
+/host-home/MY-Robot/install/my_robot/share/my_robot/rvizs/slam_view.rviz
 /host-home/MY-Robot/install/my_robot/share/my_robot/urdf/MY-Robot.urdf
 /host-home/MY-Robot/install/my_robot/share/my_robot/worlds/my-world.world
 /host-home/MY-Robot/install/my_robot/lib/python3.10/site-packages/my_robot-0.0.0-py3.10.egg-info/dependency_links.txt

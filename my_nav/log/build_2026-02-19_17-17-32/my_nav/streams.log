@@ -1,0 +1,37 @@
+[0.843s] Invoking command in '/host-home/my_nav': PYTHONPATH=/host-home/my_nav/build/my_nav/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/host-home/my_nav/install/my_nav/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base build/my_nav build --build-base /host-home/my_nav/build/my_nav/build install --record /host-home/my_nav/build/my_nav/install.log --single-version-externally-managed install_data
+[1.121s] running egg_info
+[1.122s] creating build/my_nav/my_nav.egg-info
+[1.122s] writing build/my_nav/my_nav.egg-info/PKG-INFO
+[1.122s] writing dependency_links to build/my_nav/my_nav.egg-info/dependency_links.txt
+[1.122s] writing entry points to build/my_nav/my_nav.egg-info/entry_points.txt
+[1.122s] writing requirements to build/my_nav/my_nav.egg-info/requires.txt
+[1.123s] writing top-level names to build/my_nav/my_nav.egg-info/top_level.txt
+[1.123s] writing manifest file 'build/my_nav/my_nav.egg-info/SOURCES.txt'
+[1.126s] reading manifest file 'build/my_nav/my_nav.egg-info/SOURCES.txt'
+[1.127s] writing manifest file 'build/my_nav/my_nav.egg-info/SOURCES.txt'
+[1.128s] running build
+[1.128s] running build_py
+[1.128s] creating /host-home/my_nav/build/my_nav/build
+[1.128s] creating /host-home/my_nav/build/my_nav/build/lib
+[1.128s] creating /host-home/my_nav/build/my_nav/build/lib/my_nav
+[1.128s] copying my_nav/__init__.py -> /host-home/my_nav/build/my_nav/build/lib/my_nav
+[1.128s] running install
+[1.129s] running install_lib
+[1.133s] creating /host-home/my_nav/install/my_nav/lib/python3.10/site-packages/my_nav
+[1.133s] copying /host-home/my_nav/build/my_nav/build/lib/my_nav/__init__.py -> /host-home/my_nav/install/my_nav/lib/python3.10/site-packages/my_nav
+[1.133s] byte-compiling /host-home/my_nav/install/my_nav/lib/python3.10/site-packages/my_nav/__init__.py to __init__.cpython-310.pyc
+[1.133s] running install_data
+[1.134s] creating /host-home/my_nav/install/my_nav/share/ament_index
+[1.134s] creating /host-home/my_nav/install/my_nav/share/ament_index/resource_index
+[1.134s] creating /host-home/my_nav/install/my_nav/share/ament_index/resource_index/packages
+[1.134s] copying resource/my_nav -> /host-home/my_nav/install/my_nav/share/ament_index/resource_index/packages
+[1.134s] copying package.xml -> /host-home/my_nav/install/my_nav/share/my_nav
+[1.134s] creating /host-home/my_nav/install/my_nav/share/my_nav/launch
+[1.134s] copying launch/navigation.launch.py -> /host-home/my_nav/install/my_nav/share/my_nav/launch
+[1.134s] creating /host-home/my_nav/install/my_nav/share/my_nav/config
+[1.134s] copying config/nav2_params.yaml -> /host-home/my_nav/install/my_nav/share/my_nav/config
+[1.135s] running install_egg_info
+[1.141s] Copying build/my_nav/my_nav.egg-info to /host-home/my_nav/install/my_nav/lib/python3.10/site-packages/my_nav-0.0.0-py3.10.egg-info
+[1.143s] running install_scripts
+[1.171s] writing list of installed files to '/host-home/my_nav/build/my_nav/install.log'
+[1.198s] Invoked command in '/host-home/my_nav' returned '0': PYTHONPATH=/host-home/my_nav/build/my_nav/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/host-home/my_nav/install/my_nav/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base build/my_nav build --build-base /host-home/my_nav/build/my_nav/build install --record /host-home/my_nav/build/my_nav/install.log --single-version-externally-managed install_data

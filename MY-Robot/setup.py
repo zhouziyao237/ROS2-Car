@@ -13,6 +13,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
+        (os.path.join('share', package_name, 'rvizs'), glob('rvizs/*.rviz')),
         (os.path.join('share', package_name, 'urdf'), glob('urdf/*')),
         (os.path.join('share', package_name, 'worlds'), glob('worlds/*.world')),
     ],
@@ -22,7 +23,11 @@ setup(
     maintainer_email='your_email@example.com',
     description='My robot description',
     license='TODO: License',
-    tests_require=['pytest'],
+        extras_require={
+        'test': [
+            'pytest',
+        ],
+    },
     entry_points={
         'console_scripts': [
             'my_teleop = my_robot.my_teleop:main',

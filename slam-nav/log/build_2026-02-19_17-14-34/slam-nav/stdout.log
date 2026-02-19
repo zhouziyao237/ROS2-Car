@@ -1,0 +1,38 @@
+running egg_info
+creating build/slam-nav/slam_nav.egg-info
+writing build/slam-nav/slam_nav.egg-info/PKG-INFO
+writing dependency_links to build/slam-nav/slam_nav.egg-info/dependency_links.txt
+writing entry points to build/slam-nav/slam_nav.egg-info/entry_points.txt
+writing requirements to build/slam-nav/slam_nav.egg-info/requires.txt
+writing top-level names to build/slam-nav/slam_nav.egg-info/top_level.txt
+writing manifest file 'build/slam-nav/slam_nav.egg-info/SOURCES.txt'
+reading manifest file 'build/slam-nav/slam_nav.egg-info/SOURCES.txt'
+writing manifest file 'build/slam-nav/slam_nav.egg-info/SOURCES.txt'
+running build
+running build_py
+creating /host-home/slam-nav/build/slam-nav/build
+creating /host-home/slam-nav/build/slam-nav/build/lib
+creating /host-home/slam-nav/build/slam-nav/build/lib/slam-nav
+copying slam-nav/__init__.py -> /host-home/slam-nav/build/slam-nav/build/lib/slam-nav
+running install
+running install_lib
+creating /host-home/slam-nav/install/slam-nav/lib/python3.10/site-packages/slam-nav
+copying /host-home/slam-nav/build/slam-nav/build/lib/slam-nav/__init__.py -> /host-home/slam-nav/install/slam-nav/lib/python3.10/site-packages/slam-nav
+byte-compiling /host-home/slam-nav/install/slam-nav/lib/python3.10/site-packages/slam-nav/__init__.py to __init__.cpython-310.pyc
+running install_data
+creating /host-home/slam-nav/install/slam-nav/share/ament_index
+creating /host-home/slam-nav/install/slam-nav/share/ament_index/resource_index
+creating /host-home/slam-nav/install/slam-nav/share/ament_index/resource_index/packages
+copying resource/slam-nav -> /host-home/slam-nav/install/slam-nav/share/ament_index/resource_index/packages
+copying package.xml -> /host-home/slam-nav/install/slam-nav/share/slam-nav
+creating /host-home/slam-nav/install/slam-nav/share/slam-nav/launch
+copying launch/slam.launch.py -> /host-home/slam-nav/install/slam-nav/share/slam-nav/launch
+creating /host-home/slam-nav/install/slam-nav/share/slam-nav/config
+copying config/amcl_params.yaml -> /host-home/slam-nav/install/slam-nav/share/slam-nav/config
+creating /host-home/slam-nav/install/slam-nav/share/slam-nav/maps
+copying maps/my_map.yaml -> /host-home/slam-nav/install/slam-nav/share/slam-nav/maps
+copying maps/my_map.pgm -> /host-home/slam-nav/install/slam-nav/share/slam-nav/maps
+running install_egg_info
+Copying build/slam-nav/slam_nav.egg-info to /host-home/slam-nav/install/slam-nav/lib/python3.10/site-packages/slam_nav-0.0.0-py3.10.egg-info
+running install_scripts
+writing list of installed files to '/host-home/slam-nav/build/slam-nav/install.log'

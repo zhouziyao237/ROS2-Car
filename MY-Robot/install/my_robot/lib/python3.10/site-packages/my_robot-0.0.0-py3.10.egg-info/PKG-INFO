@@ -7,6 +7,7 @@ Maintainer: your_name
 Maintainer-email: your_email@example.com
 License: TODO: License
 Platform: UNKNOWN
+Provides-Extra: test
 
 UNKNOWN
 

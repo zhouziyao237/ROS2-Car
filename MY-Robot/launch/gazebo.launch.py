@@ -10,11 +10,13 @@ def generate_launch_description():
     package_name = 'my_robot'
     urdf_name = 'MY-Robot.urdf'
     world_name = 'my-world.world'
+    rviz_name = 'slam_view.rviz'
  
     ld = LaunchDescription()
     pkg_share = FindPackageShare(package=package_name).find(package_name) 
     urdf_model_path = os.path.join(pkg_share, f'urdf/{urdf_name}')
     gazebo_world_path = os.path.join(pkg_share, f'worlds/{world_name}')
+    rviz_config_path = os.path.join(pkg_share, f'rvizs/{rviz_name}')
  
     # Start Gazebo server
     start_gazebo_cmd =  ExecuteProcess(
@@ -41,7 +43,8 @@ def generate_launch_description():
         executable='rviz2',
         name='rviz2',
         output='screen',
-        # arguments=['-d', default_rviz_config_path]
+        arguments=['-d', rviz_config_path],
+        parameters=[{'use_sim_time': True}]   # 关键：使用仿真时间
         )
  
     ld.add_action(start_gazebo_cmd)

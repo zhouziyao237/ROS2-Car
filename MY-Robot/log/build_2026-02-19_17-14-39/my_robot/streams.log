@@ -1,0 +1,45 @@
+[0.486s] Invoking command in '/host-home/MY-Robot': PYTHONPATH=/host-home/MY-Robot/build/my_robot/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/host-home/MY-Robot/install/my_robot/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base build/my_robot build --build-base /host-home/MY-Robot/build/my_robot/build install --record /host-home/MY-Robot/build/my_robot/install.log --single-version-externally-managed install_data
+[0.661s] running egg_info
+[0.661s] creating build/my_robot/my_robot.egg-info
+[0.661s] writing build/my_robot/my_robot.egg-info/PKG-INFO
+[0.661s] writing dependency_links to build/my_robot/my_robot.egg-info/dependency_links.txt
+[0.662s] writing entry points to build/my_robot/my_robot.egg-info/entry_points.txt
+[0.662s] writing requirements to build/my_robot/my_robot.egg-info/requires.txt
+[0.662s] writing top-level names to build/my_robot/my_robot.egg-info/top_level.txt
+[0.662s] writing manifest file 'build/my_robot/my_robot.egg-info/SOURCES.txt'
+[0.663s] reading manifest file 'build/my_robot/my_robot.egg-info/SOURCES.txt'
+[0.663s] writing manifest file 'build/my_robot/my_robot.egg-info/SOURCES.txt'
+[0.664s] running build
+[0.664s] running build_py
+[0.664s] creating /host-home/MY-Robot/build/my_robot/build
+[0.664s] creating /host-home/MY-Robot/build/my_robot/build/lib
+[0.664s] creating /host-home/MY-Robot/build/my_robot/build/lib/my_robot
+[0.664s] copying my_robot/__init__.py -> /host-home/MY-Robot/build/my_robot/build/lib/my_robot
+[0.664s] copying my_robot/my_teleop.py -> /host-home/MY-Robot/build/my_robot/build/lib/my_robot
+[0.664s] running install
+[0.664s] running install_lib
+[0.665s] creating /host-home/MY-Robot/install/my_robot/lib/python3.10/site-packages/my_robot
+[0.665s] copying /host-home/MY-Robot/build/my_robot/build/lib/my_robot/__init__.py -> /host-home/MY-Robot/install/my_robot/lib/python3.10/site-packages/my_robot
+[0.665s] copying /host-home/MY-Robot/build/my_robot/build/lib/my_robot/my_teleop.py -> /host-home/MY-Robot/install/my_robot/lib/python3.10/site-packages/my_robot
+[0.665s] byte-compiling /host-home/MY-Robot/install/my_robot/lib/python3.10/site-packages/my_robot/__init__.py to __init__.cpython-310.pyc
+[0.666s] byte-compiling /host-home/MY-Robot/install/my_robot/lib/python3.10/site-packages/my_robot/my_teleop.py to my_teleop.cpython-310.pyc
+[0.666s] running install_data
+[0.666s] creating /host-home/MY-Robot/install/my_robot/share/ament_index
+[0.666s] creating /host-home/MY-Robot/install/my_robot/share/ament_index/resource_index
+[0.666s] creating /host-home/MY-Robot/install/my_robot/share/ament_index/resource_index/packages
+[0.667s] copying resource/my_robot -> /host-home/MY-Robot/install/my_robot/share/ament_index/resource_index/packages
+[0.667s] copying package.xml -> /host-home/MY-Robot/install/my_robot/share/my_robot
+[0.667s] creating /host-home/MY-Robot/install/my_robot/share/my_robot/launch
+[0.667s] copying launch/gazebo.launch.py -> /host-home/MY-Robot/install/my_robot/share/my_robot/launch
+[0.667s] creating /host-home/MY-Robot/install/my_robot/share/my_robot/rvizs
+[0.667s] copying rvizs/slam_view.rviz -> /host-home/MY-Robot/install/my_robot/share/my_robot/rvizs
+[0.667s] creating /host-home/MY-Robot/install/my_robot/share/my_robot/urdf
+[0.667s] copying urdf/MY-Robot.urdf -> /host-home/MY-Robot/install/my_robot/share/my_robot/urdf
+[0.667s] creating /host-home/MY-Robot/install/my_robot/share/my_robot/worlds
+[0.667s] copying worlds/my-world.world -> /host-home/MY-Robot/install/my_robot/share/my_robot/worlds
+[0.667s] running install_egg_info
+[0.669s] Copying build/my_robot/my_robot.egg-info to /host-home/MY-Robot/install/my_robot/lib/python3.10/site-packages/my_robot-0.0.0-py3.10.egg-info
+[0.669s] running install_scripts
+[0.687s] Installing my_teleop script to /host-home/MY-Robot/install/my_robot/lib/my_robot
+[0.687s] writing list of installed files to '/host-home/MY-Robot/build/my_robot/install.log'
+[0.706s] Invoked command in '/host-home/MY-Robot' returned '0': PYTHONPATH=/host-home/MY-Robot/build/my_robot/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/host-home/MY-Robot/install/my_robot/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base build/my_robot build --build-base /host-home/MY-Robot/build/my_robot/build install --record /host-home/MY-Robot/build/my_robot/install.log --single-version-externally-managed install_data
