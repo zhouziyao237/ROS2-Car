@@ -6,8 +6,6 @@ Panels:
       Expanded:
         - /Global Options1
         - /Status1
-        - /Grid1
-        - /RobotModel1
         - /Odometry1
         - /LaserScan1
         - /LaserScan1/Topic1
@@ -170,6 +168,8 @@ Visualization Manager:
           Value: true
         left_wheel_link:
           Value: true
+        map:
+          Value: true
         odom:
           Value: true
         right_wheel_link:
@@ -180,19 +180,20 @@ Visualization Manager:
       Show Axes: true
       Show Names: true
       Tree:
-        odom:
-          base_footprint:
-            base_link:
-              caster_link:
-                {}
-              imu_link:
-                {}
-              laser_link:
-                {}
-              left_wheel_link:
-                {}
-              right_wheel_link:
-                {}
+        map:
+          odom:
+            base_footprint:
+              base_link:
+                caster_link:
+                  {}
+                imu_link:
+                  {}
+                laser_link:
+                  {}
+                left_wheel_link:
+                  {}
+                right_wheel_link:
+                  {}
       Update Interval: 0
       Value: true
     - Alpha: 0.699999988079071
@@ -394,7 +395,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 15.955280303955078
+      Distance: 23.013395309448242
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -409,10 +410,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.9497964382171631
+      Pitch: 1.2047961950302124
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz_default_plugins)
-      Yaw: 0.09358645230531693
+      Yaw: 6.246772289276123
     Saved: ~
 Window Geometry:
   Displays:
