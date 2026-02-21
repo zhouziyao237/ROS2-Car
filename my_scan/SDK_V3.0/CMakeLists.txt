@@ -1,5 +1,5 @@
 project(CAMSENSE_SDK)
-cmake_minimum_required (VERSION 2.8)
+cmake_minimum_required(VERSION 3.10)
 add_definitions(-std=c++11) # Use C++11
 
 # 修复路径变量（使用CMAKE_SOURCE_DIR）

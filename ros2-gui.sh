@@ -5,8 +5,8 @@
 #          completely bypassing mounted file permission issues.
 
 # ========== Configuration (Modify these to match your setup) ==========
-CONTAINER_NAME="ros2-gui"           # Container name
-IMAGE_NAME="my-ros2"                # Your Docker image name
+CONTAINER_NAME="my-ros2"           # Container name
+IMAGE_NAME="my-ros2-env"                # Your Docker image name
 WORKSPACE_VOLUME="ros2_workspace"   # Docker volume for persistent workspace
 HOST_MOUNT_DIR="/home/ros2-server/ros2-car"   # Host directory to mount into container
 # ======================================================================
@@ -23,10 +23,13 @@ xhost +local:docker &> /dev/null
 # Display help
 show_help() {
     cat << EOF
-Usage: $0 {start|exec|stop|rm}
+Usage: $0 {start|exec|stop|rm} [extra docker run options...]
 
 Commands:
-  start   - Create and start the persistent container (if exists, just start it)
+  start   - Create and start the persistent container. You can append extra
+            docker run options, e.g.:
+              $0 start --device /dev/bus/usb:/dev/bus/usb
+              $0 start -v /extra/data:/data --env ROS_DOMAIN_ID=42
   exec    - Enter the container with dynamic X11 cookie injection
   stop    - Stop the container
   rm      - Remove the container
@@ -42,7 +45,9 @@ EOF
 }
 
 # Start the container (create if not exists, start if stopped)
+# Modified to accept extra docker run arguments
 start_container() {
+    local extra_args=("$@")   # Capture all additional arguments
     if docker inspect "$CONTAINER_NAME" &> /dev/null; then
         echo "Container $CONTAINER_NAME already exists."
         if [ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER_NAME")" != "true" ]; then
@@ -55,14 +60,15 @@ start_container() {
         echo "Creating and starting new container $CONTAINER_NAME ..."
         # Create volume if it doesn't exist
         docker volume inspect "$WORKSPACE_VOLUME" &> /dev/null || docker volume create "$WORKSPACE_VOLUME"
-        # Run container in background (keeps running)
+        # Run container in background (keeps running), inserting extra args before image name
         docker run -it -d \
             --name "$CONTAINER_NAME" \
             --net=host \
             -v "$WORKSPACE_VOLUME:/root/workspace" \
             -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
-            -v "$HOME/.Xauthority:/root/.Xauthority:ro" \   # Mount host's .Xauthority read-only (optional)
+            -v "$HOME/.Xauthority:/root/.Xauthority:ro" \
             -v "$HOST_MOUNT_DIR:/host-home" \
+            "${extra_args[@]}" \          # <-- Extra arguments inserted here
             "$IMAGE_NAME" \
             bash -c "while true; do sleep 3600; done"
         echo "Container started."
@@ -117,7 +123,6 @@ exec_container() {
     echo "Injecting X11 cookie for display :$DISPLAY_NUM into container..."
 
     # Step 4: Construct the command to run inside container
-    # Use a variable to hold the multi-line command, avoiding line continuation issues
     INNER_CMD="
         # Create session-specific temporary file using PID for uniqueness
         SESSION_XAUTH=/tmp/.Xauthority_\$\$
@@ -144,7 +149,6 @@ exec_container() {
         exec bash
     "
 
-    # Execute docker exec with the constructed command
     docker exec -it \
         -e DISPLAY=":$DISPLAY_NUM" \
         "$CONTAINER_NAME" \
@@ -166,7 +170,8 @@ rm_container() {
 # Main command parsing
 case "${1:-}" in
     start)
-        start_container
+        shift          # Remove 'start' from argument list
+        start_container "$@"   # Pass remaining arguments to function
         ;;
     exec|enter)
         exec_container

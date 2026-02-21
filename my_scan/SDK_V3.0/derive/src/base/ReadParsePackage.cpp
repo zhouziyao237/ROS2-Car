@@ -4,15 +4,15 @@
 #include <chrono>
 
 
-#define CENTER_BASE_ANGLE 28.5  //ÏßÐÔ²¹³¥½Ç¶È
+#define CENTER_BASE_ANGLE 28.5  //ï¿½ï¿½ï¿½Ô²ï¿½ï¿½ï¿½ï¿½Ç¶ï¿½
 
-#define FPS_MAX 3100    //×î´ófps
-#define FPS_MIN 2900    //×îÐ¡fps
-#define FPS_CONTINUE_SECOND 5    //fpsÒì³£µÄ³ÖÐøÊ±¼ä
+#define FPS_MAX 3100    //ï¿½ï¿½ï¿½fps
+#define FPS_MIN 2900    //ï¿½ï¿½Ð¡fps
+#define FPS_CONTINUE_SECOND 5    //fpsï¿½ì³£ï¿½Ä³ï¿½ï¿½ï¿½Ê±ï¿½ï¿½
 
-#define SPEED_MAX 420     //×î´óËÙ¶È
-#define SPEED_MIN 300     //×îÐ¡ËÙ¶È
-#define SPEED_CONTINUE_SECOND 5   //×î´óËÙ¶È»òÕß×îÐ¡ËÙ¶ÈÒì³£µÄ³ÖÐøÊ±¼ä
+#define SPEED_MAX 420     //ï¿½ï¿½ï¿½ï¿½Ù¶ï¿½
+#define SPEED_MIN 300     //ï¿½ï¿½Ð¡ï¿½Ù¶ï¿½
+#define SPEED_CONTINUE_SECOND 5   //ï¿½ï¿½ï¿½ï¿½Ù¶È»ï¿½ï¿½ï¿½ï¿½ï¿½Ð¡ï¿½Ù¶ï¿½ï¿½ì³£ï¿½Ä³ï¿½ï¿½ï¿½Ê±ï¿½ï¿½
 
 ReadParsePackage::ReadParsePackage()
 {

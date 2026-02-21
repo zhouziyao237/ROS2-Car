@@ -1,0 +1,4 @@
+{
+    "cmake.sourceDirectory": "/host-home/my_scan/ros2_src",
+    "cmake.buildDirectory": "/host-home/my_scan/ros2_src/build",
+}

@@ -57,7 +57,7 @@ int main(int argc, char **argv)
     bool isReverse = true;
     while (!isExit)
     {
-  /*      node_info nodebuffer[2048];
+        node_info nodebuffer[2048];
         size_t count = 0;
         
         device.GetScanData(nodebuffer, 2048, count, isReverse);
@@ -87,12 +87,12 @@ int main(int argc, char **argv)
         out.write("\n", 1);
         char headTail[64] = {0};
         sprintf(headTail, "%.4f,%.4f,%d\n", nodebuffer[0].angle_q6_checkbit / 64.0f, nodebuffer[count - 1].angle_q6_checkbit / 64.0f, count);
-        out1.write(headTail, strlen(headTail));*/
+        // out1.write(headTail, strlen(headTail));
 
         std::list<node_info> dataList;
         device.GetScanData(dataList, isReverse);
 
-        int errcode = device.GetLastErrCode();
+        errcode = device.GetLastErrCode();
         if (errcode != LIDAR_SUCCESS)
         {
             printf("errcode:%d\n", errcode);
@@ -100,7 +100,7 @@ int main(int argc, char **argv)
 
         if (dataList.empty())
         {
-            //std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
             continue;
         }
 

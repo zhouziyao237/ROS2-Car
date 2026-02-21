@@ -1,4 +1,4 @@
-﻿#include <stdio.h>
+#include <stdio.h>
 #include <iostream>
 #include <string> 
 #include <sstream>
@@ -100,7 +100,7 @@ void sdkCallBackFunDistQ2(LstNodeDistQ2 lstG)
 int getPort()
 {
 	printf("Please select COM:\n");
-	int iPort = 3;
+	int iPort =0;
     std::cin >> iPort;
 	return iPort;
 }

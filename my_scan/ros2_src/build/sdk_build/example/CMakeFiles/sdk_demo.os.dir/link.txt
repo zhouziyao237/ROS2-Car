@@ -1,0 +1,1 @@
+/usr/bin/g++ -g CMakeFiles/sdk_demo.os.dir/sdk_demo.cpp.o -o ../../bin/lib/sdk_demo.os  ../../bin/lib/liblidar_lib.a ../../bin/lib/libbase_lib.a 

@@ -1,0 +1,1 @@
+/usr/bin/g++ -g CMakeFiles/sdk_scanData.os.dir/sdk_scanData.cpp.o -o ../../bin/lib/sdk_scanData.os  ../../bin/lib/liblidar_lib.a ../../bin/lib/libbase_lib.a 

@@ -1,7 +1,7 @@
 #ifndef LIDARTEST_H
 #define LIDARTEST_H
 
-#include "../base/hclidar.h"
+#include "hclidar.h"
 
 #include <stdio.h>
 

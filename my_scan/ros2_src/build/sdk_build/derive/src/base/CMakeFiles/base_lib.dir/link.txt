@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../../../bin/lib/libbase_lib.a CMakeFiles/base_lib.dir/hchead.cpp.o CMakeFiles/base_lib.dir/hclidar.cpp.o CMakeFiles/base_lib.dir/lidar.cpp.o CMakeFiles/base_lib.dir/ReadParsePackage.cpp.o CMakeFiles/base_lib.dir/HC_serial.cpp.o CMakeFiles/base_lib.dir/HcSDK.cpp.o
+/usr/bin/ranlib ../../../../bin/lib/libbase_lib.a
