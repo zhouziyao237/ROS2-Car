@@ -26,20 +26,23 @@ add_subdirectory(${SDKV3_PATH}/derive ${CMAKE_BINARY_DIR}/derive)
 # 创建接口库
 add_library(ROS2LIBS INTERFACE)
 target_link_libraries(ROS2LIBS INTERFACE
+    sdk_lib
     rclcpp::rclcpp
     ${sensor_msgs_LIBRARIES}
 )
 target_include_directories(ROS2LIBS INTERFACE
+    sdk_lib
     ${rclcpp_INCLUDE_DIRS}
     ${sensor_msgs_INCLUDE_DIRS}
 )
 
-# 编译可执行文件
-add_executable(LaserScan.os LaserScan.cpp)
-target_link_libraries(LaserScan.os PRIVATE
-    sdk_lib
-    ROS2LIBS
-)
-target_include_directories(LaserScan.os PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-)
+set(PYBIND11_DIR ${SDKV3_PATH}/pybind11)
+
+find_package(Python COMPONENTS Interpreter Development REQUIRED)
+
+add_subdirectory(${PYBIND11_DIR} ${PYBIND11_DIR})
+
+pybind11_add_module(sdk_py ${SDKV3_PATH}/derive/src/bindings.cpp)
+
+target_link_libraries(sdk_py PRIVATE sdk_lib)
+target_include_directories(sdk_py PRIVATE sdk_lib)

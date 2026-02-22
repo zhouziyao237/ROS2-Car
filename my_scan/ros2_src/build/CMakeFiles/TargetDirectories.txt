@@ -1,6 +1,6 @@
 /host-home/my_scan/ros2_src/build/CMakeFiles/uninstall.dir
 /host-home/my_scan/ros2_src/build/CMakeFiles/ros2_lidar_driver_uninstall.dir
-/host-home/my_scan/ros2_src/build/CMakeFiles/LaserScan.os.dir
+/host-home/my_scan/ros2_src/build/CMakeFiles/sdk_py.dir
 /host-home/my_scan/ros2_src/build/CMakeFiles/test.dir
 /host-home/my_scan/ros2_src/build/CMakeFiles/edit_cache.dir
 /host-home/my_scan/ros2_src/build/CMakeFiles/rebuild_cache.dir
@@ -18,3 +18,6 @@
 /host-home/my_scan/ros2_src/build/derive/src/lidar/CMakeFiles/test.dir
 /host-home/my_scan/ros2_src/build/derive/src/lidar/CMakeFiles/edit_cache.dir
 /host-home/my_scan/ros2_src/build/derive/src/lidar/CMakeFiles/rebuild_cache.dir
+/host-home/my_scan/SDK_V3.0/pybind11/CMakeFiles/test.dir
+/host-home/my_scan/SDK_V3.0/pybind11/CMakeFiles/edit_cache.dir
+/host-home/my_scan/SDK_V3.0/pybind11/CMakeFiles/rebuild_cache.dir

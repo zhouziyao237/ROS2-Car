@@ -1,5 +1,0 @@
-# ignore VS Project files
-build/
-build_win32/
-.vs/
-bin/

@@ -4,7 +4,7 @@
 # compile CXX with /usr/bin/g++
 CXX_DEFINES = 
 
-CXX_INCLUDES = -I/host-home/my_scan/SDK_V3.0/derive/dep -I/host-home/my_scan/SDK_V3.0/derive/dep/eigen3 -I/host-home/my_scan/SDK_V3.0/derive/include -I/host-home/my_scan/SDK_V3.0/derive/lib -I/host-home/my_scan/SDK_V3.0/derive/src/base
+CXX_INCLUDES = -I/host-home/my_scan/SDK_V3.0/derive/sdk_lib -I/host-home/my_scan/SDK_V3.0/derive/INTERFACE -I/host-home/my_scan/SDK_V3.0/derive/dep -I/host-home/my_scan/SDK_V3.0/derive/dep/eigen3 -I/host-home/my_scan/SDK_V3.0/derive/include -I/host-home/my_scan/SDK_V3.0/derive/lib -I/host-home/my_scan/SDK_V3.0/derive/src/base
 
-CXX_FLAGS = -g -std=gnu++14
+CXX_FLAGS = -g -fPIC -std=gnu++14
 

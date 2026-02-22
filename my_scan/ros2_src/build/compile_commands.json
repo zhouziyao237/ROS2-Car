@@ -1,47 +1,47 @@
 [
 {
   "directory": "/host-home/my_scan/ros2_src/build",
-  "command": "/usr/bin/g++ -DDEFAULT_RMW_IMPLEMENTATION=rmw_fastrtps_cpp -DFASTCDR_DYN_LINK -DRCUTILS_ENABLE_FAULT_INJECTION -I/host-home/my_scan/ros2_src -I/host-home/my_scan/SDK_V3.0/derive/include -I/host-home/my_scan/SDK_V3.0/derive/src/base -I/host-home/my_scan/SDK_V3.0/derive/src/lidar -I/opt/ros/humble/include/sensor_msgs -isystem /opt/ros/humble/include/rclcpp -isystem /opt/ros/humble/include/ament_index_cpp -isystem /opt/ros/humble/include/libstatistics_collector -isystem /opt/ros/humble/include/rcl -isystem /opt/ros/humble/include/rcpputils -isystem /opt/ros/humble/include/rcutils -isystem /opt/ros/humble/include/builtin_interfaces -isystem /opt/ros/humble/include/rosgraph_msgs -isystem /opt/ros/humble/include/rosidl_typesupport_cpp -isystem /opt/ros/humble/include/rosidl_typesupport_c -isystem /opt/ros/humble/include/rosidl_runtime_cpp -isystem /opt/ros/humble/include/rcl_yaml_param_parser -isystem /opt/ros/humble/include/statistics_msgs -isystem /opt/ros/humble/include/tracetools -isystem /opt/ros/humble/include/geometry_msgs -isystem /opt/ros/humble/include/std_msgs -isystem /opt/ros/humble/include/rosidl_runtime_c -isystem /opt/ros/humble/include/rosidl_typesupport_interface -isystem /opt/ros/humble/include/rosidl_typesupport_fastrtps_c -isystem /opt/ros/humble/include/rosidl_typesupport_fastrtps_cpp -isystem /opt/ros/humble/include/rmw -isystem /opt/ros/humble/include/rosidl_typesupport_introspection_c -isystem /opt/ros/humble/include/rosidl_typesupport_introspection_cpp -isystem /opt/ros/humble/include/fastcdr -isystem /opt/ros/humble/include/rcl_interfaces -isystem /opt/ros/humble/include/rcl_logging_interface -isystem /opt/ros/humble/include/libyaml_vendor -g -o CMakeFiles/LaserScan.os.dir/LaserScan.cpp.o -c /host-home/my_scan/ros2_src/LaserScan.cpp",
-  "file": "/host-home/my_scan/ros2_src/LaserScan.cpp"
+  "command": "/usr/bin/g++ -Dsdk_py_EXPORTS -I/host-home/my_scan/ros2_src/sdk_lib -I/host-home/my_scan/SDK_V3.0/derive/include -I/host-home/my_scan/SDK_V3.0/derive/src/base -I/host-home/my_scan/SDK_V3.0/derive/src/lidar -isystem /usr/include/python3.10 -isystem /host-home/my_scan/SDK_V3.0/pybind11/include -g -fPIC -fvisibility=hidden -std=gnu++14 -o CMakeFiles/sdk_py.dir/host-home/my_scan/SDK_V3.0/derive/src/bindings.cpp.o -c /host-home/my_scan/SDK_V3.0/derive/src/bindings.cpp",
+  "file": "/host-home/my_scan/SDK_V3.0/derive/src/bindings.cpp"
 },
 {
   "directory": "/host-home/my_scan/ros2_src/build/derive/src/base",
-  "command": "/usr/bin/g++  -I/host-home/my_scan/SDK_V3.0/derive/dep -I/host-home/my_scan/SDK_V3.0/derive/dep/eigen3 -I/host-home/my_scan/SDK_V3.0/derive/include -I/host-home/my_scan/SDK_V3.0/derive/lib -I/host-home/my_scan/SDK_V3.0/derive/src/base -g -std=gnu++14 -o CMakeFiles/base_lib.dir/hchead.cpp.o -c /host-home/my_scan/SDK_V3.0/derive/src/base/hchead.cpp",
+  "command": "/usr/bin/g++  -I/host-home/my_scan/SDK_V3.0/derive/sdk_lib -I/host-home/my_scan/SDK_V3.0/derive/INTERFACE -I/host-home/my_scan/SDK_V3.0/derive/dep -I/host-home/my_scan/SDK_V3.0/derive/dep/eigen3 -I/host-home/my_scan/SDK_V3.0/derive/include -I/host-home/my_scan/SDK_V3.0/derive/lib -I/host-home/my_scan/SDK_V3.0/derive/src/base -g -fPIC -std=gnu++14 -o CMakeFiles/base_lib.dir/hchead.cpp.o -c /host-home/my_scan/SDK_V3.0/derive/src/base/hchead.cpp",
   "file": "/host-home/my_scan/SDK_V3.0/derive/src/base/hchead.cpp"
 },
 {
   "directory": "/host-home/my_scan/ros2_src/build/derive/src/base",
-  "command": "/usr/bin/g++  -I/host-home/my_scan/SDK_V3.0/derive/dep -I/host-home/my_scan/SDK_V3.0/derive/dep/eigen3 -I/host-home/my_scan/SDK_V3.0/derive/include -I/host-home/my_scan/SDK_V3.0/derive/lib -I/host-home/my_scan/SDK_V3.0/derive/src/base -g -std=gnu++14 -o CMakeFiles/base_lib.dir/hclidar.cpp.o -c /host-home/my_scan/SDK_V3.0/derive/src/base/hclidar.cpp",
+  "command": "/usr/bin/g++  -I/host-home/my_scan/SDK_V3.0/derive/sdk_lib -I/host-home/my_scan/SDK_V3.0/derive/INTERFACE -I/host-home/my_scan/SDK_V3.0/derive/dep -I/host-home/my_scan/SDK_V3.0/derive/dep/eigen3 -I/host-home/my_scan/SDK_V3.0/derive/include -I/host-home/my_scan/SDK_V3.0/derive/lib -I/host-home/my_scan/SDK_V3.0/derive/src/base -g -fPIC -std=gnu++14 -o CMakeFiles/base_lib.dir/hclidar.cpp.o -c /host-home/my_scan/SDK_V3.0/derive/src/base/hclidar.cpp",
   "file": "/host-home/my_scan/SDK_V3.0/derive/src/base/hclidar.cpp"
 },
 {
   "directory": "/host-home/my_scan/ros2_src/build/derive/src/base",
-  "command": "/usr/bin/g++  -I/host-home/my_scan/SDK_V3.0/derive/dep -I/host-home/my_scan/SDK_V3.0/derive/dep/eigen3 -I/host-home/my_scan/SDK_V3.0/derive/include -I/host-home/my_scan/SDK_V3.0/derive/lib -I/host-home/my_scan/SDK_V3.0/derive/src/base -g -std=gnu++14 -o CMakeFiles/base_lib.dir/lidar.cpp.o -c /host-home/my_scan/SDK_V3.0/derive/src/base/lidar.cpp",
+  "command": "/usr/bin/g++  -I/host-home/my_scan/SDK_V3.0/derive/sdk_lib -I/host-home/my_scan/SDK_V3.0/derive/INTERFACE -I/host-home/my_scan/SDK_V3.0/derive/dep -I/host-home/my_scan/SDK_V3.0/derive/dep/eigen3 -I/host-home/my_scan/SDK_V3.0/derive/include -I/host-home/my_scan/SDK_V3.0/derive/lib -I/host-home/my_scan/SDK_V3.0/derive/src/base -g -fPIC -std=gnu++14 -o CMakeFiles/base_lib.dir/lidar.cpp.o -c /host-home/my_scan/SDK_V3.0/derive/src/base/lidar.cpp",
   "file": "/host-home/my_scan/SDK_V3.0/derive/src/base/lidar.cpp"
 },
 {
   "directory": "/host-home/my_scan/ros2_src/build/derive/src/base",
-  "command": "/usr/bin/g++  -I/host-home/my_scan/SDK_V3.0/derive/dep -I/host-home/my_scan/SDK_V3.0/derive/dep/eigen3 -I/host-home/my_scan/SDK_V3.0/derive/include -I/host-home/my_scan/SDK_V3.0/derive/lib -I/host-home/my_scan/SDK_V3.0/derive/src/base -g -std=gnu++14 -o CMakeFiles/base_lib.dir/ReadParsePackage.cpp.o -c /host-home/my_scan/SDK_V3.0/derive/src/base/ReadParsePackage.cpp",
+  "command": "/usr/bin/g++  -I/host-home/my_scan/SDK_V3.0/derive/sdk_lib -I/host-home/my_scan/SDK_V3.0/derive/INTERFACE -I/host-home/my_scan/SDK_V3.0/derive/dep -I/host-home/my_scan/SDK_V3.0/derive/dep/eigen3 -I/host-home/my_scan/SDK_V3.0/derive/include -I/host-home/my_scan/SDK_V3.0/derive/lib -I/host-home/my_scan/SDK_V3.0/derive/src/base -g -fPIC -std=gnu++14 -o CMakeFiles/base_lib.dir/ReadParsePackage.cpp.o -c /host-home/my_scan/SDK_V3.0/derive/src/base/ReadParsePackage.cpp",
   "file": "/host-home/my_scan/SDK_V3.0/derive/src/base/ReadParsePackage.cpp"
 },
 {
   "directory": "/host-home/my_scan/ros2_src/build/derive/src/base",
-  "command": "/usr/bin/g++  -I/host-home/my_scan/SDK_V3.0/derive/dep -I/host-home/my_scan/SDK_V3.0/derive/dep/eigen3 -I/host-home/my_scan/SDK_V3.0/derive/include -I/host-home/my_scan/SDK_V3.0/derive/lib -I/host-home/my_scan/SDK_V3.0/derive/src/base -g -std=gnu++14 -o CMakeFiles/base_lib.dir/HC_serial.cpp.o -c /host-home/my_scan/SDK_V3.0/derive/src/base/HC_serial.cpp",
+  "command": "/usr/bin/g++  -I/host-home/my_scan/SDK_V3.0/derive/sdk_lib -I/host-home/my_scan/SDK_V3.0/derive/INTERFACE -I/host-home/my_scan/SDK_V3.0/derive/dep -I/host-home/my_scan/SDK_V3.0/derive/dep/eigen3 -I/host-home/my_scan/SDK_V3.0/derive/include -I/host-home/my_scan/SDK_V3.0/derive/lib -I/host-home/my_scan/SDK_V3.0/derive/src/base -g -fPIC -std=gnu++14 -o CMakeFiles/base_lib.dir/HC_serial.cpp.o -c /host-home/my_scan/SDK_V3.0/derive/src/base/HC_serial.cpp",
   "file": "/host-home/my_scan/SDK_V3.0/derive/src/base/HC_serial.cpp"
 },
 {
   "directory": "/host-home/my_scan/ros2_src/build/derive/src/base",
-  "command": "/usr/bin/g++  -I/host-home/my_scan/SDK_V3.0/derive/dep -I/host-home/my_scan/SDK_V3.0/derive/dep/eigen3 -I/host-home/my_scan/SDK_V3.0/derive/include -I/host-home/my_scan/SDK_V3.0/derive/lib -I/host-home/my_scan/SDK_V3.0/derive/src/base -g -std=gnu++14 -o CMakeFiles/base_lib.dir/HcSDK.cpp.o -c /host-home/my_scan/SDK_V3.0/derive/src/base/HcSDK.cpp",
+  "command": "/usr/bin/g++  -I/host-home/my_scan/SDK_V3.0/derive/sdk_lib -I/host-home/my_scan/SDK_V3.0/derive/INTERFACE -I/host-home/my_scan/SDK_V3.0/derive/dep -I/host-home/my_scan/SDK_V3.0/derive/dep/eigen3 -I/host-home/my_scan/SDK_V3.0/derive/include -I/host-home/my_scan/SDK_V3.0/derive/lib -I/host-home/my_scan/SDK_V3.0/derive/src/base -g -fPIC -std=gnu++14 -o CMakeFiles/base_lib.dir/HcSDK.cpp.o -c /host-home/my_scan/SDK_V3.0/derive/src/base/HcSDK.cpp",
   "file": "/host-home/my_scan/SDK_V3.0/derive/src/base/HcSDK.cpp"
 },
 {
   "directory": "/host-home/my_scan/ros2_src/build/derive/src/lidar",
-  "command": "/usr/bin/g++  -I/host-home/my_scan/SDK_V3.0/derive/dep -I/host-home/my_scan/SDK_V3.0/derive/dep/eigen3 -I/host-home/my_scan/SDK_V3.0/derive/include -I/host-home/my_scan/SDK_V3.0/derive/lib -I/host-home/my_scan/SDK_V3.0/derive/src/lidar -I/host-home/my_scan/SDK_V3.0/derive/src/base -g -std=gnu++14 -o CMakeFiles/lidar_lib.dir/hc_test.cpp.o -c /host-home/my_scan/SDK_V3.0/derive/src/lidar/hc_test.cpp",
+  "command": "/usr/bin/g++  -I/host-home/my_scan/SDK_V3.0/derive/sdk_lib -I/host-home/my_scan/SDK_V3.0/derive/INTERFACE -I/host-home/my_scan/SDK_V3.0/derive/dep -I/host-home/my_scan/SDK_V3.0/derive/dep/eigen3 -I/host-home/my_scan/SDK_V3.0/derive/include -I/host-home/my_scan/SDK_V3.0/derive/lib -I/host-home/my_scan/SDK_V3.0/derive/src/lidar -I/host-home/my_scan/SDK_V3.0/derive/src/base -g -fPIC -std=gnu++14 -o CMakeFiles/lidar_lib.dir/hc_test.cpp.o -c /host-home/my_scan/SDK_V3.0/derive/src/lidar/hc_test.cpp",
   "file": "/host-home/my_scan/SDK_V3.0/derive/src/lidar/hc_test.cpp"
 },
 {
   "directory": "/host-home/my_scan/ros2_src/build/derive/src/lidar",
-  "command": "/usr/bin/g++  -I/host-home/my_scan/SDK_V3.0/derive/dep -I/host-home/my_scan/SDK_V3.0/derive/dep/eigen3 -I/host-home/my_scan/SDK_V3.0/derive/include -I/host-home/my_scan/SDK_V3.0/derive/lib -I/host-home/my_scan/SDK_V3.0/derive/src/lidar -I/host-home/my_scan/SDK_V3.0/derive/src/base -g -std=gnu++14 -o CMakeFiles/lidar_lib.dir/LidarTest.cpp.o -c /host-home/my_scan/SDK_V3.0/derive/src/lidar/LidarTest.cpp",
+  "command": "/usr/bin/g++  -I/host-home/my_scan/SDK_V3.0/derive/sdk_lib -I/host-home/my_scan/SDK_V3.0/derive/INTERFACE -I/host-home/my_scan/SDK_V3.0/derive/dep -I/host-home/my_scan/SDK_V3.0/derive/dep/eigen3 -I/host-home/my_scan/SDK_V3.0/derive/include -I/host-home/my_scan/SDK_V3.0/derive/lib -I/host-home/my_scan/SDK_V3.0/derive/src/lidar -I/host-home/my_scan/SDK_V3.0/derive/src/base -g -fPIC -std=gnu++14 -o CMakeFiles/lidar_lib.dir/LidarTest.cpp.o -c /host-home/my_scan/SDK_V3.0/derive/src/lidar/LidarTest.cpp",
   "file": "/host-home/my_scan/SDK_V3.0/derive/src/lidar/LidarTest.cpp"
 }
 ]

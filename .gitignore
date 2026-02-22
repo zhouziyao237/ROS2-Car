@@ -1,16 +1,7 @@
-# 个人备份文件
-*.bak
-*.old
-*.new
+# ignore VS Project files
+/host-home/my_scan/ros2_src/build/
+/host-home/my_scan/SDK_V3.0/build/
 
-# X11 认证文件（不应提交）
-.Xauthority*
-x11-fix.log
-
-# 系统临时文件
-*~
-.swp
-.DS_Store
-
-# 容器数据卷（由 Docker 管理，无需提交）
-ros2_workspace/
+build_win32/
+.vscode/
+bin/

@@ -1,0 +1,1 @@
+/usr/bin/g++ -fPIC -g -shared  -o bin/lib/sdk_py.cpython-310-x86_64-linux-gnu.so CMakeFiles/sdk_py.dir/host-home/my_scan/SDK_V3.0/derive/src/bindings.cpp.o  bin/lib/liblidar_lib.a bin/lib/libbase_lib.a 

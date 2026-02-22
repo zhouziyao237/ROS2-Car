@@ -1,0 +1,220 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"childIndexes" : 
+					[
+						1,
+						5
+					],
+					"jsonFile" : "directory-.-Debug-f5ebdc15457944623624.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.12"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						2,
+						3,
+						4
+					]
+				},
+				{
+					"build" : "derive",
+					"childIndexes" : 
+					[
+						2
+					],
+					"jsonFile" : "directory-derive-Debug-2ccdb42a06e0d5ef2263.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.12"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 1,
+					"source" : "/host-home/my_scan/SDK_V3.0/derive"
+				},
+				{
+					"build" : "derive/src",
+					"childIndexes" : 
+					[
+						3,
+						4
+					],
+					"jsonFile" : "directory-derive.src-Debug-8218afe1e570192826da.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.12"
+					},
+					"parentIndex" : 1,
+					"projectIndex" : 1,
+					"source" : "/host-home/my_scan/SDK_V3.0/derive/src"
+				},
+				{
+					"build" : "derive/src/base",
+					"jsonFile" : "directory-derive.src.base-Debug-5ca6d222ff1bd47723b5.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.12"
+					},
+					"parentIndex" : 2,
+					"projectIndex" : 2,
+					"source" : "/host-home/my_scan/SDK_V3.0/derive/src/base",
+					"targetIndexes" : 
+					[
+						0
+					]
+				},
+				{
+					"build" : "derive/src/lidar",
+					"jsonFile" : "directory-derive.src.lidar-Debug-eb8ed9b6c86630fdc43a.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.12"
+					},
+					"parentIndex" : 2,
+					"projectIndex" : 3,
+					"source" : "/host-home/my_scan/SDK_V3.0/derive/src/lidar",
+					"targetIndexes" : 
+					[
+						1
+					]
+				},
+				{
+					"build" : "/host-home/my_scan/SDK_V3.0/pybind11",
+					"jsonFile" : "directory-Debug-45a3557b7841f0e59069.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.15"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 4,
+					"source" : "/host-home/my_scan/SDK_V3.0/pybind11"
+				}
+			],
+			"name" : "Debug",
+			"projects" : 
+			[
+				{
+					"childIndexes" : 
+					[
+						1,
+						4
+					],
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "ros2_lidar_driver",
+					"targetIndexes" : 
+					[
+						2,
+						3,
+						4
+					]
+				},
+				{
+					"childIndexes" : 
+					[
+						2,
+						3
+					],
+					"directoryIndexes" : 
+					[
+						1,
+						2
+					],
+					"name" : "sdk",
+					"parentIndex" : 0
+				},
+				{
+					"directoryIndexes" : 
+					[
+						3
+					],
+					"name" : "base",
+					"parentIndex" : 1,
+					"targetIndexes" : 
+					[
+						0
+					]
+				},
+				{
+					"directoryIndexes" : 
+					[
+						4
+					],
+					"name" : "lidar",
+					"parentIndex" : 1,
+					"targetIndexes" : 
+					[
+						1
+					]
+				},
+				{
+					"directoryIndexes" : 
+					[
+						5
+					],
+					"name" : "pybind11",
+					"parentIndex" : 0
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 3,
+					"id" : "base_lib::@85dd558d87849ad2f2bb",
+					"jsonFile" : "target-base_lib-Debug-4c123eb4788bdb32a536.json",
+					"name" : "base_lib",
+					"projectIndex" : 2
+				},
+				{
+					"directoryIndex" : 4,
+					"id" : "lidar_lib::@77c931562d71602c4d14",
+					"jsonFile" : "target-lidar_lib-Debug-5fdfc737af9444984c91.json",
+					"name" : "lidar_lib",
+					"projectIndex" : 3
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "ros2_lidar_driver_uninstall::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-ros2_lidar_driver_uninstall-Debug-135bb49e79b10dffec52.json",
+					"name" : "ros2_lidar_driver_uninstall",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "sdk_py::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-sdk_py-Debug-e33a2d855454fa968e91.json",
+					"name" : "sdk_py",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "uninstall::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-uninstall-Debug-abf3257ac422a3ec2cd8.json",
+					"name" : "uninstall",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "/host-home/my_scan/ros2_src/build",
+		"source" : "/host-home/my_scan/ros2_src"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 3
+	}
+}

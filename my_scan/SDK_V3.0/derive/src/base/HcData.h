@@ -53,18 +53,18 @@ typedef std::list<tsNodeInfo> LstNodeDistQ2;
 
 typedef struct tsSDKPara
 {
-	int           iNoDataMS;  //warning timeout ,ms, read data from serial port is null,default 1000ms
-	int           iDisconnectMS;   //lidar disconnected��ms, defualt 3000ms
-	int           iFPSContinueMS;  // FPS continue abnormal, ms ,default 5000ms
-	int           iSpeedContinueMS; // speed continue abnormal, ms ,default 3500ms
-	int           iCoverContinueMS;// covered  duration, ms ,default 3500ms
-	int           iBlockContinueMS; // blocked  duration, ms ,default 3500ms
-	int           iCoverPoints;  //
-	int           iPollBuffSize;  //POLL mode ,buff max size
-	int           iCallbackBuffSize; //Callback mode ,buff size
-	int           iCirclesBuffSize;//POLL mode, circle max size
-	int           iChangeSpeedMS; // change speed  duration, ms ,default 2500ms
 
+	int iNoDataMS;              // 数据读取超时时间（毫秒），当从串口读取数据为空时触发警告，默认值为1000ms。
+	int iDisconnectMS;          // 激光雷达断开连接的检测时间（毫秒），默认值为3000ms。
+	int iFPSContinueMS;         // 帧率持续异常的检测时间（毫秒），默认值为5000ms。
+	int iSpeedContinueMS;       // 速度持续异常的检测时间（毫秒），默认值为3500ms。
+	int iCoverContinueMS;       // 遮挡持续时间（毫秒），默认值为3500ms。
+	int iBlockContinueMS;       // 阻塞持续时间（毫秒），默认值为3500ms。
+	int iCoverPoints;           // 遮挡点数阈值（具体含义需结合上下文确定）。
+	int iPollBuffSize;          // POLL模式下缓冲区的最大大小。
+	int iCallbackBuffSize;      // Callback模式下缓冲区的大小。
+	int iCirclesBuffSize;       // POLL模式下圆形数据缓冲区的最大大小。
+	int iChangeSpeedMS;         // 速度变化的持续时间（毫秒），默认值为2500ms。
 	tsSDKPara()
 	{
 		iNoDataMS = 1000;
@@ -181,19 +181,19 @@ typedef struct tsSDKStatistic
 //pointcloud
 typedef struct tsPointCloud
 {
-	bool         bValid;       // true Valid point, false  invalid            
-	double       dAngle;       // compensate angle    ,degree     
-	double       dAngleRaw;    // raw angle     ,degree 
-	double       dAngleDisp;   // don't care    
-	UINT16       u16Dist;      // compensate distance  ,mm  
-	UINT16       u16DistRaw;   // raw distance,mm
-	UINT16       u16Speed;     // motor speed, RPM
-	UINT16       u16Gray;      // luminance
-	bool         bGrayTwoByte; // true  u16Gray 2byte ,false u16Gray 1byte 
-	UINT64       u64TimeStampMs;    // timestamp ,ms  
-	UINT64       u64TimeStampNs;    // timestamp ,ns  
-	float        fTemperature;//�¶�
-	bool         bOverRange;
+	bool bValid;           // 数据点是否有效
+	double dAngle;         // 补偿后角度（度）
+	double dAngleRaw;      // 原始角度（度）
+	double dAngleDisp;     // 无需关注的角度值
+	UINT16 u16Dist;        // 补偿后距离（mm）
+	UINT16 u16DistRaw;     // 原始距离（mm）
+	UINT16 u16Speed;       // 电机转速（RPM）
+	UINT16 u16Gray;        // 亮度值（灰度）
+	bool bGrayTwoByte;     // 亮度值字节数标识
+	UINT64 u64TimeStampMs; // 时间戳（毫秒）
+	UINT64 u64TimeStampNs; // 时间戳（纳秒）
+	float fTemperature;    // 温度值
+	bool bOverRange;       // 是否超出量程
 	tsPointCloud() :
 		bValid(true),
 		dAngle(0.),

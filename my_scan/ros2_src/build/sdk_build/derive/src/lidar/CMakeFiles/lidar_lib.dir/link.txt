@@ -1,2 +1,0 @@
-/usr/bin/ar qc ../../../../bin/lib/liblidar_lib.a CMakeFiles/lidar_lib.dir/hc_test.cpp.o CMakeFiles/lidar_lib.dir/LidarTest.cpp.o
-/usr/bin/ranlib ../../../../bin/lib/liblidar_lib.a

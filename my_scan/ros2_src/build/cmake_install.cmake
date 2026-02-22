@@ -45,6 +45,7 @@ endif()
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for each subdirectory.
   include("/host-home/my_scan/ros2_src/build/derive/cmake_install.cmake")
+  include("/host-home/my_scan/SDK_V3.0/pybind11/cmake_install.cmake")
 
 endif()
 
