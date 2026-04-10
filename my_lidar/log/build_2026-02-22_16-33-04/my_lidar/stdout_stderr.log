@@ -1,0 +1,46 @@
+running egg_info
+creating build/my_lidar/my_lidar.egg-info
+writing build/my_lidar/my_lidar.egg-info/PKG-INFO
+writing dependency_links to build/my_lidar/my_lidar.egg-info/dependency_links.txt
+writing entry points to build/my_lidar/my_lidar.egg-info/entry_points.txt
+writing requirements to build/my_lidar/my_lidar.egg-info/requires.txt
+writing top-level names to build/my_lidar/my_lidar.egg-info/top_level.txt
+writing manifest file 'build/my_lidar/my_lidar.egg-info/SOURCES.txt'
+reading manifest file 'build/my_lidar/my_lidar.egg-info/SOURCES.txt'
+writing manifest file 'build/my_lidar/my_lidar.egg-info/SOURCES.txt'
+running build
+running build_py
+creating /workspace/my_lidar/build/my_lidar/build
+creating /workspace/my_lidar/build/my_lidar/build/lib
+creating /workspace/my_lidar/build/my_lidar/build/lib/my_lidar
+copying my_lidar/__init__.py -> /workspace/my_lidar/build/my_lidar/build/lib/my_lidar
+creating /workspace/my_lidar/build/my_lidar/build/lib/lidar_src
+copying lidar_src/__init__.py -> /workspace/my_lidar/build/my_lidar/build/lib/lidar_src
+copying lidar_src/lidar.py -> /workspace/my_lidar/build/my_lidar/build/lib/lidar_src
+running install
+running install_lib
+creating /workspace/my_lidar/install/my_lidar/lib/python3.10/site-packages/my_lidar
+copying /workspace/my_lidar/build/my_lidar/build/lib/my_lidar/__init__.py -> /workspace/my_lidar/install/my_lidar/lib/python3.10/site-packages/my_lidar
+creating /workspace/my_lidar/install/my_lidar/lib/python3.10/site-packages/lidar_src
+copying /workspace/my_lidar/build/my_lidar/build/lib/lidar_src/__init__.py -> /workspace/my_lidar/install/my_lidar/lib/python3.10/site-packages/lidar_src
+copying /workspace/my_lidar/build/my_lidar/build/lib/lidar_src/lidar.py -> /workspace/my_lidar/install/my_lidar/lib/python3.10/site-packages/lidar_src
+byte-compiling /workspace/my_lidar/install/my_lidar/lib/python3.10/site-packages/my_lidar/__init__.py to __init__.cpython-310.pyc
+byte-compiling /workspace/my_lidar/install/my_lidar/lib/python3.10/site-packages/lidar_src/__init__.py to __init__.cpython-310.pyc
+byte-compiling /workspace/my_lidar/install/my_lidar/lib/python3.10/site-packages/lidar_src/lidar.py to lidar.cpython-310.pyc
+running install_data
+creating /workspace/my_lidar/install/my_lidar/share/ament_index
+creating /workspace/my_lidar/install/my_lidar/share/ament_index/resource_index
+creating /workspace/my_lidar/install/my_lidar/share/ament_index/resource_index/packages
+copying resource/my_lidar -> /workspace/my_lidar/install/my_lidar/share/ament_index/resource_index/packages
+copying package.xml -> /workspace/my_lidar/install/my_lidar/share/my_lidar
+creating /workspace/my_lidar/install/my_lidar/share/my_lidar/launch
+copying launch/lidar.launch.py -> /workspace/my_lidar/install/my_lidar/share/my_lidar/launch
+creating /workspace/my_lidar/install/my_lidar/share/my_lidar/lidar_src
+creating /workspace/my_lidar/install/my_lidar/share/my_lidar/lidar_src/*.py
+copying lidar_src/__init__.py -> /workspace/my_lidar/install/my_lidar/share/my_lidar/lidar_src/*.py
+copying lidar_src/lidar.py -> /workspace/my_lidar/install/my_lidar/share/my_lidar/lidar_src/*.py
+running install_egg_info
+Copying build/my_lidar/my_lidar.egg-info to /workspace/my_lidar/install/my_lidar/lib/python3.10/site-packages/my_lidar-0.0.0-py3.10.egg-info
+running install_scripts
+Installing lidar_node script to /workspace/my_lidar/install/my_lidar/lib/my_lidar
+writing list of installed files to '/workspace/my_lidar/build/my_lidar/install.log'

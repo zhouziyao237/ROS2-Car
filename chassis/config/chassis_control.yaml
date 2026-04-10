@@ -1,0 +1,39 @@
+controller_manager:
+  ros__parameters:
+    update_rate: 50  # Hz
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    mecanum_drive_controller:
+      type: mecanum_drive_controller/MecanumDriveController
+
+mecanum_drive_controller:
+  ros__parameters:
+    # 关节名称必须与 URDF 中的关节名严格一致
+    front_left_wheel_joint: "FL_Joint"
+    front_right_wheel_joint: "FR_Joint"
+    back_left_wheel_joint: "BL_Joint"
+    back_right_wheel_joint: "BR_Joint"
+
+    wheel_radius: 0.0375
+    wheel_separation: 0.4166
+    wheel_base: 0.1550
+
+    # 坐标系设置（重要！）
+    base_frame_id: "base_link"
+    odom_frame_id: "odom"
+
+    publish_rate: 50.0
+    open_loop: false
+    enable_odom_tf: true
+
+    # 速度限制
+    linear.x.max_velocity: 1.0
+    linear.x.min_velocity: -1.0
+    linear.y.max_velocity: 1.0
+    linear.y.min_velocity: -1.0
+    angular.z.max_velocity: 2.0
+    angular.z.min_velocity: -2.0
+
+    cmd_vel_timeout: 0.5

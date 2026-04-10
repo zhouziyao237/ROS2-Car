@@ -1,0 +1,21 @@
+[0.532s] Invoking command in '/workspace/my_lidar': PYTHONPATH=/workspace/my_lidar/build/my_lidar/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/workspace/my_lidar/install/my_lidar/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base build/my_lidar build --build-base /workspace/my_lidar/build/my_lidar/build install --record /workspace/my_lidar/build/my_lidar/install.log --single-version-externally-managed install_data
+[0.709s] running egg_info
+[0.710s] writing build/my_lidar/my_lidar.egg-info/PKG-INFO
+[0.710s] writing dependency_links to build/my_lidar/my_lidar.egg-info/dependency_links.txt
+[0.710s] writing entry points to build/my_lidar/my_lidar.egg-info/entry_points.txt
+[0.710s] writing requirements to build/my_lidar/my_lidar.egg-info/requires.txt
+[0.711s] writing top-level names to build/my_lidar/my_lidar.egg-info/top_level.txt
+[0.712s] reading manifest file 'build/my_lidar/my_lidar.egg-info/SOURCES.txt'
+[0.713s] writing manifest file 'build/my_lidar/my_lidar.egg-info/SOURCES.txt'
+[0.713s] running build
+[0.713s] running build_py
+[0.713s] running install
+[0.713s] running install_lib
+[0.714s] running install_data
+[0.715s] running install_egg_info
+[0.716s] removing '/workspace/my_lidar/install/my_lidar/lib/python3.10/site-packages/my_lidar-0.0.0-py3.10.egg-info' (and everything under it)
+[0.716s] Copying build/my_lidar/my_lidar.egg-info to /workspace/my_lidar/install/my_lidar/lib/python3.10/site-packages/my_lidar-0.0.0-py3.10.egg-info
+[0.717s] running install_scripts
+[0.737s] Installing lidar_node script to /workspace/my_lidar/install/my_lidar/lib/my_lidar
+[0.738s] writing list of installed files to '/workspace/my_lidar/build/my_lidar/install.log'
+[0.759s] Invoked command in '/workspace/my_lidar' returned '0': PYTHONPATH=/workspace/my_lidar/build/my_lidar/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/workspace/my_lidar/install/my_lidar/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base build/my_lidar build --build-base /workspace/my_lidar/build/my_lidar/build install --record /workspace/my_lidar/build/my_lidar/install.log --single-version-externally-managed install_data

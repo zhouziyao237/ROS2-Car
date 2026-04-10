@@ -1,4 +1,4 @@
 {
-    "cmake.sourceDirectory": "/workspace/my_scan/ros2_src",
-    "cmake.buildDirectory": "/host-home/my_scan/ros2_src/build",
+    "cmake.sourceDirectory": "/workspace/my_lidar/lidar_src",
+    "cmake.buildDirectory": "/workspace/my_lidar/lidar_src/build",
 }

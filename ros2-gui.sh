@@ -60,7 +60,8 @@ start_container() {
         echo "Creating and starting new container $CONTAINER_NAME ..."
         # Create volume if it doesn't exist
         docker volume inspect "$WORKSPACE_VOLUME" &> /dev/null || docker volume create "$WORKSPACE_VOLUME"
-        # Run container in background (keeps running), inserting extra args before image name
+        # Run container in background (keeps running)
+        # Important: Use array expansion to avoid word splitting issues.
         docker run -it -d \
             --name "$CONTAINER_NAME" \
             --net=host \
@@ -68,7 +69,7 @@ start_container() {
             -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
             -v "$HOME/.Xauthority:/root/.Xauthority:ro" \
             -v "$HOST_MOUNT_DIR:/host-home" \
-            "${extra_args[@]}" \          # <-- Extra arguments inserted here
+            "${extra_args[@]}" \
             "$IMAGE_NAME" \
             bash -c "while true; do sleep 3600; done"
         echo "Container started."

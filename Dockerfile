@@ -5,15 +5,19 @@ FROM osrf/ros:humble-desktop-full
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Set working directory
-WORKDIR /root/workspace
+WORKDIR /workspace
 
 # Replace Ubuntu apt sources with Tsinghua mirrors (for faster downloads in China)
+# Also replace ROS 2 sources to Tsinghua mirror (fixes packages.ros.org connection issues)
 RUN sed -i 's@archive.ubuntu.com@mirrors.tuna.tsinghua.edu.cn@g' /etc/apt/sources.list && \
     sed -i 's@security.ubuntu.com@mirrors.tuna.tsinghua.edu.cn@g' /etc/apt/sources.list && \
+    # Replace ROS 2 sources (if they exist in sources.list or separate file)
+    sed -i 's@http://packages.ros.org/ros2/ubuntu@https://mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu@g' /etc/apt/sources.list && \
+    if [ -f /etc/apt/sources.list.d/ros2.list ]; then \
+        sed -i 's@http://packages.ros.org/ros2/ubuntu@https://mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu@g' /etc/apt/sources.list.d/ros2.list; \
+    fi && \
     apt-get update && \
-    apt-get install -y software-properties-common && \
-    add-apt-repository -y ppa:deadsnakes/ppa && \
-    apt-get update && \
+    # Install essential tools (python3-pip, xauth, etc.) - Python 3.10 is already in base image
     apt-get install -y --no-install-recommends \
         build-essential \
         wget \
@@ -22,14 +26,11 @@ RUN sed -i 's@archive.ubuntu.com@mirrors.tuna.tsinghua.edu.cn@g' /etc/apt/source
         gcc \
         g++ \
         make \
-        python3.8 \
-        python3.8-dev \
-        python3.8-venv \
         python3-pip \
+        python3-dev \
+        python3-venv \
         xauth \
         x11-apps \
-        ros-humble-gazebo-ros-pkgs \
-        ros-humble-gazebo-ros2-control \
         vim \
         curl \
         ca-certificates \
@@ -39,9 +40,11 @@ RUN sed -i 's@archive.ubuntu.com@mirrors.tuna.tsinghua.edu.cn@g' /etc/apt/source
         patchelf \
     && rm -rf /var/lib/apt/lists/*
 
-# Configure Python alternatives (optional: set python3.8 as default python3)
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.8 1 \
-    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 1
+# Ensure Python 3.10 is the default (optional, base image already uses it)
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 100 && \
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 100 && \
+    update-alternatives --set python /usr/bin/python3.10 && \
+    update-alternatives --set python3 /usr/bin/python3.10
 
 # Set pip index to Tsinghua mirror
 RUN pip3 config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple

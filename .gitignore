@@ -1,6 +1,7 @@
 # ignore VS Project files
-/host-home/my_scan/ros2_src/build/
-/host-home/my_scan/SDK_V3.0/build/
+my_lidar/build
+my_lidar/lidar_src/build/
+my_lidar/SDK_V3.0/build/
 
 build_win32/
 .vscode/
