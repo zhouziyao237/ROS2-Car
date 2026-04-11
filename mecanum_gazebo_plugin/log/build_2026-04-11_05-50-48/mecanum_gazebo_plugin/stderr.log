@@ -1,0 +1,22 @@
+[33mCMake Warning (dev) at /usr/share/cmake-3.22/Modules/FindPackageHandleStandardArgs.cmake:438 (message):
+  The package name passed to `find_package_handle_standard_args` (PkgConfig)
+  does not match the name of the calling package (gazebo).  This can lead to
+  problems in calling code that expects `find_package` result variables
+  (e.g., `_FOUND`) to follow a certain pattern.
+Call Stack (most recent call first):
+  /usr/share/cmake-3.22/Modules/FindPkgConfig.cmake:99 (find_package_handle_standard_args)
+  /usr/lib/x86_64-linux-gnu/cmake/gazebo/gazebo-config.cmake:72 (include)
+  CMakeLists.txt:11 (find_package)
+This warning is for project developers.  Use -Wno-dev to suppress it.
+[0m
+[01m[K/host-home/mecanum_gazebo_plugin/src/unified_odometry.cpp:[m[K In member function ‘[01m[Kvoid UnifiedOdometry::publishOdometry()[m[K’:
+[01m[K/host-home/mecanum_gazebo_plugin/src/unified_odometry.cpp:97:5:[m[K [01;31m[Kerror: [m[K‘[01m[Ktf2[m[K’ has not been declared
+   97 |     [01;31m[Ktf2[m[K::Quaternion q;
+      |     [01;31m[K^~~[m[K
+[01m[K/host-home/mecanum_gazebo_plugin/src/unified_odometry.cpp:98:5:[m[K [01;31m[Kerror: [m[K‘[01m[Kq[m[K’ was not declared in this scope
+   98 |     [01;31m[Kq[m[K.setRPY(0, 0, yaw_);
+      |     [01;31m[K^[m[K
+gmake[2]: *** [CMakeFiles/unified_odometry.dir/build.make:76: CMakeFiles/unified_odometry.dir/src/unified_odometry.cpp.o] Error 1
+gmake[1]: *** [CMakeFiles/Makefile2:622: CMakeFiles/unified_odometry.dir/all] Error 2
+gmake[1]: *** Waiting for unfinished jobs....
+gmake: *** [Makefile:146: all] Error 2

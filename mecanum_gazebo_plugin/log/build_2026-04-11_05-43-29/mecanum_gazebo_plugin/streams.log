@@ -1,0 +1,258 @@
+[0.022s] Invoking command in '/host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /usr/bin/cmake --build /host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin -- -j8 -l8
+[0.058s] -- Found ament_cmake: 1.3.13 (/opt/ros/humble/share/ament_cmake/cmake)
+[0.184s] -- Found rclcpp: 16.0.18 (/opt/ros/humble/share/rclcpp/cmake)
+[0.208s] -- Found rosidl_generator_c: 3.1.8 (/opt/ros/humble/share/rosidl_generator_c/cmake)
+[0.210s] -- Found rosidl_adapter: 3.1.8 (/opt/ros/humble/share/rosidl_adapter/cmake)
+[0.219s] -- Found rosidl_generator_cpp: 3.1.8 (/opt/ros/humble/share/rosidl_generator_cpp/cmake)
+[0.228s] -- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c
+[0.239s] -- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp
+[0.266s] -- Found rmw_implementation_cmake: 6.1.2 (/opt/ros/humble/share/rmw_implementation_cmake/cmake)
+[0.267s] -- Found rmw_fastrtps_cpp: 6.2.10 (/opt/ros/humble/share/rmw_fastrtps_cpp/cmake)
+[0.398s] -- Using RMW implementation 'rmw_fastrtps_cpp' as default
+[0.450s] [33mCMake Warning (dev) at /usr/share/cmake-3.22/Modules/FindPackageHandleStandardArgs.cmake:438 (message):
+[0.451s]   The package name passed to `find_package_handle_standard_args` (PkgConfig)
+[0.451s]   does not match the name of the calling package (gazebo).  This can lead to
+[0.451s]   problems in calling code that expects `find_package` result variables
+[0.451s]   (e.g., `_FOUND`) to follow a certain pattern.
+[0.451s] Call Stack (most recent call first):
+[0.451s]   /usr/share/cmake-3.22/Modules/FindPkgConfig.cmake:99 (find_package_handle_standard_args)
+[0.451s]   /usr/lib/x86_64-linux-gnu/cmake/gazebo/gazebo-config.cmake:72 (include)
+[0.451s]   CMakeLists.txt:8 (find_package)
+[0.451s] This warning is for project developers.  Use -Wno-dev to suppress it.
+[0.451s] [0m
+[0.481s] -- Found DART: /usr/include (Required is at least version "6.6") found components: dart 
+[0.541s] -- Found Protobuf: /usr/lib/x86_64-linux-gnu/libprotobuf.so (found version "3.12.4") 
+[0.543s] -- Looking for ignition-math6 -- found version 6.15.1
+[0.549s] -- Searching for dependencies of ignition-math6
+[0.550s] -- Looking for OGRE...
+[0.569s] -- Found Ogre Ghadamon (1.9.0)
+[0.569s] -- Found OGRE: optimized;/usr/lib/x86_64-linux-gnu/libOgreMain.so;debug;/usr/lib/x86_64-linux-gnu/libOgreMain.so
+[0.579s] -- Looking for OGRE_Paging...
+[0.580s] -- Found OGRE_Paging: optimized;/usr/lib/x86_64-linux-gnu/libOgrePaging.so;debug;/usr/lib/x86_64-linux-gnu/libOgrePaging.so
+[0.580s] -- Looking for OGRE_Terrain...
+[0.580s] -- Found OGRE_Terrain: optimized;/usr/lib/x86_64-linux-gnu/libOgreTerrain.so;debug;/usr/lib/x86_64-linux-gnu/libOgreTerrain.so
+[0.580s] -- Looking for OGRE_Property...
+[0.580s] -- Found OGRE_Property: optimized;/usr/lib/x86_64-linux-gnu/libOgreProperty.so;debug;/usr/lib/x86_64-linux-gnu/libOgreProperty.so
+[0.580s] -- Looking for OGRE_RTShaderSystem...
+[0.580s] -- Found OGRE_RTShaderSystem: optimized;/usr/lib/x86_64-linux-gnu/libOgreRTShaderSystem.so;debug;/usr/lib/x86_64-linux-gnu/libOgreRTShaderSystem.so
+[0.580s] -- Looking for OGRE_Volume...
+[0.580s] -- Found OGRE_Volume: optimized;/usr/lib/x86_64-linux-gnu/libOgreVolume.so;debug;/usr/lib/x86_64-linux-gnu/libOgreVolume.so
+[0.580s] -- Looking for OGRE_Overlay...
+[0.580s] -- Found OGRE_Overlay: optimized;/usr/lib/x86_64-linux-gnu/libOgreOverlay.so;debug;/usr/lib/x86_64-linux-gnu/libOgreOverlay.so
+[0.660s] -- Looking for ignition-math6 -- found version 6.15.1
+[0.661s] -- Looking for ignition-transport8 -- found version 8.2.1
+[0.661s] -- Searching for dependencies of ignition-transport8
+[0.691s] -- Found Protobuf: /usr/lib/x86_64-linux-gnu/libprotobuf.so (found suitable version "3.12.4", minimum required is "3") 
+[0.709s] -- Config-file not installed for ZeroMQ -- checking for pkg-config
+[0.715s] -- Checking for module 'libzmq >= 4'
+[0.733s] --   Found libzmq , version 4.3.4
+[0.799s] -- Checking for module 'uuid'
+[0.817s] --   Found uuid, version 2.37.2
+[0.860s] -- Looking for ignition-msgs5 -- found version 5.8.1
+[0.861s] -- Searching for dependencies of ignition-msgs5
+[0.889s] -- Looking for ignition-math6 -- found version 6.15.1
+[0.895s] -- Checking for module 'tinyxml2'
+[0.916s] --   Found tinyxml2, version 9.0.0
+[0.965s] -- Looking for ignition-msgs5 -- found version 5.8.1
+[0.966s] -- Looking for ignition-common3 -- found version 3.14.0
+[0.966s] -- Searching for dependencies of ignition-common3
+[0.966s] -- Looking for dlfcn.h - found
+[0.966s] -- Looking for libdl - found
+[0.977s] -- Searching for <ignition-common3> component [graphics]
+[0.977s] -- Looking for ignition-common3-graphics -- found version 3.14.0
+[0.978s] -- Searching for dependencies of ignition-common3-graphics
+[0.978s] -- Looking for ignition-math6 -- found version 6.15.1
+[0.979s] -- Looking for ignition-fuel_tools4 -- found version 4.4.0
+[0.980s] -- Searching for dependencies of ignition-fuel_tools4
+[1.031s] -- Checking for module 'jsoncpp'
+[1.048s] --   Found jsoncpp, version 1.9.5
+[1.105s] -- Checking for module 'libzip'
+[1.131s] --   Found libzip, version 1.7.3
+[1.177s] -- Looking for ignition-common3 -- found version 3.14.0
+[1.177s] -- Looking for ignition-math6 -- found version 6.15.1
+[1.177s] -- Looking for ignition-msgs5 -- found version 5.8.1
+[1.180s] -- Found gazebo_ros: 3.9.0 (/opt/ros/humble/share/gazebo_ros/cmake)
+[1.183s] -- Gazebo version: 11.10
+[1.184s] -- Found rosidl_default_generators: 1.2.0 (/opt/ros/humble/share/rosidl_default_generators/cmake)
+[1.192s] -- Found yaml_cpp_vendor: 8.0.2 (/opt/ros/humble/share/yaml_cpp_vendor/cmake)
+[1.462s] -- Found ament_cmake_ros: 0.10.0 (/opt/ros/humble/share/ament_cmake_ros/cmake)
+[1.825s] -- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c
+[1.967s] -- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp
+[1.991s] -- Found python_cmake_module: 0.10.0 (/opt/ros/humble/share/python_cmake_module/cmake)
+[2.013s] -- Using PYTHON_EXECUTABLE: /usr/bin/python3
+[2.013s] -- Using PYTHON_INCLUDE_DIRS: /usr/include/python3.10
+[2.013s] -- Using PYTHON_LIBRARIES: /usr/lib/x86_64-linux-gnu/libpython3.10.so
+[2.043s] [0mCMake Deprecation Warning at /opt/ros/humble/share/rosidl_cmake/cmake/rosidl_target_interfaces.cmake:32 (message):
+[2.044s]   Use rosidl_get_typesupport_target() and target_link_libraries() instead of
+[2.044s]   rosidl_target_interfaces()
+[2.044s] Call Stack (most recent call first):
+[2.045s]   CMakeLists.txt:35 (rosidl_target_interfaces)
+[2.045s] 
+[2.045s] [0m
+[2.051s] -- Configuring done
+[2.123s] -- Generating done
+[2.148s] -- Build files have been written to: /host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin
+[2.187s] [35m[1mConsolidate compiler generated dependencies of target mecanum_gazebo_plugin__rosidl_generator_c[0m
+[2.204s] [ 12%] Built target mecanum_gazebo_plugin__cpp
+[2.204s] [ 12%] Built target mecanum_gazebo_plugin__rosidl_generator_c
+[2.217s] [ 12%] Built target ament_cmake_python_copy_mecanum_gazebo_plugin
+[2.225s] [35m[1mConsolidate compiler generated dependencies of target mecanum_gazebo_plugin__rosidl_typesupport_introspection_c[0m
+[2.225s] [35m[1mConsolidate compiler generated dependencies of target mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_c[0m
+[2.226s] [35m[1mConsolidate compiler generated dependencies of target mecanum_gazebo_plugin__rosidl_typesupport_cpp[0m
+[2.226s] [35m[1mConsolidate compiler generated dependencies of target mecanum_gazebo_plugin__rosidl_typesupport_c[0m
+[2.227s] [35m[1mConsolidate compiler generated dependencies of target mecanum_gazebo_plugin__rosidl_typesupport_introspection_cpp[0m
+[2.229s] [35m[1mConsolidate compiler generated dependencies of target mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_cpp[0m
+[2.246s] [ 30%] Built target mecanum_gazebo_plugin__rosidl_typesupport_c
+[2.246s] [ 36%] Built target mecanum_gazebo_plugin__rosidl_typesupport_cpp
+[2.246s] [ 39%] Built target mecanum_gazebo_plugin__rosidl_typesupport_introspection_c
+[2.247s] [ 48%] Built target mecanum_gazebo_plugin__rosidl_typesupport_introspection_cpp
+[2.247s] [ 57%] Built target mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_c
+[2.250s] [ 66%] Built target mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_cpp
+[2.280s] [ 66%] Built target mecanum_gazebo_plugin
+[2.296s] [35m[1mConsolidate compiler generated dependencies of target mecanum_drive_plugin[0m
+[2.311s] [ 69%] Built target mecanum_gazebo_plugin__py
+[2.333s] [35m[1mConsolidate compiler generated dependencies of target mecanum_gazebo_plugin__rosidl_generator_py[0m
+[2.355s] [ 75%] Built target mecanum_gazebo_plugin__rosidl_generator_py
+[2.369s] [ 78%] [32mBuilding CXX object CMakeFiles/mecanum_drive_plugin.dir/src/mecanum_drive_plugin.cpp.o[0m
+[2.374s] [35m[1mConsolidate compiler generated dependencies of target mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_c__pyext[0m
+[2.374s] [35m[1mConsolidate compiler generated dependencies of target mecanum_gazebo_plugin__rosidl_typesupport_c__pyext[0m
+[2.375s] [35m[1mConsolidate compiler generated dependencies of target mecanum_gazebo_plugin__rosidl_typesupport_introspection_c__pyext[0m
+[2.396s] [ 84%] Built target mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_c__pyext
+[2.396s] [ 90%] Built target mecanum_gazebo_plugin__rosidl_typesupport_c__pyext
+[2.398s] [ 96%] Built target mecanum_gazebo_plugin__rosidl_typesupport_introspection_c__pyext
+[2.471s] running egg_info
+[2.472s] writing mecanum_gazebo_plugin.egg-info/PKG-INFO
+[2.473s] writing dependency_links to mecanum_gazebo_plugin.egg-info/dependency_links.txt
+[2.473s] writing top-level names to mecanum_gazebo_plugin.egg-info/top_level.txt
+[2.474s] reading manifest file 'mecanum_gazebo_plugin.egg-info/SOURCES.txt'
+[2.475s] writing manifest file 'mecanum_gazebo_plugin.egg-info/SOURCES.txt'
+[2.503s] [ 96%] Built target ament_cmake_python_build_mecanum_gazebo_plugin_egg
+[21.841s] [100%] [32m[1mLinking CXX shared library libmecanum_drive_plugin.so[0m
+[22.731s] [100%] Built target mecanum_drive_plugin
+[22.747s] Invoked command in '/host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /usr/bin/cmake --build /host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin -- -j8 -l8
+[22.765s] Invoking command in '/host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /usr/bin/cmake --install /host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin
+[22.774s] -- Install configuration: ""
+[22.774s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/ament_index/resource_index/rosidl_interfaces/mecanum_gazebo_plugin
+[22.775s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin
+[22.775s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg
+[22.775s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail
+[22.775s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__type_support.h
+[22.775s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__functions.c
+[22.775s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__functions.h
+[22.775s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__struct.h
+[22.775s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/mecanum_cmd.h
+[22.775s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/rosidl_generator_c__visibility_control.h
+[22.776s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/environment/library_path.sh
+[22.776s] -- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/environment/library_path.dsv
+[22.776s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib/libmecanum_gazebo_plugin__rosidl_generator_c.so
+[22.776s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin
+[22.776s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg
+[22.776s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail
+[22.776s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__rosidl_typesupport_fastrtps_c.h
+[22.777s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/rosidl_typesupport_fastrtps_c__visibility_control.h
+[22.777s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib/libmecanum_gazebo_plugin__rosidl_typesupport_fastrtps_c.so
+[22.777s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin
+[22.777s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg
+[22.777s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail
+[22.778s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__type_support.hpp
+[22.778s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__builder.hpp
+[22.778s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__struct.hpp
+[22.778s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__traits.hpp
+[22.778s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/rosidl_generator_cpp__visibility_control.hpp
+[22.778s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/mecanum_cmd.hpp
+[22.779s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin
+[22.779s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg
+[22.779s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/rosidl_typesupport_fastrtps_cpp__visibility_control.h
+[22.780s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail
+[22.780s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__rosidl_typesupport_fastrtps_cpp.hpp
+[22.780s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/dds_fastrtps
+[22.780s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib/libmecanum_gazebo_plugin__rosidl_typesupport_fastrtps_cpp.so
+[22.781s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin
+[22.781s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg
+[22.781s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail
+[22.781s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__rosidl_typesupport_introspection_c.h
+[22.781s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__type_support.c
+[22.782s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/rosidl_typesupport_introspection_c__visibility_control.h
+[22.782s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib/libmecanum_gazebo_plugin__rosidl_typesupport_introspection_c.so
+[22.782s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib/libmecanum_gazebo_plugin__rosidl_typesupport_c.so
+[22.782s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin
+[22.783s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg
+[22.783s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail
+[22.783s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__type_support.cpp
+[22.783s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__rosidl_typesupport_introspection_cpp.hpp
+[22.783s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib/libmecanum_gazebo_plugin__rosidl_typesupport_introspection_cpp.so
+[22.784s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib/libmecanum_gazebo_plugin__rosidl_typesupport_cpp.so
+[22.784s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/environment/pythonpath.sh
+[22.784s] -- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/environment/pythonpath.dsv
+[22.784s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin-0.0.0-py3.10.egg-info
+[22.785s] -- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin-0.0.0-py3.10.egg-info/dependency_links.txt
+[22.785s] -- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin-0.0.0-py3.10.egg-info/PKG-INFO
+[22.785s] -- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin-0.0.0-py3.10.egg-info/top_level.txt
+[22.785s] -- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin-0.0.0-py3.10.egg-info/SOURCES.txt
+[22.785s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin
+[22.785s] -- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/__init__.py
+[22.785s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/_mecanum_gazebo_plugin_s.ep.rosidl_typesupport_introspection_c.c
+[22.786s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/msg
+[22.786s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/msg/__init__.py
+[22.786s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/msg/_mecanum_cmd_s.c
+[22.786s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/msg/_mecanum_cmd.py
+[22.786s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/libmecanum_gazebo_plugin__rosidl_generator_py.so
+[22.786s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/mecanum_gazebo_plugin_s__rosidl_typesupport_introspection_c.cpython-310-x86_64-linux-gnu.so
+[22.786s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/mecanum_gazebo_plugin_s__rosidl_typesupport_c.cpython-310-x86_64-linux-gnu.so
+[22.787s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/_mecanum_gazebo_plugin_s.ep.rosidl_typesupport_c.c
+[22.787s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/mecanum_gazebo_plugin_s__rosidl_typesupport_fastrtps_c.cpython-310-x86_64-linux-gnu.so
+[22.787s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/_mecanum_gazebo_plugin_s.ep.rosidl_typesupport_fastrtps_c.c
+[22.818s] Listing '/host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin'...
+[22.818s] Compiling '/host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/__init__.py'...
+[22.818s] Listing '/host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/msg'...
+[22.822s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/mecanum_gazebo_plugin_s__rosidl_typesupport_fastrtps_c.cpython-310-x86_64-linux-gnu.so
+[22.822s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/mecanum_gazebo_plugin_s__rosidl_typesupport_introspection_c.cpython-310-x86_64-linux-gnu.so
+[22.822s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/mecanum_gazebo_plugin_s__rosidl_typesupport_c.cpython-310-x86_64-linux-gnu.so
+[22.823s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib/libmecanum_gazebo_plugin__rosidl_generator_py.so
+[22.823s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/msg/MecanumCmd.idl
+[22.823s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/msg/MecanumCmd.msg
+[22.823s] -- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib/libmecanum_drive_plugin.so
+[22.837s] -- Set runtime path of "/host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib/libmecanum_drive_plugin.so" to ""
+[22.837s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/plugin_description.xml
+[22.838s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/msg
+[22.838s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/msg/MecanumCmd.msg
+[22.838s] -- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/ament_index/resource_index/package_run_dependencies/mecanum_gazebo_plugin
+[22.838s] -- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/ament_index/resource_index/parent_prefix_path/mecanum_gazebo_plugin
+[22.838s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/environment/ament_prefix_path.sh
+[22.838s] -- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/environment/ament_prefix_path.dsv
+[22.838s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/environment/path.sh
+[22.839s] -- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/environment/path.dsv
+[22.839s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/local_setup.bash
+[22.839s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/local_setup.sh
+[22.839s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/local_setup.zsh
+[22.839s] -- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/local_setup.dsv
+[22.840s] -- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/package.dsv
+[22.840s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/ament_index/resource_index/packages/mecanum_gazebo_plugin
+[22.840s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/export_mecanum_gazebo_plugin__rosidl_generator_cExport.cmake
+[22.840s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/export_mecanum_gazebo_plugin__rosidl_generator_cExport-noconfig.cmake
+[22.840s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/export_mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_cExport.cmake
+[22.841s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/export_mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_cExport-noconfig.cmake
+[22.841s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/export_mecanum_gazebo_plugin__rosidl_generator_cppExport.cmake
+[22.841s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/export_mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_cppExport.cmake
+[22.841s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/export_mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_cppExport-noconfig.cmake
+[22.843s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/mecanum_gazebo_plugin__rosidl_typesupport_introspection_cExport.cmake
+[22.843s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/mecanum_gazebo_plugin__rosidl_typesupport_introspection_cExport-noconfig.cmake
+[22.844s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/mecanum_gazebo_plugin__rosidl_typesupport_cExport.cmake
+[22.844s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/mecanum_gazebo_plugin__rosidl_typesupport_cExport-noconfig.cmake
+[22.844s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/mecanum_gazebo_plugin__rosidl_typesupport_introspection_cppExport.cmake
+[22.844s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/mecanum_gazebo_plugin__rosidl_typesupport_introspection_cppExport-noconfig.cmake
+[22.844s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/mecanum_gazebo_plugin__rosidl_typesupport_cppExport.cmake
+[22.844s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/mecanum_gazebo_plugin__rosidl_typesupport_cppExport-noconfig.cmake
+[22.844s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/export_mecanum_gazebo_plugin__rosidl_generator_pyExport.cmake
+[22.845s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/export_mecanum_gazebo_plugin__rosidl_generator_pyExport-noconfig.cmake
+[22.845s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/rosidl_cmake-extras.cmake
+[22.845s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/ament_cmake_export_dependencies-extras.cmake
+[22.845s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/ament_cmake_export_include_directories-extras.cmake
+[22.845s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/ament_cmake_export_libraries-extras.cmake
+[22.845s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/ament_cmake_export_targets-extras.cmake
+[22.845s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/rosidl_cmake_export_typesupport_targets-extras.cmake
+[22.845s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/rosidl_cmake_export_typesupport_libraries-extras.cmake
+[22.845s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/mecanum_gazebo_pluginConfig.cmake
+[22.845s] -- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/mecanum_gazebo_pluginConfig-version.cmake
+[22.845s] -- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/package.xml
+[22.847s] Invoked command in '/host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /usr/bin/cmake --install /host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin

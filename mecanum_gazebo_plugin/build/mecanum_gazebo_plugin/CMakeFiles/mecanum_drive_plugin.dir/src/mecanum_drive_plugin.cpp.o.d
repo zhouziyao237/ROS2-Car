@@ -2973,7 +2973,28 @@ CMakeFiles/mecanum_drive_plugin.dir/src/mecanum_drive_plugin.cpp.o: \
  /opt/ros/humble/include/rclcpp/rclcpp/wait_set_template.hpp \
  /opt/ros/humble/include/gazebo_ros/executor.hpp \
  /opt/ros/humble/include/gazebo_ros/node_visibility_control.h \
- /opt/ros/humble/include/gazebo_ros/qos.hpp \
+ /opt/ros/humble/include/gazebo_ros/qos.hpp /usr/include/yaml-cpp/yaml.h \
+ /usr/include/yaml-cpp/parser.h /usr/include/yaml-cpp/dll.h \
+ /usr/include/yaml-cpp/emitter.h /usr/include/yaml-cpp/binary.h \
+ /usr/include/yaml-cpp/emitterdef.h /usr/include/yaml-cpp/emittermanip.h \
+ /usr/include/yaml-cpp/null.h /usr/include/yaml-cpp/ostream_wrapper.h \
+ /usr/include/yaml-cpp/emitterstyle.h /usr/include/yaml-cpp/stlemitter.h \
+ /usr/include/yaml-cpp/exceptions.h /usr/include/yaml-cpp/mark.h \
+ /usr/include/yaml-cpp/noexcept.h /usr/include/yaml-cpp/traits.h \
+ /usr/include/yaml-cpp/node/node.h \
+ /usr/include/yaml-cpp/node/detail/iterator_fwd.h \
+ /usr/include/yaml-cpp/node/ptr.h /usr/include/yaml-cpp/node/type.h \
+ /usr/include/yaml-cpp/node/impl.h \
+ /usr/include/yaml-cpp/node/detail/memory.h \
+ /usr/include/yaml-cpp/node/detail/node.h \
+ /usr/include/yaml-cpp/node/detail/node_ref.h \
+ /usr/include/yaml-cpp/node/detail/node_data.h \
+ /usr/include/yaml-cpp/node/detail/node_iterator.h \
+ /usr/include/yaml-cpp/node/iterator.h \
+ /usr/include/yaml-cpp/node/detail/iterator.h \
+ /usr/include/yaml-cpp/node/convert.h \
+ /usr/include/yaml-cpp/node/detail/impl.h \
+ /usr/include/yaml-cpp/node/parse.h /usr/include/yaml-cpp/node/emit.h \
  /host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin/rosidl_generator_cpp/mecanum_gazebo_plugin/msg/mecanum_cmd.hpp \
  /host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin/rosidl_generator_cpp/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__struct.hpp \
  /host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin/rosidl_generator_cpp/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__builder.hpp \

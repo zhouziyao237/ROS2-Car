@@ -406,6 +406,19 @@ mecanum_drive_plugin/fast:
 .PHONY : mecanum_drive_plugin/fast
 
 #=============================================================================
+# Target rules for targets named unified_odometry
+
+# Build rule for target.
+unified_odometry: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 unified_odometry
+.PHONY : unified_odometry
+
+# fast build rule for target.
+unified_odometry/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/unified_odometry.dir/build.make CMakeFiles/unified_odometry.dir/build
+.PHONY : unified_odometry/fast
+
+#=============================================================================
 # Target rules for targets named mecanum_gazebo_plugin__py
 
 # Build rule for target.
@@ -706,6 +719,30 @@ src/mecanum_drive_plugin.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/mecanum_drive_plugin.dir/build.make CMakeFiles/mecanum_drive_plugin.dir/src/mecanum_drive_plugin.cpp.s
 .PHONY : src/mecanum_drive_plugin.cpp.s
 
+src/unified_odometry.o: src/unified_odometry.cpp.o
+.PHONY : src/unified_odometry.o
+
+# target to build an object file
+src/unified_odometry.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/unified_odometry.dir/build.make CMakeFiles/unified_odometry.dir/src/unified_odometry.cpp.o
+.PHONY : src/unified_odometry.cpp.o
+
+src/unified_odometry.i: src/unified_odometry.cpp.i
+.PHONY : src/unified_odometry.i
+
+# target to preprocess a source file
+src/unified_odometry.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/unified_odometry.dir/build.make CMakeFiles/unified_odometry.dir/src/unified_odometry.cpp.i
+.PHONY : src/unified_odometry.cpp.i
+
+src/unified_odometry.s: src/unified_odometry.cpp.s
+.PHONY : src/unified_odometry.s
+
+# target to generate assembly for a file
+src/unified_odometry.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/unified_odometry.dir/build.make CMakeFiles/unified_odometry.dir/src/unified_odometry.cpp.s
+.PHONY : src/unified_odometry.cpp.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -738,6 +775,7 @@ help:
 	@echo "... mecanum_gazebo_plugin__rosidl_typesupport_introspection_c"
 	@echo "... mecanum_gazebo_plugin__rosidl_typesupport_introspection_c__pyext"
 	@echo "... mecanum_gazebo_plugin__rosidl_typesupport_introspection_cpp"
+	@echo "... unified_odometry"
 	@echo "... rosidl_generator_c/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__functions.o"
 	@echo "... rosidl_generator_c/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__functions.i"
 	@echo "... rosidl_generator_c/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__functions.s"
@@ -774,6 +812,9 @@ help:
 	@echo "... src/mecanum_drive_plugin.o"
 	@echo "... src/mecanum_drive_plugin.i"
 	@echo "... src/mecanum_drive_plugin.s"
+	@echo "... src/unified_odometry.o"
+	@echo "... src/unified_odometry.i"
+	@echo "... src/unified_odometry.s"
 .PHONY : help
 
 

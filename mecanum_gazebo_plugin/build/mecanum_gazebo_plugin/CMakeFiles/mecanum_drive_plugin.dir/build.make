@@ -93,6 +93,7 @@ mecanum_drive_plugin_EXTERNAL_OBJECTS =
 libmecanum_drive_plugin.so: CMakeFiles/mecanum_drive_plugin.dir/src/mecanum_drive_plugin.cpp.o
 libmecanum_drive_plugin.so: CMakeFiles/mecanum_drive_plugin.dir/build.make
 libmecanum_drive_plugin.so: /opt/ros/humble/lib/librclcpp.so
+libmecanum_drive_plugin.so: /usr/lib/x86_64-linux-gnu/libyaml-cpp.so.0.7.0
 libmecanum_drive_plugin.so: /opt/ros/humble/lib/libgazebo_ros_node.so
 libmecanum_drive_plugin.so: /opt/ros/humble/lib/libgazebo_ros_utils.so
 libmecanum_drive_plugin.so: /opt/ros/humble/lib/libgazebo_ros_init.so

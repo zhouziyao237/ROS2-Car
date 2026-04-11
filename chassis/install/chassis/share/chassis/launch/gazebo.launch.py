@@ -4,7 +4,6 @@ import subprocess
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, TimerAction
-from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 def generate_launch_description():
@@ -15,8 +14,10 @@ def generate_launch_description():
     gazebo_world_path = os.path.join(pkg_share, 'worlds', 'my-world.world')
     rviz_config_path = os.path.join(pkg_share, 'rviz', 'rviz.rviz')
     meshes_abs_path = os.path.join(pkg_share, 'meshes')
+    
+    # 统一配置文件路径
+    robot_config = os.path.join(pkg_share, 'config', 'robot_config.yaml')
 
-    # 解析 xacro，移除注释
     raw_content = subprocess.check_output(
         ['xacro', urdf_model_path, 'use_sim:=true'],
         text=True
@@ -35,9 +36,9 @@ def generate_launch_description():
 
     gazebo = ExecuteProcess(
         cmd=['gazebo', '--verbose',
-            '-s', 'libgazebo_ros_init.so',
-            '-s', 'libgazebo_ros_factory.so',
-            gazebo_world_path],
+             '-s', 'libgazebo_ros_init.so',
+             '-s', 'libgazebo_ros_factory.so',
+             gazebo_world_path],
         output='screen',
         additional_env={
             'GAZEBO_PLUGIN_PATH': '/host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib',
@@ -59,10 +60,19 @@ def generate_launch_description():
         parameters=[{'use_sim_time': True}]
     )
 
+    unified_odometry = Node(
+        package='mecanum_gazebo_plugin',
+        executable='unified_odometry',
+        name='unified_odometry',
+        output='screen',
+        parameters=[robot_config]   # 自动加载 odometry 命名空间下的参数
+    )
+
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='true'),
         robot_state_publisher,
         gazebo,
-        TimerAction(period=3.0, actions=[spawn_entity]),   # 等待 Gazebo 完全启动
+        TimerAction(period=3.0, actions=[spawn_entity]),
         rviz,
+        unified_odometry,
     ])

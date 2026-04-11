@@ -1,6 +1,0 @@
-Invoking command in '/host-home/chassis/build/chassis': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake /host-home/chassis -DCMAKE_INSTALL_PREFIX=/host-home/chassis/install/chassis
-Invoked command in '/host-home/chassis/build/chassis' returned '0': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake /host-home/chassis -DCMAKE_INSTALL_PREFIX=/host-home/chassis/install/chassis
-Invoking command in '/host-home/chassis/build/chassis': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake --build /host-home/chassis/build/chassis -- -j8 -l8
-Invoked command in '/host-home/chassis/build/chassis' returned '0': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake --build /host-home/chassis/build/chassis -- -j8 -l8
-Invoking command in '/host-home/chassis/build/chassis': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake --install /host-home/chassis/build/chassis
-Invoked command in '/host-home/chassis/build/chassis' returned '0': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake --install /host-home/chassis/build/chassis

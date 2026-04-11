@@ -1,0 +1,493 @@
+[0.000000] (-) TimerEvent: {}
+[0.000584] (mecanum_gazebo_plugin) JobQueued: {'identifier': 'mecanum_gazebo_plugin', 'dependencies': OrderedDict()}
+[0.000698] (mecanum_gazebo_plugin) JobStarted: {'identifier': 'mecanum_gazebo_plugin'}
+[0.013462] (mecanum_gazebo_plugin) JobProgress: {'identifier': 'mecanum_gazebo_plugin', 'progress': 'cmake'}
+[0.016101] (mecanum_gazebo_plugin) JobProgress: {'identifier': 'mecanum_gazebo_plugin', 'progress': 'build'}
+[0.016185] (mecanum_gazebo_plugin) Command: {'cmd': ['/usr/bin/cmake', '--build', '/host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin', '--', '-j8', '-l8'], 'cwd': '/host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin', 'env': OrderedDict([('HOSTNAME', 'ros2-server'), ('GIT_ASKPASS', '/root/.vscode-server/bin/41dd792b5e652393e7787322889ed5fdc58bd75b/extensions/git/dist/askpass.sh'), ('SHLVL', '2'), ('LD_LIBRARY_PATH', '/host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib:/usr/lib/x86_64-linux-gnu/gazebo-11/plugins:/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/x86_64-linux-gnu:/opt/ros/humble/lib:/opt/mujoco/bin:/opt/mujoco/bin'), ('BROWSER', '/root/.vscode-server/bin/41dd792b5e652393e7787322889ed5fdc58bd75b/bin/helpers/browser.sh'), ('HOME', '/root'), ('TERM_PROGRAM_VERSION', '1.115.0'), ('VSCODE_IPC_HOOK_CLI', '/tmp/vscode-ipc-b7ee6f5a-1f0b-4256-90ef-af4af51cf901.sock'), ('ROS_PYTHON_VERSION', '3'), ('VSCODE_GIT_ASKPASS_MAIN', '/root/.vscode-server/bin/41dd792b5e652393e7787322889ed5fdc58bd75b/extensions/git/dist/askpass-main.js'), ('VSCODE_GIT_ASKPASS_NODE', '/root/.vscode-server/bin/41dd792b5e652393e7787322889ed5fdc58bd75b/node'), ('VSCODE_PYTHON_AUTOACTIVATE_GUARD', '1'), ('COLORTERM', 'truecolor'), ('REMOTE_CONTAINERS', 'true'), ('COLCON_PREFIX_PATH', '/host-home/mecanum_gazebo_plugin/install'), ('ROS_DISTRO', 'humble'), ('REMOTE_CONTAINERS_IPC', '/tmp/vscode-remote-containers-ipc-005e4990-5e54-4eb5-82c1-a142493d0341.sock'), ('_', '/usr/bin/colcon'), ('ROS_VERSION', '2'), ('TERM', 'xterm-256color'), ('ROS_LOCALHOST_ONLY', '0'), ('PATH', '/root/.vscode-server/data/User/globalStorage/github.copilot-chat/debugCommand:/root/.vscode-server/data/User/globalStorage/github.copilot-chat/copilotCli:/root/.vscode-server/bin/41dd792b5e652393e7787322889ed5fdc58bd75b/bin/remote-cli:/opt/ros/humble/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/mujoco/bin:/opt/mujoco/bin'), ('MUJOCO_DIR', '/opt/mujoco'), ('REMOTE_CONTAINERS_SOCKETS', '["/root/.gnupg/S.gpg-agent"]'), ('LANG', 'C.UTF-8'), ('LS_COLORS', 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:'), ('VSCODE_GIT_IPC_HANDLE', '/tmp/vscode-git-06dbb965c5.sock'), ('TERM_PROGRAM', 'vscode'), ('AMENT_PREFIX_PATH', '/host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin:/opt/ros/humble'), ('DEBIAN_FRONTEND', 'noninteractive'), ('SHELL', '/bin/bash'), ('VSCODE_GIT_ASKPASS_EXTRA_ARGS', ''), ('PWD', '/host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin'), ('LC_ALL', 'C.UTF-8'), ('GAZEBO_PLUGIN_PATH', '/host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib:/opt/ros/humble/lib:'), ('PYTHONPATH', '/host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages:/opt/ros/humble/lib/python3.10/site-packages:/opt/ros/humble/local/lib/python3.10/dist-packages'), ('COLCON', '1'), ('CMAKE_PREFIX_PATH', '/host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin:/opt/ros/humble')]), 'shell': False}
+[0.058310] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Found ament_cmake: 1.3.13 (/opt/ros/humble/share/ament_cmake/cmake)\n'}
+[0.098665] (-) TimerEvent: {}
+[0.184475] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Found rclcpp: 16.0.18 (/opt/ros/humble/share/rclcpp/cmake)\n'}
+[0.198786] (-) TimerEvent: {}
+[0.208343] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Found rosidl_generator_c: 3.1.8 (/opt/ros/humble/share/rosidl_generator_c/cmake)\n'}
+[0.210424] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Found rosidl_adapter: 3.1.8 (/opt/ros/humble/share/rosidl_adapter/cmake)\n'}
+[0.219060] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Found rosidl_generator_cpp: 3.1.8 (/opt/ros/humble/share/rosidl_generator_cpp/cmake)\n'}
+[0.228447] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c\n'}
+[0.239196] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp\n'}
+[0.266651] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Found rmw_implementation_cmake: 6.1.2 (/opt/ros/humble/share/rmw_implementation_cmake/cmake)\n'}
+[0.267917] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Found rmw_fastrtps_cpp: 6.2.10 (/opt/ros/humble/share/rmw_fastrtps_cpp/cmake)\n'}
+[0.299214] (-) TimerEvent: {}
+[0.398016] (mecanum_gazebo_plugin) StdoutLine: {'line': b"-- Using RMW implementation 'rmw_fastrtps_cpp' as default\n"}
+[0.399281] (-) TimerEvent: {}
+[0.451034] (mecanum_gazebo_plugin) StderrLine: {'line': b'\x1b[33mCMake Warning (dev) at /usr/share/cmake-3.22/Modules/FindPackageHandleStandardArgs.cmake:438 (message):\n'}
+[0.451264] (mecanum_gazebo_plugin) StderrLine: {'line': b'  The package name passed to `find_package_handle_standard_args` (PkgConfig)\n'}
+[0.451353] (mecanum_gazebo_plugin) StderrLine: {'line': b'  does not match the name of the calling package (gazebo).  This can lead to\n'}
+[0.451453] (mecanum_gazebo_plugin) StderrLine: {'line': b'  problems in calling code that expects `find_package` result variables\n'}
+[0.451500] (mecanum_gazebo_plugin) StderrLine: {'line': b'  (e.g., `_FOUND`) to follow a certain pattern.\n'}
+[0.451544] (mecanum_gazebo_plugin) StderrLine: {'line': b'Call Stack (most recent call first):\n'}
+[0.451587] (mecanum_gazebo_plugin) StderrLine: {'line': b'  /usr/share/cmake-3.22/Modules/FindPkgConfig.cmake:99 (find_package_handle_standard_args)\n'}
+[0.451655] (mecanum_gazebo_plugin) StderrLine: {'line': b'  /usr/lib/x86_64-linux-gnu/cmake/gazebo/gazebo-config.cmake:72 (include)\n'}
+[0.451800] (mecanum_gazebo_plugin) StderrLine: {'line': b'  CMakeLists.txt:8 (find_package)\n'}
+[0.451864] (mecanum_gazebo_plugin) StderrLine: {'line': b'This warning is for project developers.  Use -Wno-dev to suppress it.\n'}
+[0.451908] (mecanum_gazebo_plugin) StderrLine: {'line': b'\x1b[0m\n'}
+[0.481648] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Found DART: /usr/include (Required is at least version "6.6") found components: dart \n'}
+[0.499616] (-) TimerEvent: {}
+[0.541454] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Found Protobuf: /usr/lib/x86_64-linux-gnu/libprotobuf.so (found version "3.12.4") \n'}
+[0.543468] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Looking for ignition-math6 -- found version 6.15.1\n'}
+[0.549483] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Searching for dependencies of ignition-math6\n'}
+[0.550644] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Looking for OGRE...\n'}
+[0.568813] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Found Ogre Ghadamon (1.9.0)\n'}
+[0.569551] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Found OGRE: optimized;/usr/lib/x86_64-linux-gnu/libOgreMain.so;debug;/usr/lib/x86_64-linux-gnu/libOgreMain.so\n'}
+[0.579564] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Looking for OGRE_Paging...\n'}
+[0.580265] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Found OGRE_Paging: optimized;/usr/lib/x86_64-linux-gnu/libOgrePaging.so;debug;/usr/lib/x86_64-linux-gnu/libOgrePaging.so\n'}
+[0.580454] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Looking for OGRE_Terrain...\n'}
+[0.580556] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Found OGRE_Terrain: optimized;/usr/lib/x86_64-linux-gnu/libOgreTerrain.so;debug;/usr/lib/x86_64-linux-gnu/libOgreTerrain.so\n'}
+[0.580662] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Looking for OGRE_Property...\n'}
+[0.580723] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Found OGRE_Property: optimized;/usr/lib/x86_64-linux-gnu/libOgreProperty.so;debug;/usr/lib/x86_64-linux-gnu/libOgreProperty.so\n'}
+[0.580769] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Looking for OGRE_RTShaderSystem...\n'}
+[0.580812] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Found OGRE_RTShaderSystem: optimized;/usr/lib/x86_64-linux-gnu/libOgreRTShaderSystem.so;debug;/usr/lib/x86_64-linux-gnu/libOgreRTShaderSystem.so\n'}
+[0.580866] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Looking for OGRE_Volume...\n'}
+[0.580924] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Found OGRE_Volume: optimized;/usr/lib/x86_64-linux-gnu/libOgreVolume.so;debug;/usr/lib/x86_64-linux-gnu/libOgreVolume.so\n'}
+[0.580968] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Looking for OGRE_Overlay...\n'}
+[0.581010] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Found OGRE_Overlay: optimized;/usr/lib/x86_64-linux-gnu/libOgreOverlay.so;debug;/usr/lib/x86_64-linux-gnu/libOgreOverlay.so\n'}
+[0.599744] (-) TimerEvent: {}
+[0.661061] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Looking for ignition-math6 -- found version 6.15.1\n'}
+[0.661350] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Looking for ignition-transport8 -- found version 8.2.1\n'}
+[0.661745] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Searching for dependencies of ignition-transport8\n'}
+[0.691651] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Found Protobuf: /usr/lib/x86_64-linux-gnu/libprotobuf.so (found suitable version "3.12.4", minimum required is "3") \n'}
+[0.699922] (-) TimerEvent: {}
+[0.709573] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Config-file not installed for ZeroMQ -- checking for pkg-config\n'}
+[0.715570] (mecanum_gazebo_plugin) StdoutLine: {'line': b"-- Checking for module 'libzmq >= 4'\n"}
+[0.733103] (mecanum_gazebo_plugin) StdoutLine: {'line': b'--   Found libzmq , version 4.3.4\n'}
+[0.798878] (mecanum_gazebo_plugin) StdoutLine: {'line': b"-- Checking for module 'uuid'\n"}
+[0.799966] (-) TimerEvent: {}
+[0.817350] (mecanum_gazebo_plugin) StdoutLine: {'line': b'--   Found uuid, version 2.37.2\n'}
+[0.860815] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Looking for ignition-msgs5 -- found version 5.8.1\n'}
+[0.861328] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Searching for dependencies of ignition-msgs5\n'}
+[0.889570] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Looking for ignition-math6 -- found version 6.15.1\n'}
+[0.895484] (mecanum_gazebo_plugin) StdoutLine: {'line': b"-- Checking for module 'tinyxml2'\n"}
+[0.900099] (-) TimerEvent: {}
+[0.916008] (mecanum_gazebo_plugin) StdoutLine: {'line': b'--   Found tinyxml2, version 9.0.0\n'}
+[0.965951] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Looking for ignition-msgs5 -- found version 5.8.1\n'}
+[0.966265] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Looking for ignition-common3 -- found version 3.14.0\n'}
+[0.966557] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Searching for dependencies of ignition-common3\n'}
+[0.966701] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Looking for dlfcn.h - found\n'}
+[0.966751] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Looking for libdl - found\n'}
+[0.977713] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Searching for <ignition-common3> component [graphics]\n'}
+[0.977948] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Looking for ignition-common3-graphics -- found version 3.14.0\n'}
+[0.978391] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Searching for dependencies of ignition-common3-graphics\n'}
+[0.978848] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Looking for ignition-math6 -- found version 6.15.1\n'}
+[0.979925] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Looking for ignition-fuel_tools4 -- found version 4.4.0\n'}
+[0.980503] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Searching for dependencies of ignition-fuel_tools4\n'}
+[1.000237] (-) TimerEvent: {}
+[1.031515] (mecanum_gazebo_plugin) StdoutLine: {'line': b"-- Checking for module 'jsoncpp'\n"}
+[1.048279] (mecanum_gazebo_plugin) StdoutLine: {'line': b'--   Found jsoncpp, version 1.9.5\n'}
+[1.100426] (-) TimerEvent: {}
+[1.105573] (mecanum_gazebo_plugin) StdoutLine: {'line': b"-- Checking for module 'libzip'\n"}
+[1.131883] (mecanum_gazebo_plugin) StdoutLine: {'line': b'--   Found libzip, version 1.7.3\n'}
+[1.177140] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Looking for ignition-common3 -- found version 3.14.0\n'}
+[1.177501] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Looking for ignition-math6 -- found version 6.15.1\n'}
+[1.178109] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Looking for ignition-msgs5 -- found version 5.8.1\n'}
+[1.180977] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Found gazebo_ros: 3.9.0 (/opt/ros/humble/share/gazebo_ros/cmake)\n'}
+[1.183895] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Gazebo version: 11.10\n'}
+[1.184762] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Found rosidl_default_generators: 1.2.0 (/opt/ros/humble/share/rosidl_default_generators/cmake)\n'}
+[1.192624] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Found yaml_cpp_vendor: 8.0.2 (/opt/ros/humble/share/yaml_cpp_vendor/cmake)\n'}
+[1.200587] (-) TimerEvent: {}
+[1.300939] (-) TimerEvent: {}
+[1.401345] (-) TimerEvent: {}
+[1.462779] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Found ament_cmake_ros: 0.10.0 (/opt/ros/humble/share/ament_cmake_ros/cmake)\n'}
+[1.501496] (-) TimerEvent: {}
+[1.601890] (-) TimerEvent: {}
+[1.702315] (-) TimerEvent: {}
+[1.802796] (-) TimerEvent: {}
+[1.825985] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c\n'}
+[1.903048] (-) TimerEvent: {}
+[1.967224] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp\n'}
+[1.991589] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Found python_cmake_module: 0.10.0 (/opt/ros/humble/share/python_cmake_module/cmake)\n'}
+[2.003172] (-) TimerEvent: {}
+[2.013364] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Using PYTHON_EXECUTABLE: /usr/bin/python3\n'}
+[2.013618] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Using PYTHON_INCLUDE_DIRS: /usr/include/python3.10\n'}
+[2.013853] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Using PYTHON_LIBRARIES: /usr/lib/x86_64-linux-gnu/libpython3.10.so\n'}
+[2.043883] (mecanum_gazebo_plugin) StderrLine: {'line': b'\x1b[0mCMake Deprecation Warning at /opt/ros/humble/share/rosidl_cmake/cmake/rosidl_target_interfaces.cmake:32 (message):\n'}
+[2.044155] (mecanum_gazebo_plugin) StderrLine: {'line': b'  Use rosidl_get_typesupport_target() and target_link_libraries() instead of\n'}
+[2.044878] (mecanum_gazebo_plugin) StderrLine: {'line': b'  rosidl_target_interfaces()\n'}
+[2.045029] (mecanum_gazebo_plugin) StderrLine: {'line': b'Call Stack (most recent call first):\n'}
+[2.045175] (mecanum_gazebo_plugin) StderrLine: {'line': b'  CMakeLists.txt:35 (rosidl_target_interfaces)\n'}
+[2.045332] (mecanum_gazebo_plugin) StderrLine: {'line': b'\n'}
+[2.045407] (mecanum_gazebo_plugin) StderrLine: {'line': b'\x1b[0m\n'}
+[2.051287] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Configuring done\n'}
+[2.103336] (-) TimerEvent: {}
+[2.124045] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Generating done\n'}
+[2.148136] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Build files have been written to: /host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin\n'}
+[2.187881] (mecanum_gazebo_plugin) StdoutLine: {'line': b'\x1b[35m\x1b[1mConsolidate compiler generated dependencies of target mecanum_gazebo_plugin__rosidl_generator_c\x1b[0m\n'}
+[2.203473] (-) TimerEvent: {}
+[2.204246] (mecanum_gazebo_plugin) StdoutLine: {'line': b'[ 12%] Built target mecanum_gazebo_plugin__cpp\n'}
+[2.204448] (mecanum_gazebo_plugin) StdoutLine: {'line': b'[ 12%] Built target mecanum_gazebo_plugin__rosidl_generator_c\n'}
+[2.217041] (mecanum_gazebo_plugin) StdoutLine: {'line': b'[ 12%] Built target ament_cmake_python_copy_mecanum_gazebo_plugin\n'}
+[2.224956] (mecanum_gazebo_plugin) StdoutLine: {'line': b'\x1b[35m\x1b[1mConsolidate compiler generated dependencies of target mecanum_gazebo_plugin__rosidl_typesupport_introspection_c\x1b[0m\n'}
+[2.225550] (mecanum_gazebo_plugin) StdoutLine: {'line': b'\x1b[35m\x1b[1mConsolidate compiler generated dependencies of target mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_c\x1b[0m\n'}
+[2.225665] (mecanum_gazebo_plugin) StdoutLine: {'line': b'\x1b[35m\x1b[1mConsolidate compiler generated dependencies of target mecanum_gazebo_plugin__rosidl_typesupport_cpp\x1b[0m\n'}
+[2.226377] (mecanum_gazebo_plugin) StdoutLine: {'line': b'\x1b[35m\x1b[1mConsolidate compiler generated dependencies of target mecanum_gazebo_plugin__rosidl_typesupport_c\x1b[0m\n'}
+[2.227164] (mecanum_gazebo_plugin) StdoutLine: {'line': b'\x1b[35m\x1b[1mConsolidate compiler generated dependencies of target mecanum_gazebo_plugin__rosidl_typesupport_introspection_cpp\x1b[0m\n'}
+[2.229411] (mecanum_gazebo_plugin) StdoutLine: {'line': b'\x1b[35m\x1b[1mConsolidate compiler generated dependencies of target mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_cpp\x1b[0m\n'}
+[2.246776] (mecanum_gazebo_plugin) StdoutLine: {'line': b'[ 30%] Built target mecanum_gazebo_plugin__rosidl_typesupport_c\n'}
+[2.247016] (mecanum_gazebo_plugin) StdoutLine: {'line': b'[ 36%] Built target mecanum_gazebo_plugin__rosidl_typesupport_cpp\n'}
+[2.247135] (mecanum_gazebo_plugin) StdoutLine: {'line': b'[ 39%] Built target mecanum_gazebo_plugin__rosidl_typesupport_introspection_c\n'}
+[2.247196] (mecanum_gazebo_plugin) StdoutLine: {'line': b'[ 48%] Built target mecanum_gazebo_plugin__rosidl_typesupport_introspection_cpp\n'}
+[2.247835] (mecanum_gazebo_plugin) StdoutLine: {'line': b'[ 57%] Built target mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_c\n'}
+[2.250928] (mecanum_gazebo_plugin) StdoutLine: {'line': b'[ 66%] Built target mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_cpp\n'}
+[2.280792] (mecanum_gazebo_plugin) StdoutLine: {'line': b'[ 66%] Built target mecanum_gazebo_plugin\n'}
+[2.296828] (mecanum_gazebo_plugin) StdoutLine: {'line': b'\x1b[35m\x1b[1mConsolidate compiler generated dependencies of target mecanum_drive_plugin\x1b[0m\n'}
+[2.303671] (-) TimerEvent: {}
+[2.311412] (mecanum_gazebo_plugin) StdoutLine: {'line': b'[ 69%] Built target mecanum_gazebo_plugin__py\n'}
+[2.332866] (mecanum_gazebo_plugin) StdoutLine: {'line': b'\x1b[35m\x1b[1mConsolidate compiler generated dependencies of target mecanum_gazebo_plugin__rosidl_generator_py\x1b[0m\n'}
+[2.355537] (mecanum_gazebo_plugin) StdoutLine: {'line': b'[ 75%] Built target mecanum_gazebo_plugin__rosidl_generator_py\n'}
+[2.369711] (mecanum_gazebo_plugin) StdoutLine: {'line': b'[ 78%] \x1b[32mBuilding CXX object CMakeFiles/mecanum_drive_plugin.dir/src/mecanum_drive_plugin.cpp.o\x1b[0m\n'}
+[2.374538] (mecanum_gazebo_plugin) StdoutLine: {'line': b'\x1b[35m\x1b[1mConsolidate compiler generated dependencies of target mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_c__pyext\x1b[0m\n'}
+[2.374813] (mecanum_gazebo_plugin) StdoutLine: {'line': b'\x1b[35m\x1b[1mConsolidate compiler generated dependencies of target mecanum_gazebo_plugin__rosidl_typesupport_c__pyext\x1b[0m\n'}
+[2.375769] (mecanum_gazebo_plugin) StdoutLine: {'line': b'\x1b[35m\x1b[1mConsolidate compiler generated dependencies of target mecanum_gazebo_plugin__rosidl_typesupport_introspection_c__pyext\x1b[0m\n'}
+[2.396161] (mecanum_gazebo_plugin) StdoutLine: {'line': b'[ 84%] Built target mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_c__pyext\n'}
+[2.396447] (mecanum_gazebo_plugin) StdoutLine: {'line': b'[ 90%] Built target mecanum_gazebo_plugin__rosidl_typesupport_c__pyext\n'}
+[2.398303] (mecanum_gazebo_plugin) StdoutLine: {'line': b'[ 96%] Built target mecanum_gazebo_plugin__rosidl_typesupport_introspection_c__pyext\n'}
+[2.403851] (-) TimerEvent: {}
+[2.470789] (mecanum_gazebo_plugin) StdoutLine: {'line': b'running egg_info\n'}
+[2.472688] (mecanum_gazebo_plugin) StdoutLine: {'line': b'writing mecanum_gazebo_plugin.egg-info/PKG-INFO\n'}
+[2.473287] (mecanum_gazebo_plugin) StdoutLine: {'line': b'writing dependency_links to mecanum_gazebo_plugin.egg-info/dependency_links.txt\n'}
+[2.473421] (mecanum_gazebo_plugin) StdoutLine: {'line': b'writing top-level names to mecanum_gazebo_plugin.egg-info/top_level.txt\n'}
+[2.475078] (mecanum_gazebo_plugin) StdoutLine: {'line': b"reading manifest file 'mecanum_gazebo_plugin.egg-info/SOURCES.txt'\n"}
+[2.475641] (mecanum_gazebo_plugin) StdoutLine: {'line': b"writing manifest file 'mecanum_gazebo_plugin.egg-info/SOURCES.txt'\n"}
+[2.503088] (mecanum_gazebo_plugin) StdoutLine: {'line': b'[ 96%] Built target ament_cmake_python_build_mecanum_gazebo_plugin_egg\n'}
+[2.503972] (-) TimerEvent: {}
+[2.604304] (-) TimerEvent: {}
+[2.704725] (-) TimerEvent: {}
+[2.805352] (-) TimerEvent: {}
+[2.905956] (-) TimerEvent: {}
+[3.006463] (-) TimerEvent: {}
+[3.106880] (-) TimerEvent: {}
+[3.207318] (-) TimerEvent: {}
+[3.307944] (-) TimerEvent: {}
+[3.408500] (-) TimerEvent: {}
+[3.509010] (-) TimerEvent: {}
+[3.609438] (-) TimerEvent: {}
+[3.709801] (-) TimerEvent: {}
+[3.810367] (-) TimerEvent: {}
+[3.911109] (-) TimerEvent: {}
+[4.011583] (-) TimerEvent: {}
+[4.111989] (-) TimerEvent: {}
+[4.212669] (-) TimerEvent: {}
+[4.313304] (-) TimerEvent: {}
+[4.414009] (-) TimerEvent: {}
+[4.514553] (-) TimerEvent: {}
+[4.615028] (-) TimerEvent: {}
+[4.715629] (-) TimerEvent: {}
+[4.816308] (-) TimerEvent: {}
+[4.916945] (-) TimerEvent: {}
+[5.017382] (-) TimerEvent: {}
+[5.118309] (-) TimerEvent: {}
+[5.218776] (-) TimerEvent: {}
+[5.319258] (-) TimerEvent: {}
+[5.419799] (-) TimerEvent: {}
+[5.520269] (-) TimerEvent: {}
+[5.620698] (-) TimerEvent: {}
+[5.721120] (-) TimerEvent: {}
+[5.821576] (-) TimerEvent: {}
+[5.922113] (-) TimerEvent: {}
+[6.022743] (-) TimerEvent: {}
+[6.123196] (-) TimerEvent: {}
+[6.223837] (-) TimerEvent: {}
+[6.324386] (-) TimerEvent: {}
+[6.424861] (-) TimerEvent: {}
+[6.525497] (-) TimerEvent: {}
+[6.626003] (-) TimerEvent: {}
+[6.726529] (-) TimerEvent: {}
+[6.827142] (-) TimerEvent: {}
+[6.927676] (-) TimerEvent: {}
+[7.028312] (-) TimerEvent: {}
+[7.128746] (-) TimerEvent: {}
+[7.229166] (-) TimerEvent: {}
+[7.329620] (-) TimerEvent: {}
+[7.430235] (-) TimerEvent: {}
+[7.530668] (-) TimerEvent: {}
+[7.631179] (-) TimerEvent: {}
+[7.731800] (-) TimerEvent: {}
+[7.832249] (-) TimerEvent: {}
+[7.932668] (-) TimerEvent: {}
+[8.033076] (-) TimerEvent: {}
+[8.133604] (-) TimerEvent: {}
+[8.234206] (-) TimerEvent: {}
+[8.334813] (-) TimerEvent: {}
+[8.435614] (-) TimerEvent: {}
+[8.536281] (-) TimerEvent: {}
+[8.636758] (-) TimerEvent: {}
+[8.737157] (-) TimerEvent: {}
+[8.837697] (-) TimerEvent: {}
+[8.938343] (-) TimerEvent: {}
+[9.039147] (-) TimerEvent: {}
+[9.139600] (-) TimerEvent: {}
+[9.240107] (-) TimerEvent: {}
+[9.340545] (-) TimerEvent: {}
+[9.441201] (-) TimerEvent: {}
+[9.541728] (-) TimerEvent: {}
+[9.642118] (-) TimerEvent: {}
+[9.742631] (-) TimerEvent: {}
+[9.843211] (-) TimerEvent: {}
+[9.943635] (-) TimerEvent: {}
+[10.044218] (-) TimerEvent: {}
+[10.144716] (-) TimerEvent: {}
+[10.245640] (-) TimerEvent: {}
+[10.346351] (-) TimerEvent: {}
+[10.446891] (-) TimerEvent: {}
+[10.547420] (-) TimerEvent: {}
+[10.647817] (-) TimerEvent: {}
+[10.748346] (-) TimerEvent: {}
+[10.848933] (-) TimerEvent: {}
+[10.949477] (-) TimerEvent: {}
+[11.050078] (-) TimerEvent: {}
+[11.151294] (-) TimerEvent: {}
+[11.251821] (-) TimerEvent: {}
+[11.352402] (-) TimerEvent: {}
+[11.453009] (-) TimerEvent: {}
+[11.553625] (-) TimerEvent: {}
+[11.654126] (-) TimerEvent: {}
+[11.754682] (-) TimerEvent: {}
+[11.855143] (-) TimerEvent: {}
+[11.955873] (-) TimerEvent: {}
+[12.056356] (-) TimerEvent: {}
+[12.156780] (-) TimerEvent: {}
+[12.257281] (-) TimerEvent: {}
+[12.357973] (-) TimerEvent: {}
+[12.458468] (-) TimerEvent: {}
+[12.558974] (-) TimerEvent: {}
+[12.659450] (-) TimerEvent: {}
+[12.759893] (-) TimerEvent: {}
+[12.860359] (-) TimerEvent: {}
+[12.960965] (-) TimerEvent: {}
+[13.061658] (-) TimerEvent: {}
+[13.162094] (-) TimerEvent: {}
+[13.262626] (-) TimerEvent: {}
+[13.363129] (-) TimerEvent: {}
+[13.464211] (-) TimerEvent: {}
+[13.564890] (-) TimerEvent: {}
+[13.665389] (-) TimerEvent: {}
+[13.765926] (-) TimerEvent: {}
+[13.866328] (-) TimerEvent: {}
+[13.966922] (-) TimerEvent: {}
+[14.067364] (-) TimerEvent: {}
+[14.167946] (-) TimerEvent: {}
+[14.268632] (-) TimerEvent: {}
+[14.369153] (-) TimerEvent: {}
+[14.469771] (-) TimerEvent: {}
+[14.570334] (-) TimerEvent: {}
+[14.671122] (-) TimerEvent: {}
+[14.772067] (-) TimerEvent: {}
+[14.872496] (-) TimerEvent: {}
+[14.972930] (-) TimerEvent: {}
+[15.073365] (-) TimerEvent: {}
+[15.173833] (-) TimerEvent: {}
+[15.274304] (-) TimerEvent: {}
+[15.374774] (-) TimerEvent: {}
+[15.475498] (-) TimerEvent: {}
+[15.576229] (-) TimerEvent: {}
+[15.676773] (-) TimerEvent: {}
+[15.777395] (-) TimerEvent: {}
+[15.877813] (-) TimerEvent: {}
+[15.978557] (-) TimerEvent: {}
+[16.079167] (-) TimerEvent: {}
+[16.179759] (-) TimerEvent: {}
+[16.280223] (-) TimerEvent: {}
+[16.380878] (-) TimerEvent: {}
+[16.481324] (-) TimerEvent: {}
+[16.581813] (-) TimerEvent: {}
+[16.682291] (-) TimerEvent: {}
+[16.782743] (-) TimerEvent: {}
+[16.883282] (-) TimerEvent: {}
+[16.983998] (-) TimerEvent: {}
+[17.084495] (-) TimerEvent: {}
+[17.184919] (-) TimerEvent: {}
+[17.285372] (-) TimerEvent: {}
+[17.385900] (-) TimerEvent: {}
+[17.486364] (-) TimerEvent: {}
+[17.586812] (-) TimerEvent: {}
+[17.687930] (-) TimerEvent: {}
+[17.788886] (-) TimerEvent: {}
+[17.889707] (-) TimerEvent: {}
+[17.990293] (-) TimerEvent: {}
+[18.090673] (-) TimerEvent: {}
+[18.191080] (-) TimerEvent: {}
+[18.291448] (-) TimerEvent: {}
+[18.391979] (-) TimerEvent: {}
+[18.492385] (-) TimerEvent: {}
+[18.592985] (-) TimerEvent: {}
+[18.693419] (-) TimerEvent: {}
+[18.793851] (-) TimerEvent: {}
+[18.894303] (-) TimerEvent: {}
+[18.995138] (-) TimerEvent: {}
+[19.095763] (-) TimerEvent: {}
+[19.196397] (-) TimerEvent: {}
+[19.296944] (-) TimerEvent: {}
+[19.397795] (-) TimerEvent: {}
+[19.498787] (-) TimerEvent: {}
+[19.599296] (-) TimerEvent: {}
+[19.699847] (-) TimerEvent: {}
+[19.800709] (-) TimerEvent: {}
+[19.901899] (-) TimerEvent: {}
+[20.002581] (-) TimerEvent: {}
+[20.103329] (-) TimerEvent: {}
+[20.203721] (-) TimerEvent: {}
+[20.304218] (-) TimerEvent: {}
+[20.404618] (-) TimerEvent: {}
+[20.505046] (-) TimerEvent: {}
+[20.605485] (-) TimerEvent: {}
+[20.706393] (-) TimerEvent: {}
+[20.806941] (-) TimerEvent: {}
+[20.908189] (-) TimerEvent: {}
+[21.008781] (-) TimerEvent: {}
+[21.109539] (-) TimerEvent: {}
+[21.210102] (-) TimerEvent: {}
+[21.310711] (-) TimerEvent: {}
+[21.411245] (-) TimerEvent: {}
+[21.511939] (-) TimerEvent: {}
+[21.612569] (-) TimerEvent: {}
+[21.713325] (-) TimerEvent: {}
+[21.813982] (-) TimerEvent: {}
+[21.841918] (mecanum_gazebo_plugin) StdoutLine: {'line': b'[100%] \x1b[32m\x1b[1mLinking CXX shared library libmecanum_drive_plugin.so\x1b[0m\n'}
+[21.914238] (-) TimerEvent: {}
+[22.014980] (-) TimerEvent: {}
+[22.115405] (-) TimerEvent: {}
+[22.215809] (-) TimerEvent: {}
+[22.316285] (-) TimerEvent: {}
+[22.417079] (-) TimerEvent: {}
+[22.518021] (-) TimerEvent: {}
+[22.619124] (-) TimerEvent: {}
+[22.720140] (-) TimerEvent: {}
+[22.731925] (mecanum_gazebo_plugin) StdoutLine: {'line': b'[100%] Built target mecanum_drive_plugin\n'}
+[22.747721] (mecanum_gazebo_plugin) CommandEnded: {'returncode': 0}
+[22.748705] (mecanum_gazebo_plugin) JobProgress: {'identifier': 'mecanum_gazebo_plugin', 'progress': 'install'}
+[22.764016] (mecanum_gazebo_plugin) Command: {'cmd': ['/usr/bin/cmake', '--install', '/host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin'], 'cwd': '/host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin', 'env': OrderedDict([('HOSTNAME', 'ros2-server'), ('GIT_ASKPASS', '/root/.vscode-server/bin/41dd792b5e652393e7787322889ed5fdc58bd75b/extensions/git/dist/askpass.sh'), ('SHLVL', '2'), ('LD_LIBRARY_PATH', '/host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib:/usr/lib/x86_64-linux-gnu/gazebo-11/plugins:/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/x86_64-linux-gnu:/opt/ros/humble/lib:/opt/mujoco/bin:/opt/mujoco/bin'), ('BROWSER', '/root/.vscode-server/bin/41dd792b5e652393e7787322889ed5fdc58bd75b/bin/helpers/browser.sh'), ('HOME', '/root'), ('TERM_PROGRAM_VERSION', '1.115.0'), ('VSCODE_IPC_HOOK_CLI', '/tmp/vscode-ipc-b7ee6f5a-1f0b-4256-90ef-af4af51cf901.sock'), ('ROS_PYTHON_VERSION', '3'), ('VSCODE_GIT_ASKPASS_MAIN', '/root/.vscode-server/bin/41dd792b5e652393e7787322889ed5fdc58bd75b/extensions/git/dist/askpass-main.js'), ('VSCODE_GIT_ASKPASS_NODE', '/root/.vscode-server/bin/41dd792b5e652393e7787322889ed5fdc58bd75b/node'), ('VSCODE_PYTHON_AUTOACTIVATE_GUARD', '1'), ('COLORTERM', 'truecolor'), ('REMOTE_CONTAINERS', 'true'), ('COLCON_PREFIX_PATH', '/host-home/mecanum_gazebo_plugin/install'), ('ROS_DISTRO', 'humble'), ('REMOTE_CONTAINERS_IPC', '/tmp/vscode-remote-containers-ipc-005e4990-5e54-4eb5-82c1-a142493d0341.sock'), ('_', '/usr/bin/colcon'), ('ROS_VERSION', '2'), ('TERM', 'xterm-256color'), ('ROS_LOCALHOST_ONLY', '0'), ('PATH', '/root/.vscode-server/data/User/globalStorage/github.copilot-chat/debugCommand:/root/.vscode-server/data/User/globalStorage/github.copilot-chat/copilotCli:/root/.vscode-server/bin/41dd792b5e652393e7787322889ed5fdc58bd75b/bin/remote-cli:/opt/ros/humble/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/mujoco/bin:/opt/mujoco/bin'), ('MUJOCO_DIR', '/opt/mujoco'), ('REMOTE_CONTAINERS_SOCKETS', '["/root/.gnupg/S.gpg-agent"]'), ('LANG', 'C.UTF-8'), ('LS_COLORS', 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:'), ('VSCODE_GIT_IPC_HANDLE', '/tmp/vscode-git-06dbb965c5.sock'), ('TERM_PROGRAM', 'vscode'), ('AMENT_PREFIX_PATH', '/host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin:/opt/ros/humble'), ('DEBIAN_FRONTEND', 'noninteractive'), ('SHELL', '/bin/bash'), ('VSCODE_GIT_ASKPASS_EXTRA_ARGS', ''), ('PWD', '/host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin'), ('LC_ALL', 'C.UTF-8'), ('GAZEBO_PLUGIN_PATH', '/host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib:/opt/ros/humble/lib:'), ('PYTHONPATH', '/host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages:/opt/ros/humble/lib/python3.10/site-packages:/opt/ros/humble/local/lib/python3.10/dist-packages'), ('COLCON', '1'), ('CMAKE_PREFIX_PATH', '/host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin:/opt/ros/humble')]), 'shell': False}
+[22.774641] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Install configuration: ""\n'}
+[22.775012] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/ament_index/resource_index/rosidl_interfaces/mecanum_gazebo_plugin\n'}
+[22.775182] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin\n'}
+[22.775320] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg\n'}
+[22.775685] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail\n'}
+[22.775771] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__type_support.h\n'}
+[22.775828] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__functions.c\n'}
+[22.775934] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__functions.h\n'}
+[22.776009] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__struct.h\n'}
+[22.776054] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/mecanum_cmd.h\n'}
+[22.776098] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/rosidl_generator_c__visibility_control.h\n'}
+[22.776145] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/environment/library_path.sh\n'}
+[22.776267] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/environment/library_path.dsv\n'}
+[22.776488] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib/libmecanum_gazebo_plugin__rosidl_generator_c.so\n'}
+[22.776580] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin\n'}
+[22.776732] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg\n'}
+[22.776803] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail\n'}
+[22.777052] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__rosidl_typesupport_fastrtps_c.h\n'}
+[22.777294] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/rosidl_typesupport_fastrtps_c__visibility_control.h\n'}
+[22.777526] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib/libmecanum_gazebo_plugin__rosidl_typesupport_fastrtps_c.so\n'}
+[22.777730] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin\n'}
+[22.777922] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg\n'}
+[22.778061] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail\n'}
+[22.778199] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__type_support.hpp\n'}
+[22.778353] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__builder.hpp\n'}
+[22.778473] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__struct.hpp\n'}
+[22.778607] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__traits.hpp\n'}
+[22.778821] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/rosidl_generator_cpp__visibility_control.hpp\n'}
+[22.779062] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/mecanum_cmd.hpp\n'}
+[22.779277] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin\n'}
+[22.779837] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg\n'}
+[22.780015] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/rosidl_typesupport_fastrtps_cpp__visibility_control.h\n'}
+[22.780215] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail\n'}
+[22.780453] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__rosidl_typesupport_fastrtps_cpp.hpp\n'}
+[22.780610] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/dds_fastrtps\n'}
+[22.780904] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib/libmecanum_gazebo_plugin__rosidl_typesupport_fastrtps_cpp.so\n'}
+[22.781228] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin\n'}
+[22.781389] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg\n'}
+[22.781476] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail\n'}
+[22.781610] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__rosidl_typesupport_introspection_c.h\n'}
+[22.781817] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__type_support.c\n'}
+[22.782193] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/rosidl_typesupport_introspection_c__visibility_control.h\n'}
+[22.782635] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib/libmecanum_gazebo_plugin__rosidl_typesupport_introspection_c.so\n'}
+[22.782742] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib/libmecanum_gazebo_plugin__rosidl_typesupport_c.so\n'}
+[22.782976] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin\n'}
+[22.783255] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg\n'}
+[22.783545] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail\n'}
+[22.783682] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__type_support.cpp\n'}
+[22.783889] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/include/mecanum_gazebo_plugin/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__rosidl_typesupport_introspection_cpp.hpp\n'}
+[22.783971] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib/libmecanum_gazebo_plugin__rosidl_typesupport_introspection_cpp.so\n'}
+[22.784286] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib/libmecanum_gazebo_plugin__rosidl_typesupport_cpp.so\n'}
+[22.784689] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/environment/pythonpath.sh\n'}
+[22.784877] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/environment/pythonpath.dsv\n'}
+[22.785037] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin-0.0.0-py3.10.egg-info\n'}
+[22.785173] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin-0.0.0-py3.10.egg-info/dependency_links.txt\n'}
+[22.785312] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin-0.0.0-py3.10.egg-info/PKG-INFO\n'}
+[22.785463] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin-0.0.0-py3.10.egg-info/top_level.txt\n'}
+[22.785618] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin-0.0.0-py3.10.egg-info/SOURCES.txt\n'}
+[22.785769] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin\n'}
+[22.785930] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/__init__.py\n'}
+[22.786067] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/_mecanum_gazebo_plugin_s.ep.rosidl_typesupport_introspection_c.c\n'}
+[22.786227] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/msg\n'}
+[22.786380] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/msg/__init__.py\n'}
+[22.786516] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/msg/_mecanum_cmd_s.c\n'}
+[22.786603] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/msg/_mecanum_cmd.py\n'}
+[22.786662] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/libmecanum_gazebo_plugin__rosidl_generator_py.so\n'}
+[22.786762] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/mecanum_gazebo_plugin_s__rosidl_typesupport_introspection_c.cpython-310-x86_64-linux-gnu.so\n'}
+[22.787035] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/mecanum_gazebo_plugin_s__rosidl_typesupport_c.cpython-310-x86_64-linux-gnu.so\n'}
+[22.787188] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/_mecanum_gazebo_plugin_s.ep.rosidl_typesupport_c.c\n'}
+[22.787365] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/mecanum_gazebo_plugin_s__rosidl_typesupport_fastrtps_c.cpython-310-x86_64-linux-gnu.so\n'}
+[22.787537] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/_mecanum_gazebo_plugin_s.ep.rosidl_typesupport_fastrtps_c.c\n'}
+[22.818116] (mecanum_gazebo_plugin) StdoutLine: {'line': b"Listing '/host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin'...\n"}
+[22.818397] (mecanum_gazebo_plugin) StdoutLine: {'line': b"Compiling '/host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/__init__.py'...\n"}
+[22.818510] (mecanum_gazebo_plugin) StdoutLine: {'line': b"Listing '/host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/msg'...\n"}
+[22.820221] (-) TimerEvent: {}
+[22.822009] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/mecanum_gazebo_plugin_s__rosidl_typesupport_fastrtps_c.cpython-310-x86_64-linux-gnu.so\n'}
+[22.822466] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/mecanum_gazebo_plugin_s__rosidl_typesupport_introspection_c.cpython-310-x86_64-linux-gnu.so\n'}
+[22.822788] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/local/lib/python3.10/dist-packages/mecanum_gazebo_plugin/mecanum_gazebo_plugin_s__rosidl_typesupport_c.cpython-310-x86_64-linux-gnu.so\n'}
+[22.823163] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib/libmecanum_gazebo_plugin__rosidl_generator_py.so\n'}
+[22.823473] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/msg/MecanumCmd.idl\n'}
+[22.823622] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/msg/MecanumCmd.msg\n'}
+[22.823835] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib/libmecanum_drive_plugin.so\n'}
+[22.836839] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Set runtime path of "/host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib/libmecanum_drive_plugin.so" to ""\n'}
+[22.837510] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/plugin_description.xml\n'}
+[22.838284] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/msg\n'}
+[22.838689] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/msg/MecanumCmd.msg\n'}
+[22.838759] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/ament_index/resource_index/package_run_dependencies/mecanum_gazebo_plugin\n'}
+[22.838815] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/ament_index/resource_index/parent_prefix_path/mecanum_gazebo_plugin\n'}
+[22.838879] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/environment/ament_prefix_path.sh\n'}
+[22.839113] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/environment/ament_prefix_path.dsv\n'}
+[22.839178] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/environment/path.sh\n'}
+[22.839324] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/environment/path.dsv\n'}
+[22.839513] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/local_setup.bash\n'}
+[22.839802] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/local_setup.sh\n'}
+[22.839906] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/local_setup.zsh\n'}
+[22.840149] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/local_setup.dsv\n'}
+[22.840223] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/package.dsv\n'}
+[22.840284] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/ament_index/resource_index/packages/mecanum_gazebo_plugin\n'}
+[22.840417] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/export_mecanum_gazebo_plugin__rosidl_generator_cExport.cmake\n'}
+[22.840502] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/export_mecanum_gazebo_plugin__rosidl_generator_cExport-noconfig.cmake\n'}
+[22.840778] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/export_mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_cExport.cmake\n'}
+[22.841243] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/export_mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_cExport-noconfig.cmake\n'}
+[22.841565] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/export_mecanum_gazebo_plugin__rosidl_generator_cppExport.cmake\n'}
+[22.841650] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/export_mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_cppExport.cmake\n'}
+[22.841736] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/export_mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_cppExport-noconfig.cmake\n'}
+[22.842072] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/mecanum_gazebo_plugin__rosidl_typesupport_introspection_cExport.cmake\n'}
+[22.843677] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/mecanum_gazebo_plugin__rosidl_typesupport_introspection_cExport-noconfig.cmake\n'}
+[22.844151] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/mecanum_gazebo_plugin__rosidl_typesupport_cExport.cmake\n'}
+[22.844534] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/mecanum_gazebo_plugin__rosidl_typesupport_cExport-noconfig.cmake\n'}
+[22.844624] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/mecanum_gazebo_plugin__rosidl_typesupport_introspection_cppExport.cmake\n'}
+[22.844751] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/mecanum_gazebo_plugin__rosidl_typesupport_introspection_cppExport-noconfig.cmake\n'}
+[22.844881] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/mecanum_gazebo_plugin__rosidl_typesupport_cppExport.cmake\n'}
+[22.844969] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/mecanum_gazebo_plugin__rosidl_typesupport_cppExport-noconfig.cmake\n'}
+[22.845092] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/export_mecanum_gazebo_plugin__rosidl_generator_pyExport.cmake\n'}
+[22.845179] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/export_mecanum_gazebo_plugin__rosidl_generator_pyExport-noconfig.cmake\n'}
+[22.845265] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/rosidl_cmake-extras.cmake\n'}
+[22.845312] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/ament_cmake_export_dependencies-extras.cmake\n'}
+[22.845358] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/ament_cmake_export_include_directories-extras.cmake\n'}
+[22.845402] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/ament_cmake_export_libraries-extras.cmake\n'}
+[22.845445] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/ament_cmake_export_targets-extras.cmake\n'}
+[22.845487] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/rosidl_cmake_export_typesupport_targets-extras.cmake\n'}
+[22.845541] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/rosidl_cmake_export_typesupport_libraries-extras.cmake\n'}
+[22.845593] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/mecanum_gazebo_pluginConfig.cmake\n'}
+[22.845679] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Up-to-date: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/cmake/mecanum_gazebo_pluginConfig-version.cmake\n'}
+[22.845743] (mecanum_gazebo_plugin) StdoutLine: {'line': b'-- Installing: /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/package.xml\n'}
+[22.847605] (mecanum_gazebo_plugin) CommandEnded: {'returncode': 0}
+[22.883658] (mecanum_gazebo_plugin) JobEnded: {'identifier': 'mecanum_gazebo_plugin', 'rc': 0}
+[22.884869] (-) EventReactorShutdown: {}

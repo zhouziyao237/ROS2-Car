@@ -3132,6 +3132,37 @@ CMakeFiles/mecanum_drive_plugin.dir/src/mecanum_drive_plugin.cpp.o: ../../src/me
   /opt/ros/humble/include/gazebo_ros/executor.hpp \
   /opt/ros/humble/include/gazebo_ros/node_visibility_control.h \
   /opt/ros/humble/include/gazebo_ros/qos.hpp \
+  /usr/include/yaml-cpp/yaml.h \
+  /usr/include/yaml-cpp/parser.h \
+  /usr/include/yaml-cpp/dll.h \
+  /usr/include/yaml-cpp/emitter.h \
+  /usr/include/yaml-cpp/binary.h \
+  /usr/include/yaml-cpp/emitterdef.h \
+  /usr/include/yaml-cpp/emittermanip.h \
+  /usr/include/yaml-cpp/null.h \
+  /usr/include/yaml-cpp/ostream_wrapper.h \
+  /usr/include/yaml-cpp/emitterstyle.h \
+  /usr/include/yaml-cpp/stlemitter.h \
+  /usr/include/yaml-cpp/exceptions.h \
+  /usr/include/yaml-cpp/mark.h \
+  /usr/include/yaml-cpp/noexcept.h \
+  /usr/include/yaml-cpp/traits.h \
+  /usr/include/yaml-cpp/node/node.h \
+  /usr/include/yaml-cpp/node/detail/iterator_fwd.h \
+  /usr/include/yaml-cpp/node/ptr.h \
+  /usr/include/yaml-cpp/node/type.h \
+  /usr/include/yaml-cpp/node/impl.h \
+  /usr/include/yaml-cpp/node/detail/memory.h \
+  /usr/include/yaml-cpp/node/detail/node.h \
+  /usr/include/yaml-cpp/node/detail/node_ref.h \
+  /usr/include/yaml-cpp/node/detail/node_data.h \
+  /usr/include/yaml-cpp/node/detail/node_iterator.h \
+  /usr/include/yaml-cpp/node/iterator.h \
+  /usr/include/yaml-cpp/node/detail/iterator.h \
+  /usr/include/yaml-cpp/node/convert.h \
+  /usr/include/yaml-cpp/node/detail/impl.h \
+  /usr/include/yaml-cpp/node/parse.h \
+  /usr/include/yaml-cpp/node/emit.h \
   rosidl_generator_cpp/mecanum_gazebo_plugin/msg/mecanum_cmd.hpp \
   rosidl_generator_cpp/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__struct.hpp \
   rosidl_generator_cpp/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__builder.hpp \
@@ -3145,6 +3176,42 @@ rosidl_generator_cpp/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__traits.hpp:
 rosidl_generator_cpp/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__builder.hpp:
 
 rosidl_generator_cpp/mecanum_gazebo_plugin/msg/mecanum_cmd.hpp:
+
+/usr/include/yaml-cpp/node/parse.h:
+
+/usr/include/yaml-cpp/node/detail/impl.h:
+
+/usr/include/yaml-cpp/node/convert.h:
+
+/usr/include/yaml-cpp/node/iterator.h:
+
+/usr/include/yaml-cpp/node/detail/node_ref.h:
+
+/usr/include/yaml-cpp/node/detail/memory.h:
+
+/usr/include/yaml-cpp/node/impl.h:
+
+/usr/include/yaml-cpp/node/type.h:
+
+/usr/include/yaml-cpp/node/ptr.h:
+
+/usr/include/yaml-cpp/traits.h:
+
+/usr/include/yaml-cpp/noexcept.h:
+
+/usr/include/yaml-cpp/mark.h:
+
+/usr/include/yaml-cpp/stlemitter.h:
+
+/usr/include/yaml-cpp/emitterstyle.h:
+
+/usr/include/yaml-cpp/null.h:
+
+/usr/include/yaml-cpp/binary.h:
+
+/usr/include/yaml-cpp/emitter.h:
+
+/usr/include/yaml-cpp/parser.h:
 
 /opt/ros/humble/include/gazebo_ros/qos.hpp:
 
@@ -3406,6 +3473,8 @@ rosidl_generator_cpp/mecanum_gazebo_plugin/msg/mecanum_cmd.hpp:
 
 /opt/ros/humble/include/rosidl_runtime_cpp/rosidl_typesupport_cpp/message_type_support.hpp:
 
+/usr/include/yaml-cpp/yaml.h:
+
 /opt/ros/humble/include/builtin_interfaces/builtin_interfaces/msg/detail/duration__type_support.hpp:
 
 /opt/ros/humble/include/builtin_interfaces/builtin_interfaces/msg/detail/duration__struct.hpp:
@@ -3587,6 +3656,8 @@ rosidl_generator_cpp/mecanum_gazebo_plugin/msg/mecanum_cmd.hpp:
 /usr/include/gazebo-11/gazebo/physics/World.hh:
 
 /usr/include/gazebo-11/gazebo/physics/Population.hh:
+
+/usr/include/yaml-cpp/node/emit.h:
 
 /usr/include/gazebo-11/gazebo/physics/PlaneShape.hh:
 
@@ -3974,6 +4045,8 @@ rosidl_generator_cpp/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__type_support.
 
 /usr/include/boost/unordered/detail/set.hpp:
 
+/usr/include/yaml-cpp/emittermanip.h:
+
 /opt/ros/humble/include/rclcpp/rclcpp/parameter.hpp:
 
 /usr/include/boost/move/detail/to_raw_pointer.hpp:
@@ -4314,6 +4387,8 @@ rosidl_generator_cpp/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__type_support.
 
 /usr/include/ignition/math6/gz/math/detail/WellOrderedVector.hh:
 
+/usr/include/yaml-cpp/node/node.h:
+
 /usr/include/gazebo-11/gazebo/common/SystemPaths.hh:
 
 /usr/include/gazebo-11/gazebo/msgs/imagegeom.pb.h:
@@ -4562,6 +4637,8 @@ rosidl_generator_cpp/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__type_support.
 
 /usr/include/boost/thread/lock_algorithms.hpp:
 
+/usr/include/yaml-cpp/ostream_wrapper.h:
+
 /usr/include/ignition/msgs5/ignition/msgs/discovery.pb.h:
 
 /usr/include/boost/mpl/aux_/preprocessed/gcc/apply_fwd.hpp:
@@ -4739,6 +4816,8 @@ rosidl_generator_cpp/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__type_support.
 /usr/include/boost/chrono/duration.hpp:
 
 /usr/include/boost/mpl/aux_/type_wrapper.hpp:
+
+/usr/include/yaml-cpp/exceptions.h:
 
 /usr/include/oneapi/tbb/flow_graph_abstractions.h:
 
@@ -5426,6 +5505,8 @@ rosidl_generator_cpp/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__struct.hpp:
 
 /usr/include/boost/next_prior.hpp:
 
+/usr/include/yaml-cpp/node/detail/iterator.h:
+
 /usr/include/ignition/math6/gz/math/Spline.hh:
 
 /usr/include/boost/predef/library/c/uc.h:
@@ -5781,6 +5862,8 @@ rosidl_generator_cpp/mecanum_gazebo_plugin/msg/detail/mecanum_cmd__struct.hpp:
 /usr/include/x86_64-linux-gnu/bits/struct_mutex.h:
 
 /usr/include/boost/mpl/aux_/config/preprocessor.hpp:
+
+/usr/include/yaml-cpp/emitterdef.h:
 
 /usr/include/c++/11/ext/numeric_traits.h:
 
@@ -6190,6 +6273,8 @@ rosidl_generator_cpp/mecanum_gazebo_plugin/msg/rosidl_generator_cpp__visibility_
 
 /usr/include/boost/asio/execution/execute.hpp:
 
+/usr/include/yaml-cpp/dll.h:
+
 /usr/include/boost/predef/architecture/alpha.h:
 
 /usr/include/c++/11/complex:
@@ -6545,6 +6630,8 @@ rosidl_generator_cpp/mecanum_gazebo_plugin/msg/rosidl_generator_cpp__visibility_
 /usr/include/boost/predef/architecture/m68k.h:
 
 /usr/include/boost/date_time/time_system_split.hpp:
+
+/usr/include/yaml-cpp/node/detail/iterator_fwd.h:
 
 /usr/include/sdformat-9.7/sdf/Actor.hh:
 
@@ -7282,6 +7369,8 @@ rosidl_generator_cpp/mecanum_gazebo_plugin/msg/rosidl_generator_cpp__visibility_
 
 /usr/include/boost/atomic/detail/fp_ops_generic.hpp:
 
+/usr/include/yaml-cpp/node/detail/node_iterator.h:
+
 /usr/include/boost/atomic/detail/fp_operations_fwd.hpp:
 
 /usr/include/ignition/transport8/ignition/transport/detail/Node.hh:
@@ -7778,6 +7867,8 @@ rosidl_generator_cpp/mecanum_gazebo_plugin/msg/rosidl_generator_cpp__visibility_
 
 /usr/include/x86_64-linux-gnu/bits/types/struct_statx_timestamp.h:
 
+/usr/include/yaml-cpp/node/detail/node_data.h:
+
 /opt/ros/humble/include/tracetools/tracetools/utils.hpp:
 
 /usr/include/sdformat-9.7/sdf/Pbr.hh:
@@ -8059,6 +8150,8 @@ rosidl_generator_cpp/mecanum_gazebo_plugin/msg/rosidl_generator_cpp__visibility_
 /usr/include/boost/atomic/detail/pause.hpp:
 
 /usr/include/gazebo-11/gazebo/msgs/track_visual.pb.h:
+
+/usr/include/yaml-cpp/node/detail/node.h:
 
 /usr/include/x86_64-linux-gnu/libavcodec/bsf.h:
 

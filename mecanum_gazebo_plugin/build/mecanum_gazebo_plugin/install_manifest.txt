@@ -53,7 +53,7 @@
 /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/msg/MecanumCmd.idl
 /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/msg/MecanumCmd.msg
 /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib/libmecanum_drive_plugin.so
-/host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/plugin_description.xml
+/host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib/mecanum_gazebo_plugin/unified_odometry
 /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/mecanum_gazebo_plugin/msg/MecanumCmd.msg
 /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/ament_index/resource_index/package_run_dependencies/mecanum_gazebo_plugin
 /host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/share/ament_index/resource_index/parent_prefix_path/mecanum_gazebo_plugin

@@ -77,6 +77,7 @@ all: CMakeFiles/mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_c__pyext.dir/
 all: CMakeFiles/mecanum_gazebo_plugin__rosidl_typesupport_introspection_c__pyext.dir/all
 all: CMakeFiles/mecanum_gazebo_plugin__rosidl_typesupport_c__pyext.dir/all
 all: CMakeFiles/mecanum_drive_plugin.dir/all
+all: CMakeFiles/unified_odometry.dir/all
 all: mecanum_gazebo_plugin__py/all
 .PHONY : all
 
@@ -103,6 +104,7 @@ clean: CMakeFiles/mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_c__pyext.di
 clean: CMakeFiles/mecanum_gazebo_plugin__rosidl_typesupport_introspection_c__pyext.dir/clean
 clean: CMakeFiles/mecanum_gazebo_plugin__rosidl_typesupport_c__pyext.dir/clean
 clean: CMakeFiles/mecanum_drive_plugin.dir/clean
+clean: CMakeFiles/unified_odometry.dir/clean
 clean: mecanum_gazebo_plugin__py/clean
 .PHONY : clean
 
@@ -587,7 +589,6 @@ CMakeFiles/mecanum_gazebo_plugin__rosidl_typesupport_c__pyext.dir/clean:
 # Target rules for target CMakeFiles/mecanum_drive_plugin.dir
 
 # All Build rule for target.
-CMakeFiles/mecanum_drive_plugin.dir/all: CMakeFiles/mecanum_gazebo_plugin.dir/all
 CMakeFiles/mecanum_drive_plugin.dir/all: CMakeFiles/mecanum_gazebo_plugin__cpp.dir/all
 CMakeFiles/mecanum_drive_plugin.dir/all: CMakeFiles/mecanum_gazebo_plugin__rosidl_typesupport_cpp.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/mecanum_drive_plugin.dir/build.make CMakeFiles/mecanum_drive_plugin.dir/depend
@@ -597,7 +598,7 @@ CMakeFiles/mecanum_drive_plugin.dir/all: CMakeFiles/mecanum_gazebo_plugin__rosid
 
 # Build rule for subdir invocation for target.
 CMakeFiles/mecanum_drive_plugin.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin/CMakeFiles 24
+	$(CMAKE_COMMAND) -E cmake_progress_start /host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin/CMakeFiles 6
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/mecanum_drive_plugin.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin/CMakeFiles 0
 .PHONY : CMakeFiles/mecanum_drive_plugin.dir/rule
@@ -610,6 +611,33 @@ mecanum_drive_plugin: CMakeFiles/mecanum_drive_plugin.dir/rule
 CMakeFiles/mecanum_drive_plugin.dir/clean:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/mecanum_drive_plugin.dir/build.make CMakeFiles/mecanum_drive_plugin.dir/clean
 .PHONY : CMakeFiles/mecanum_drive_plugin.dir/clean
+
+#=============================================================================
+# Target rules for target CMakeFiles/unified_odometry.dir
+
+# All Build rule for target.
+CMakeFiles/unified_odometry.dir/all: CMakeFiles/mecanum_gazebo_plugin__cpp.dir/all
+CMakeFiles/unified_odometry.dir/all: CMakeFiles/mecanum_gazebo_plugin__rosidl_typesupport_cpp.dir/all
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/unified_odometry.dir/build.make CMakeFiles/unified_odometry.dir/depend
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/unified_odometry.dir/build.make CMakeFiles/unified_odometry.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin/CMakeFiles --progress-num=34,35 "Built target unified_odometry"
+.PHONY : CMakeFiles/unified_odometry.dir/all
+
+# Build rule for subdir invocation for target.
+CMakeFiles/unified_odometry.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin/CMakeFiles 6
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/unified_odometry.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin/CMakeFiles 0
+.PHONY : CMakeFiles/unified_odometry.dir/rule
+
+# Convenience name for target.
+unified_odometry: CMakeFiles/unified_odometry.dir/rule
+.PHONY : unified_odometry
+
+# clean rule for target.
+CMakeFiles/unified_odometry.dir/clean:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/unified_odometry.dir/build.make CMakeFiles/unified_odometry.dir/clean
+.PHONY : CMakeFiles/unified_odometry.dir/clean
 
 #=============================================================================
 # Target rules for target mecanum_gazebo_plugin__py/CMakeFiles/mecanum_gazebo_plugin__py.dir

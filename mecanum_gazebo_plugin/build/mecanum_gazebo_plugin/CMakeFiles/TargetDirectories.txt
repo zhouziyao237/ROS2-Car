@@ -16,6 +16,7 @@
 /host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin/CMakeFiles/mecanum_gazebo_plugin__rosidl_typesupport_introspection_c__pyext.dir
 /host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin/CMakeFiles/mecanum_gazebo_plugin__rosidl_typesupport_c__pyext.dir
 /host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin/CMakeFiles/mecanum_drive_plugin.dir
+/host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin/CMakeFiles/unified_odometry.dir
 /host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin/CMakeFiles/test.dir
 /host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin/CMakeFiles/edit_cache.dir
 /host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin/CMakeFiles/rebuild_cache.dir

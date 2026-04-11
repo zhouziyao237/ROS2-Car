@@ -1,9 +1,0 @@
-mecanum_drive_plugin:
-  ros__parameters:
-    wheel_radius: 0.0375
-    wheel_base: 0.1550
-    track_width: 0.4166
-    fl_dir: 1.0      # 若左前轮转向反了，改为 -1.0
-    fr_dir: 1.0
-    bl_dir: 1.0
-    br_dir: 1.0

@@ -6,10 +6,16 @@
 
   <!-- ========== 仿真/实物切换参数 ========== -->
 
-  <xacro:include filename="$(find chassis)/urdf/scan_sensor.xacro" />
+  
 
   <xacro:arg name="use_sim" default="true"/>
+  <xacro:property name="mecanum_config" value="$(find chassis)/config/robot_config.yaml" />
 
+  <xacro:include filename="$(find chassis)/urdf/scan_sensor.xacro" />
+  <xacro:include filename="$(find chassis)/urdf/mecanum.xacro" />
+
+  <xacro:scan_sensor prefix="scan" use_sim="$(arg use_sim)"/>
+  <xacro:mecanum_drive use_sim="$(arg use_sim)" config_path="${mecanum_config}"/>
 
   <link
     name="base_link">
@@ -316,57 +322,5 @@
     <axis
       xyz="0 1 0" />
   </joint>
-
-  <gazebo reference="FL_Link">
-    <mu1>100.0</mu1>
-    <mu2>100.0</mu2>
-    <kp>100000000.0</kp>
-    <kd>10.0</kd>
-  </gazebo>
-  <gazebo reference="FR_Link">
-    <mu1>100.0</mu1>
-    <mu2>100.0</mu2>
-    <kp>100000000.0</kp>
-    <kd>10.0</kd>
-  </gazebo>
-  <gazebo reference="BL_Link">
-    <mu1>100.0</mu1>
-    <mu2>100.0</mu2>
-    <kp>100000000.0</kp>
-    <kd>10.0</kd>
-  </gazebo>
-  <gazebo reference="BR_Link">
-    <mu1>100.0</mu1>
-    <mu2>100.0</mu2>
-    <kp>100000000.0</kp>
-    <kd>10.0</kd>
-  </gazebo>
-
-  <gazebo>
-    <plugin name="my_mecanum_plugin" filename="libmecanum_drive_plugin.so">
-      <fl_joint>FL_Joint</fl_joint>
-      <fr_joint>FR_Joint</fr_joint>
-      <bl_joint>BL_Joint</bl_joint>
-      <br_joint>BR_Joint</br_joint>
-      <wheel_radius>0.0375</wheel_radius>
-      <wheel_base>0.1550</wheel_base>
-      <track_width>0.4166</track_width>
-    </plugin>
-  </gazebo>
-
-  <gazebo>
-    <plugin name="joint_state_publisher" filename="libgazebo_ros_joint_state_publisher.so">
-      <ros>
-        <remapping>~/out:=joint_states</remapping>
-      </ros>
-      <update_rate>50</update_rate>
-      <joint_name>FL_Joint</joint_name>
-      <joint_name>FR_Joint</joint_name>
-      <joint_name>BL_Joint</joint_name>
-      <joint_name>BR_Joint</joint_name>
-    </plugin>
-  </gazebo>
-
-  <xacro:scan_sensor prefix="scan" use_sim="$(arg use_sim)"/>
 
 </robot>
