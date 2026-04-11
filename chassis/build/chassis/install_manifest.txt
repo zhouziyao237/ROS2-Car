@@ -10,6 +10,12 @@
 /host-home/chassis/install/chassis/share/chassis/meshes/FL_Link.STL
 /host-home/chassis/install/chassis/share/chassis/meshes/FR_Link.STL
 /host-home/chassis/install/chassis/share/chassis/meshes/base_link.STL
+/host-home/chassis/install/chassis/share/chassis/rviz/meshes/BR_Link.STL
+/host-home/chassis/install/chassis/share/chassis/rviz/meshes/BL_Link.STL
+/host-home/chassis/install/chassis/share/chassis/rviz/meshes/scan_Link.STL
+/host-home/chassis/install/chassis/share/chassis/rviz/meshes/FL_Link.STL
+/host-home/chassis/install/chassis/share/chassis/rviz/meshes/FR_Link.STL
+/host-home/chassis/install/chassis/share/chassis/rviz/meshes/base_link.STL
 /host-home/chassis/install/chassis/share/chassis/rviz/rviz.rviz
 /host-home/chassis/install/chassis/share/chassis/urdf/chassis.csv
 /host-home/chassis/install/chassis/share/chassis/urdf/chassis.urdf

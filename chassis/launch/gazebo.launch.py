@@ -1,6 +1,7 @@
 import os
 import re
 import subprocess
+import yaml  # 需要安装 pyyaml: pip install pyyaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, TimerAction
@@ -14,12 +15,28 @@ def generate_launch_description():
     gazebo_world_path = os.path.join(pkg_share, 'worlds', 'my-world.world')
     rviz_config_path = os.path.join(pkg_share, 'rviz', 'rviz.rviz')
     meshes_abs_path = os.path.join(pkg_share, 'meshes')
-    
-    # 统一配置文件路径
     robot_config = os.path.join(pkg_share, 'config', 'robot_config.yaml')
 
+    # 读取 YAML 文件，提取物理参数
+    with open(robot_config, 'r') as f:
+        config = yaml.safe_load(f)
+    physics = config.get('physics', {})
+    wheel_mu1 = physics.get('wheel_mu1', 0.8)
+    wheel_mu2 = physics.get('wheel_mu2', 0.6)
+    wheel_kp = physics.get('wheel_kp', 100000.0)
+    wheel_kd = physics.get('wheel_kd', 10.0)
+
+    # 构建 xacro 命令行参数
+    xacro_args = [
+        'use_sim:=true',
+        f'wheel_mu1:={wheel_mu1}',
+        f'wheel_mu2:={wheel_mu2}',
+        f'wheel_kp:={wheel_kp}',
+        f'wheel_kd:={wheel_kd}',
+    ]
+
     raw_content = subprocess.check_output(
-        ['xacro', urdf_model_path, 'use_sim:=true'],
+        ['xacro', urdf_model_path] + xacro_args,
         text=True
     )
     robot_description_content = re.sub(r'<!--.*?-->', '', raw_content, flags=re.DOTALL)
@@ -45,7 +62,7 @@ def generate_launch_description():
             'LD_LIBRARY_PATH': '/host-home/mecanum_gazebo_plugin/install/mecanum_gazebo_plugin/lib:/opt/ros/humble/lib'
         }
     )
-    
+
     spawn_entity = Node(
         package='gazebo_ros',
         executable='spawn_entity.py',
@@ -65,7 +82,7 @@ def generate_launch_description():
         executable='unified_odometry',
         name='unified_odometry',
         output='screen',
-        parameters=[robot_config]   # 自动加载 odometry 命名空间下的参数
+        parameters=[robot_config]
     )
 
     return LaunchDescription([

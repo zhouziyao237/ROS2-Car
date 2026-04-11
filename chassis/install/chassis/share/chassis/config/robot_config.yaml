@@ -12,7 +12,7 @@ odometry:
 # 麦轮驱动插件参数（用于自定义 Gazebo 插件）
 mecanum_drive_plugin:
   ros__parameters:
-    wheel_radius: 0.0375
+    wheel_radius: 0.04
     wheel_base: 0.1550
     track_width: 0.4166
     fl_joint: "FL_Joint"

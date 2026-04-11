@@ -1,7 +1,7 @@
-# 里程计参数（用于 unified_odometry 节点）
+# 里程计参数
 odometry:
   ros__parameters:
-    use_sim: true          # 仿真为 true，实车改为 false
+    use_sim: true
     wheel_radius: 0.0375
     wheel_base: 0.1550
     track_width: 0.4166
@@ -9,7 +9,7 @@ odometry:
     base_frame: "base_link"
     publish_rate: 50.0
 
-# 麦轮驱动插件参数（用于自定义 Gazebo 插件）
+# 麦轮驱动插件参数
 mecanum_drive_plugin:
   ros__parameters:
     wheel_radius: 0.0375
@@ -23,3 +23,10 @@ mecanum_drive_plugin:
     fr_dir: 1.0
     bl_dir: -1.0
     br_dir: 1.0
+
+# 物理仿真参数（用于 xacro）
+physics:
+  wheel_mu1: 0.8
+  wheel_mu2: 0.6
+  wheel_kp: 100000.0
+  wheel_kd: 10.0
