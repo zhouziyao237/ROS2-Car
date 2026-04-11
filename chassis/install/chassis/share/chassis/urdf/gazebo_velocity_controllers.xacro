@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:macro name="wheel_velocity_controller" params="joint_name">
+    <gazebo>
+      <plugin name="${joint_name}_velocity_controller" filename="libgazebo_ros_joint_velocity_controller.so">
+        <ros>
+          <namespace>/</namespace>
+          <!-- 将默认的 cmd_vel 重映射到自定义话题，供驱动节点发布 -->
+          <remapping>/cmd_vel:=/${joint_name}_velocity_controller/command</remapping>
+        </ros>
+        <joint>${joint_name}</joint>
+        <always_on>true</always_on>
+        <update_rate>50</update_rate>
+      </plugin>
+    </gazebo>
+  </xacro:macro>
+
+</robot>

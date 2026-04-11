@@ -1,0 +1,6 @@
+{
+  "package_name": "mecanum_gazebo_plugin",
+  "non_idl_tuples": [
+    "/host-home/mecanum_gazebo_plugin:msg/MecanumCmd.msg"
+  ]
+}

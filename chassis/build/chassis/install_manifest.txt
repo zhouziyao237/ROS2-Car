@@ -1,3 +1,4 @@
+/host-home/chassis/install/chassis/share/chassis/config/mecanum_control.yaml
 /host-home/chassis/install/chassis/share/chassis/config/joint_names_chassis.yaml
 /host-home/chassis/install/chassis/share/chassis/config/chassis_control.yaml
 /host-home/chassis/install/chassis/share/chassis/launch/gazebo.launch.py
@@ -12,6 +13,7 @@
 /host-home/chassis/install/chassis/share/chassis/meshes/FR_Link.STL
 /host-home/chassis/install/chassis/share/chassis/meshes/base_link.STL
 /host-home/chassis/install/chassis/share/chassis/rviz/rviz.rviz
+/host-home/chassis/install/chassis/share/chassis/urdf/gazebo_velocity_controllers.xacro
 /host-home/chassis/install/chassis/share/chassis/urdf/chassis.csv
 /host-home/chassis/install/chassis/share/chassis/urdf/chassis.urdf
 /host-home/chassis/install/chassis/share/chassis/urdf/gazebo_mecanum.xacro

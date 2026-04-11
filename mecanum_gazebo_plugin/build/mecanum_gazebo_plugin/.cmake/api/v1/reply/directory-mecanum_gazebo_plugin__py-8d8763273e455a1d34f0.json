@@ -1,0 +1,14 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : [],
+		"files" : [],
+		"nodes" : []
+	},
+	"installers" : [],
+	"paths" : 
+	{
+		"build" : "mecanum_gazebo_plugin__py",
+		"source" : "build/mecanum_gazebo_plugin/mecanum_gazebo_plugin__py"
+	}
+}

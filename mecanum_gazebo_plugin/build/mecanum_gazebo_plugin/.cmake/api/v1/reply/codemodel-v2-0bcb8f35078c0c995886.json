@@ -1,0 +1,242 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"childIndexes" : 
+					[
+						1
+					],
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-.-f3fcda72a5c0d91d9bde.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.10.2"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12,
+						13,
+						14,
+						15,
+						16,
+						17,
+						18
+					]
+				},
+				{
+					"build" : "mecanum_gazebo_plugin__py",
+					"jsonFile" : "directory-mecanum_gazebo_plugin__py-8d8763273e455a1d34f0.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.10.2"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 0,
+					"source" : "build/mecanum_gazebo_plugin/mecanum_gazebo_plugin__py",
+					"targetIndexes" : 
+					[
+						5
+					]
+				}
+			],
+			"name" : "",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0,
+						1
+					],
+					"name" : "mecanum_gazebo_plugin",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12,
+						13,
+						14,
+						15,
+						16,
+						17,
+						18
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 0,
+					"id" : "ament_cmake_python_build_mecanum_gazebo_plugin_egg::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-ament_cmake_python_build_mecanum_gazebo_plugin_egg-1288d446df212e0e58b9.json",
+					"name" : "ament_cmake_python_build_mecanum_gazebo_plugin_egg",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "ament_cmake_python_copy_mecanum_gazebo_plugin::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-ament_cmake_python_copy_mecanum_gazebo_plugin-f5acfccdb6b8c72ebdb3.json",
+					"name" : "ament_cmake_python_copy_mecanum_gazebo_plugin",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "mecanum_drive_plugin::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-mecanum_drive_plugin-060729e46f9903c289fe.json",
+					"name" : "mecanum_drive_plugin",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "mecanum_gazebo_plugin::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-mecanum_gazebo_plugin-550b7825cc8d8199c2e0.json",
+					"name" : "mecanum_gazebo_plugin",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "mecanum_gazebo_plugin__cpp::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-mecanum_gazebo_plugin__cpp-c4ddb9c976e0ffdd20b1.json",
+					"name" : "mecanum_gazebo_plugin__cpp",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "mecanum_gazebo_plugin__py::@da5ff10738b9bc521427",
+					"jsonFile" : "target-mecanum_gazebo_plugin__py-827bebb14742a29f9c50.json",
+					"name" : "mecanum_gazebo_plugin__py",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "mecanum_gazebo_plugin__rosidl_generator_c::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-mecanum_gazebo_plugin__rosidl_generator_c-a6c90d8fd4af7e8f4ae4.json",
+					"name" : "mecanum_gazebo_plugin__rosidl_generator_c",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "mecanum_gazebo_plugin__rosidl_generator_py::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-mecanum_gazebo_plugin__rosidl_generator_py-3b5c1c43ab0eca78cf4c.json",
+					"name" : "mecanum_gazebo_plugin__rosidl_generator_py",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "mecanum_gazebo_plugin__rosidl_typesupport_c::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-mecanum_gazebo_plugin__rosidl_typesupport_c-0584fb799bf71f440bd8.json",
+					"name" : "mecanum_gazebo_plugin__rosidl_typesupport_c",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "mecanum_gazebo_plugin__rosidl_typesupport_c__pyext::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-mecanum_gazebo_plugin__rosidl_typesupport_c__pyext-868c7aa5c6ef2377c3b3.json",
+					"name" : "mecanum_gazebo_plugin__rosidl_typesupport_c__pyext",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "mecanum_gazebo_plugin__rosidl_typesupport_cpp::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-mecanum_gazebo_plugin__rosidl_typesupport_cpp-7debfb58fb6cae124175.json",
+					"name" : "mecanum_gazebo_plugin__rosidl_typesupport_cpp",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_c::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_c-ffc9999f5dc180574696.json",
+					"name" : "mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_c",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_c__pyext::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_c__pyext-3cadbb5b1a6369b88057.json",
+					"name" : "mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_c__pyext",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_cpp::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_cpp-b57c436d23cb419e243f.json",
+					"name" : "mecanum_gazebo_plugin__rosidl_typesupport_fastrtps_cpp",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "mecanum_gazebo_plugin__rosidl_typesupport_introspection_c::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-mecanum_gazebo_plugin__rosidl_typesupport_introspection_c-8e8197d7a2d0e2e9b513.json",
+					"name" : "mecanum_gazebo_plugin__rosidl_typesupport_introspection_c",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "mecanum_gazebo_plugin__rosidl_typesupport_introspection_c__pyext::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-mecanum_gazebo_plugin__rosidl_typesupport_introspection_c__pyext-80d76e49683d8dcbe640.json",
+					"name" : "mecanum_gazebo_plugin__rosidl_typesupport_introspection_c__pyext",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "mecanum_gazebo_plugin__rosidl_typesupport_introspection_cpp::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-mecanum_gazebo_plugin__rosidl_typesupport_introspection_cpp-ff52018b8be33b81f58b.json",
+					"name" : "mecanum_gazebo_plugin__rosidl_typesupport_introspection_cpp",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "mecanum_gazebo_plugin_uninstall::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-mecanum_gazebo_plugin_uninstall-72b449c28e386ac2059a.json",
+					"name" : "mecanum_gazebo_plugin_uninstall",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "uninstall::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-uninstall-6591cdd495e9a926cddb.json",
+					"name" : "uninstall",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "/host-home/mecanum_gazebo_plugin/build/mecanum_gazebo_plugin",
+		"source" : "/host-home/mecanum_gazebo_plugin"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 3
+	}
+}
