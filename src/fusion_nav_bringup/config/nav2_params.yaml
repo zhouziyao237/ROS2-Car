@@ -1,0 +1,55 @@
+# 导航2 参数文件 (基准配置)
+amcl:
+  ros__parameters:
+    use_sim_time: false
+    # 注意：在 slam 模式下，amcl 节点通常不会被启动，这些参数仅作占位
+
+bt_navigator:
+  ros__parameters:
+    use_sim_time: false
+
+controller_server:
+  ros__parameters:
+    use_sim_time: false
+    FollowPath:
+      plugin: "dwb_core::DWBLocalPlanner"
+      min_vel_x: 0.0
+      max_vel_x: 0.5
+      min_vel_theta: -0.5
+      max_vel_theta: 0.5
+      acc_lim_x: 2.5
+      acc_lim_theta: 3.2
+      decel_lim_x: -2.5
+
+planner_server:
+  ros__parameters:
+    use_sim_time: false
+    GridBased:
+      plugin: "nav2_navfn_planner::NavfnPlanner"
+      tolerance: 0.5
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      use_sim_time: false
+      global_frame: odom
+      robot_base_frame: base_link
+      update_frequency: 5.0
+      publish_frequency: 2.0
+      width: 3
+      height: 3
+      resolution: 0.05
+      plugins: ["voxel_layer", "inflation_layer"]
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      use_sim_time: false
+      global_frame: map
+      robot_base_frame: base_link
+      update_frequency: 1.0
+      publish_frequency: 1.0
+      width: 50
+      height: 50
+      resolution: 0.05
+      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]

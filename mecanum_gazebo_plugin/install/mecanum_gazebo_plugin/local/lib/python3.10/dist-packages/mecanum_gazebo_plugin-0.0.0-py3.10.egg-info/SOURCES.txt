@@ -1,8 +1,0 @@
-setup.py
-mecanum_gazebo_plugin/__init__.py
-mecanum_gazebo_plugin.egg-info/PKG-INFO
-mecanum_gazebo_plugin.egg-info/SOURCES.txt
-mecanum_gazebo_plugin.egg-info/dependency_links.txt
-mecanum_gazebo_plugin.egg-info/top_level.txt
-mecanum_gazebo_plugin/msg/__init__.py
-mecanum_gazebo_plugin/msg/_mecanum_cmd.py

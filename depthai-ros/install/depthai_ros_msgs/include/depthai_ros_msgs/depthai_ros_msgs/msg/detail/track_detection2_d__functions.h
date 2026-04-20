@@ -1,1 +1,0 @@
-/host-home/depthai-ros/build/depthai_ros_msgs/rosidl_generator_c/depthai_ros_msgs/msg/detail/track_detection2_d__functions.h

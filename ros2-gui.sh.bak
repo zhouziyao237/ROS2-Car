@@ -1,0 +1,157 @@
+#!/bin/bash
+# Filename: ros2-gui.sh
+# Purpose: Manage a persistent ROS2 GUI container with dynamic X11 cookie injection.
+#          Creates a session-specific writable .Xauthority file inside container,
+#          completely bypassing mounted file permission issues.
+
+# ========== 自动获取脚本所在目录（支持任意路径执行） ==========
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# ======================================================================
+
+# ========== Configuration ==========
+CONTAINER_NAME="my-ros2"
+IMAGE_NAME="my-ros2-env"
+WORKSPACE_VOLUME="${SCRIPT_DIR}/ros2-car"
+HOST_MOUNT_DIR="${SCRIPT_DIR}"
+# ===================================
+
+# Check if Docker is available
+if ! command -v docker &> /dev/null; then
+    echo "Error: docker command not found. Please install Docker first."
+    exit 1
+fi
+
+# Allow Docker containers to connect to the X server
+xhost +local:docker &> /dev/null
+
+show_help() {
+    cat << EOF
+Usage: $0 {start|exec|stop|rm} [extra docker run options...]
+
+Commands:
+  start   - Create and start the persistent container.
+  exec    - Enter the container with dynamic X11 cookie injection.
+  stop    - Stop the container.
+  rm      - Remove the container.
+EOF
+}
+
+start_container() {
+    local extra_args=("$@")
+    if docker inspect "$CONTAINER_NAME" &> /dev/null; then
+        echo "Container $CONTAINER_NAME already exists."
+        if [ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER_NAME")" != "true" ]; then
+            echo "Starting stopped container $CONTAINER_NAME..."
+            docker start "$CONTAINER_NAME"
+        else
+            echo "Container $CONTAINER_NAME is already running."
+        fi
+    else
+        echo "Creating and starting new container $CONTAINER_NAME ..."
+        mkdir -p "$WORKSPACE_VOLUME"
+        docker run -it -d \
+            --name "$CONTAINER_NAME" \
+            --net=host \
+            -e DISPLAY="$DISPLAY" \
+            -v "$WORKSPACE_VOLUME:/root/workspace" \
+            -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
+            -v "$HOME/.Xauthority:/root/.Xauthority:ro" \
+            -v "$HOST_MOUNT_DIR:/host-home" \
+            --privileged \
+            -v /dev:/dev \
+            "${extra_args[@]}" \
+            "$IMAGE_NAME" \
+            bash -c "while true; do sleep 3600; done"
+        echo "Container started."
+        echo "Please ensure that 'xauth' is installed inside the container."
+    fi
+}
+
+exec_container() {
+    if ! docker inspect "$CONTAINER_NAME" &> /dev/null; then
+        echo "Container $CONTAINER_NAME does not exist. Run '$0 start' first."
+        exit 1
+    fi
+    if [ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER_NAME")" != "true" ]; then
+        echo "Container $CONTAINER_NAME is not running. Starting it..."
+        docker start "$CONTAINER_NAME"
+    fi
+
+    # Optional: run auto-fix-x11.sh if available
+    AUTO_FIX_SCRIPT="${SCRIPT_DIR}/scripts/auto-fix-x11.sh"
+    if [ -f "$AUTO_FIX_SCRIPT" ]; then
+        echo "Updating host X11 authentication with auto-fix-x11.sh..."
+        "$AUTO_FIX_SCRIPT" || true
+    fi
+
+    # Extract display number robustly
+    DISPLAY_NUM=$(echo "$DISPLAY" | sed -n 's/^[^:]*:\([0-9]\+\).*$/\1/p')
+    if [ -z "$DISPLAY_NUM" ]; then
+        echo "Warning: Could not extract display number from DISPLAY='$DISPLAY', using :0"
+        DISPLAY_NUM=0
+    fi
+
+    # Retrieve cookie
+    COOKIE_ENTRY=$(xauth list "$DISPLAY" 2>/dev/null | head -1)
+    if [ -z "$COOKIE_ENTRY" ]; then
+        COOKIE_ENTRY=$(xauth list 2>/dev/null | grep ":$DISPLAY_NUM" | grep -v unix | head -1)
+    fi
+    if [ -z "$COOKIE_ENTRY" ]; then
+        echo "Error: No xauth entry found for DISPLAY=$DISPLAY (display number :$DISPLAY_NUM)"
+        exit 1
+    fi
+
+    COOKIE_VALUE=$(echo "$COOKIE_ENTRY" | awk '{print $3}')
+    echo "Injecting X11 cookie for display :$DISPLAY_NUM into container..."
+
+    INNER_CMD="
+        SESSION_XAUTH=/tmp/.Xauthority_\$\$
+        touch \"\$SESSION_XAUTH\"
+        chmod 600 \"\$SESSION_XAUTH\"
+        echo 'Adding entry: $COOKIE_ENTRY'
+        xauth -f \"\$SESSION_XAUTH\" add $COOKIE_ENTRY
+        echo \"Adding entry: localhost:$DISPLAY_NUM MIT-MAGIC-COOKIE-1 $COOKIE_VALUE\"
+        xauth -f \"\$SESSION_XAUTH\" add localhost:$DISPLAY_NUM MIT-MAGIC-COOKIE-1 $COOKIE_VALUE
+        export XAUTHORITY=\"\$SESSION_XAUTH\"
+        echo 'Session-specific X11 authentication cookies:'
+        xauth -f \"\$XAUTHORITY\" list
+        exec bash
+    "
+
+    docker exec -it \
+        -e DISPLAY=":$DISPLAY_NUM" \
+        "$CONTAINER_NAME" \
+        bash -c "$INNER_CMD"
+}
+
+stop_container() {
+    docker stop "$CONTAINER_NAME"
+}
+
+rm_container() {
+    docker rm -f "$CONTAINER_NAME"
+}
+
+case "${1:-}" in
+    start)
+        shift
+        start_container "$@"
+        ;;
+    exec|enter)
+        exec_container
+        ;;
+    stop)
+        stop_container
+        ;;
+    rm|remove)
+        rm_container
+        ;;
+    help|--help|-h)
+        show_help
+        ;;
+    *)
+        echo "Error: unknown command '$1'"
+        show_help
+        exit 1
+        ;;
+esac

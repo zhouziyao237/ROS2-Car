@@ -1,1 +1,0 @@
-/host-home/depthai-ros/depthai_ros_msgs/msg/ImuWithMagneticField.msg

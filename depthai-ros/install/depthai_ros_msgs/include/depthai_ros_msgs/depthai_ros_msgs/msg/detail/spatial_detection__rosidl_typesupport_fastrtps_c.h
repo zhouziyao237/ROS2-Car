@@ -1,1 +1,0 @@
-/host-home/depthai-ros/build/depthai_ros_msgs/rosidl_typesupport_fastrtps_c/depthai_ros_msgs/msg/detail/spatial_detection__rosidl_typesupport_fastrtps_c.h

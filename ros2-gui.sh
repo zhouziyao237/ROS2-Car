@@ -1,178 +1,118 @@
 #!/bin/bash
-# Filename: ros2-gui.sh
-# Purpose: Manage a persistent ROS2 GUI container with dynamic X11 cookie injection.
-#          Creates a session-specific writable .Xauthority file inside container,
-#          completely bypassing mounted file permission issues.
+# =============================================================================
+# ros2-gui.sh - 管理 ROS2 Docker GUI 容器（自动路径 + 简化 X11 注入）
+# =============================================================================
 
-# ========== Configuration (Modify these to match your setup) ==========
-CONTAINER_NAME="my-ros2"           # Container name
-IMAGE_NAME="my-ros2-env"                # Your Docker image name
-WORKSPACE_VOLUME="ros2_workspace"   # Docker volume for persistent workspace
-HOST_MOUNT_DIR="/home/ros2-server/ros2-car"   # Host directory to mount into container
-# ======================================================================
+# ---------- 自动获取脚本所在目录（支持任意路径执行） ----------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Check if Docker is available
+# ---------- 配置（基于脚本目录自动生成，无需手动修改） ----------
+CONTAINER_NAME="my-ros2"                 # 容器名称
+IMAGE_NAME="my-ros2-env"                 # Docker 镜像名称
+WORKSPACE_VOLUME="${SCRIPT_DIR}/ros2-car" # 容器内工作空间（映射为 /root/workspace）
+HOST_MOUNT_DIR="${SCRIPT_DIR}"           # 挂载到容器的 /host-home
+# -----------------------------------------------------------------
+
+# 检查 Docker 是否可用
 if ! command -v docker &> /dev/null; then
-    echo "Error: docker command not found. Please install Docker first."
+    echo "错误：未找到 docker 命令，请先安装 Docker。"
     exit 1
 fi
 
-# Allow Docker containers to connect to the X server (needs to be done only once)
+# 允许本地 Docker 容器连接 X 服务器（静默执行）
 xhost +local:docker &> /dev/null
 
-# Display help
+# 显示帮助信息
 show_help() {
     cat << EOF
-Usage: $0 {start|exec|stop|rm} [extra docker run options...]
+用法: $0 {start|exec|stop|rm} [额外的 docker run 选项...]
 
-Commands:
-  start   - Create and start the persistent container. You can append extra
-            docker run options, e.g.:
+命令:
+  start   - 创建并启动持久化容器。可附加额外 docker run 参数，例如：
               $0 start --device /dev/bus/usb:/dev/bus/usb
-              $0 start -v /extra/data:/data --env ROS_DOMAIN_ID=42
-  exec    - Enter the container with dynamic X11 cookie injection
-  stop    - Stop the container
-  rm      - Remove the container
+  exec    - 进入容器，自动处理 X11 显示
+  stop    - 停止容器
+  rm      - 删除容器
 
-Description:
-  - Uses host networking (--net=host) so container shares host's network.
-  - Mounts host's .Xauthority (read-only) and X11 socket as fallback.
-  - On 'exec', creates a session-specific temporary .Xauthority file inside container.
-  - Injects current X11 cookie for both original hostname and localhost.
-  - Sets DISPLAY=":$DISPLAY_NUM" for maximum compatibility.
-  - Each session gets its own authentication file, avoiding permission issues.
+说明:
+  - 使用主机网络模式 (--net=host)
+  - 挂载 X11 socket 并传递 DISPLAY 环境变量
+  - 进入容器后即可运行 rviz2 等 GUI 工具
 EOF
 }
 
-# Start the container (create if not exists, start if stopped)
-# Modified to accept extra docker run arguments
+# 启动容器
 start_container() {
-    local extra_args=("$@")   # Capture all additional arguments
+    local extra_args=("$@")
     if docker inspect "$CONTAINER_NAME" &> /dev/null; then
-        echo "Container $CONTAINER_NAME already exists."
+        echo "容器 $CONTAINER_NAME 已存在。"
         if [ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER_NAME")" != "true" ]; then
-            echo "Starting stopped container $CONTAINER_NAME..."
+            echo "正在启动已停止的容器 $CONTAINER_NAME ..."
             docker start "$CONTAINER_NAME"
         else
-            echo "Container $CONTAINER_NAME is already running."
+            echo "容器 $CONTAINER_NAME 已在运行中。"
         fi
     else
-        echo "Creating and starting new container $CONTAINER_NAME ..."
-        # Create volume if it doesn't exist
-        docker volume inspect "$WORKSPACE_VOLUME" &> /dev/null || docker volume create "$WORKSPACE_VOLUME"
-        # Run container in background (keeps running)
-        # Important: Use array expansion to avoid word splitting issues.
+        echo "正在创建并启动新容器 $CONTAINER_NAME ..."
+        mkdir -p "$WORKSPACE_VOLUME"
         docker run -it -d \
             --name "$CONTAINER_NAME" \
             --net=host \
+            -e DISPLAY="$DISPLAY" \
             -v "$WORKSPACE_VOLUME:/root/workspace" \
             -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
             -v "$HOME/.Xauthority:/root/.Xauthority:ro" \
             -v "$HOST_MOUNT_DIR:/host-home" \
+            --privileged \
+            -v /dev:/dev \
             "${extra_args[@]}" \
             "$IMAGE_NAME" \
             bash -c "while true; do sleep 3600; done"
-        echo "Container started."
-
-        echo "Please ensure that 'xauth' is installed inside the container."
-        echo "If not, run: apt update && apt install -y xauth"
+        echo "容器已启动。"
+        echo "提示：若容器内缺少 xauth，可运行：apt update && apt install -y xauth（非必须）"
     fi
 }
 
-# Enter the container with dynamic X11 cookie injection
+# 进入容器（简化版，直接传递 DISPLAY 和必要的 X11 socket）
 exec_container() {
     if ! docker inspect "$CONTAINER_NAME" &> /dev/null; then
-        echo "Container $CONTAINER_NAME does not exist. Run '$0 start' first."
+        echo "容器 $CONTAINER_NAME 不存在。请先执行 '$0 start' 创建。"
         exit 1
     fi
     if [ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER_NAME")" != "true" ]; then
-        echo "Container $CONTAINER_NAME is not running. Starting it..."
+        echo "容器 $CONTAINER_NAME 未运行，正在启动..."
         docker start "$CONTAINER_NAME"
     fi
 
-    # Step 1: Run auto-fix-x11.sh on host if available (optional, helps but not required)
-    if [ -f "$HOME/ros2-car/scripts/auto-fix-x11.sh" ]; then
-        echo "Updating host X11 authentication with auto-fix-x11.sh..."
-        "$HOME/ros2-car/scripts/auto-fix-x11.sh"
-    else
-        echo "Note: $HOME/ros2-car/scripts/auto-fix-x11.sh not found. Continuing with direct injection."
+    # 可选：若存在 auto-fix-x11.sh 则执行（但忽略错误，因为 xhost 已足够）
+    local AUTO_FIX_SCRIPT="${SCRIPT_DIR}/scripts/auto-fix-x11.sh"
+    if [ -f "$AUTO_FIX_SCRIPT" ]; then
+        echo "执行 X11 辅助脚本（忽略可能错误）..."
+        "$AUTO_FIX_SCRIPT" 2>/dev/null || true
     fi
 
-    # Step 2: Extract display number from current DISPLAY (e.g., from ros2-server:10.0 -> 10)
-    DISPLAY_NUM=$(echo "$DISPLAY" | sed -n 's/.*:\([0-9]*\)\..*/\1/p')
-    if [ -z "$DISPLAY_NUM" ]; then
-        echo "Error: Cannot extract display number from DISPLAY='$DISPLAY'"
-        exit 1
-    fi
-
-    # Step 3: Retrieve the full xauth cookie entry for current DISPLAY from host
-    # First try exact match with current DISPLAY
-    COOKIE_ENTRY=$(xauth list "$DISPLAY" 2>/dev/null | head -1)
-    if [ -z "$COOKIE_ENTRY" ]; then
-        # Fallback: try to match by display number (ignore hostname)
-        COOKIE_ENTRY=$(xauth list 2>/dev/null | grep ":$DISPLAY_NUM" | grep -v unix | head -1)
-    fi
-    if [ -z "$COOKIE_ENTRY" ]; then
-        echo "Error: No xauth entry found for DISPLAY=$DISPLAY (display number :$DISPLAY_NUM)"
-        echo "Please run 'xauth list' on the host to verify."
-        exit 1
-    fi
-
-    # Extract the cookie value (third field)
-    COOKIE_VALUE=$(echo "$COOKIE_ENTRY" | awk '{print $3}')
-
-    echo "Injecting X11 cookie for display :$DISPLAY_NUM into container..."
-
-    # Step 4: Construct the command to run inside container
-    INNER_CMD="
-        # Create session-specific temporary file using PID for uniqueness
-        SESSION_XAUTH=/tmp/.Xauthority_\$\$
-        touch \"\$SESSION_XAUTH\"
-        chmod 600 \"\$SESSION_XAUTH\"
-
-        # Inject the original hostname entry (e.g., ros2-server:11)
-        echo 'Adding entry: $COOKIE_ENTRY'
-        xauth -f \"\$SESSION_XAUTH\" add $COOKIE_ENTRY
-
-        # Inject localhost entry with the same cookie value
-        echo \"Adding entry: localhost:$DISPLAY_NUM MIT-MAGIC-COOKIE-1 $COOKIE_VALUE\"
-        xauth -f \"\$SESSION_XAUTH\" add localhost:$DISPLAY_NUM MIT-MAGIC-COOKIE-1 $COOKIE_VALUE
-
-        # Set XAUTHORITY to the session-specific file
-        export XAUTHORITY=\"\$SESSION_XAUTH\"
-
-        echo ''
-        echo 'Session-specific X11 authentication cookies (from \$XAUTHORITY):'
-        xauth -f \"\$XAUTHORITY\" list
-        echo ''
-
-        # Start interactive shell
-        exec bash
-    "
-
-    docker exec -it \
-        -e DISPLAY=":$DISPLAY_NUM" \
-        "$CONTAINER_NAME" \
-        bash -c "$INNER_CMD"
+    echo "进入容器，当前 DISPLAY=$DISPLAY"
+    # 直接启动 bash，DISPLAY 变量已通过 -e 传入容器
+    docker exec -it -e DISPLAY="$DISPLAY" "$CONTAINER_NAME" bash
 }
 
-# Stop the container
+# 停止容器
 stop_container() {
-    echo "Stopping container $CONTAINER_NAME ..."
+    echo "正在停止容器 $CONTAINER_NAME ..."
     docker stop "$CONTAINER_NAME"
 }
 
-# Remove the container
+# 删除容器
 rm_container() {
-    echo "Removing container $CONTAINER_NAME ..."
+    echo "正在删除容器 $CONTAINER_NAME ..."
     docker rm -f "$CONTAINER_NAME"
 }
 
-# Main command parsing
+# 主命令解析
 case "${1:-}" in
     start)
-        shift          # Remove 'start' from argument list
-        start_container "$@"   # Pass remaining arguments to function
+        shift
+        start_container "$@"
         ;;
     exec|enter)
         exec_container
@@ -187,7 +127,7 @@ case "${1:-}" in
         show_help
         ;;
     *)
-        echo "Error: unknown command '$1'"
+        echo "错误：未知命令 '$1'"
         show_help
         exit 1
         ;;
