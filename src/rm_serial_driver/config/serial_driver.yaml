@@ -6,3 +6,5 @@
     parity: none
     stop_bits: "1"
 
+    publish_tf: false
+    wheel_twist_topic: /wheel/twist

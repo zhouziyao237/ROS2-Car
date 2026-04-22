@@ -1,10 +1,10 @@
 scan_match_odom:
   ros__parameters:
     scan_topic: /scan
-    odom_topic: /odom
+    odom_topic: /lidar/odom
     odom_frame: odom
     base_frame: base_link
-    publish_tf: true
+    publish_tf: false
 
     min_range: 0.18
     max_range: 12.0
@@ -13,9 +13,12 @@ scan_match_odom:
     icp_max_iterations: 8
     icp_max_corr_dist: 0.20
     min_correspondences: 30
+    reject_mean_err_above: 0.08
 
     min_motion_trans: 0.004
     min_motion_rot: 0.004
+    static_lock_trans: 0.006
+    static_lock_rot: 0.006
     reject_trans_above: 0.08
     reject_rot_above: 0.12
 
@@ -26,3 +29,5 @@ scan_match_odom:
     ekf_rx: 0.06
     ekf_ry: 0.06
     ekf_ryaw: 0.04
+
+    vel_alpha: 0.2

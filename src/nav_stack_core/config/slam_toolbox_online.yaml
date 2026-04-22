@@ -14,13 +14,13 @@ slam_toolbox:
     use_scan_barycenter: true
 
     throttle_scans: 1
-    minimum_time_interval: 0.05
-    minimum_travel_distance: 0.03
-    minimum_travel_heading: 0.03
+    minimum_time_interval: 0.0
+    minimum_travel_distance: 0.0
+    minimum_travel_heading: 0.0
 
     transform_publish_period: 0.02
     map_update_interval: 0.2
     resolution: 0.05
     max_laser_range: 20.0
-    scan_queue_size: 1
+    scan_queue_size: 20
     restamp_tf: true

@@ -16,6 +16,7 @@
 #include <rclcpp/utilities.hpp>
 #include <serial_driver/serial_driver.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <geometry_msgs/msg/twist_with_covariance_stamped.hpp>
 
 // C++ system
 #include <cstdint>
@@ -41,15 +42,21 @@ RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions & options)
 
   getParams();
 
-  // TF broadcaster
+  // TF broadcaster / wheel twist publisher
   timestamp_offset_ = this->declare_parameter("timestamp_offset", 0.0);
-  tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
+  publish_tf_ = this->declare_parameter("publish_tf", false);
+  wheel_twist_topic_ = this->declare_parameter("wheel_twist_topic", std::string("/wheel/twist"));
+  if (publish_tf_) {
+    tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
+  }
 
   // Create Publisher
   latency_pub_ = this->create_publisher<std_msgs::msg::Float64>("/latency", 10);
   marker_pub_ = this->create_publisher<visualization_msgs::msg::Marker>("/aiming_point", 10);
   nav_state_pub_ =
     this->create_publisher<geometry_msgs::msg::Twist>("/serial/gimbal_joint_state", 10);
+  wheel_twist_pub_ =
+    this->create_publisher<geometry_msgs::msg::TwistWithCovarianceStamped>(wheel_twist_topic_, 10);
 
   // Detect parameter client
   detector_param_client_ = std::make_shared<rclcpp::AsyncParametersClient>(this, "armor_detector");
@@ -194,19 +201,21 @@ void RMSerialDriver::processPacket(const std::vector<uint8_t> & data, uint16_t c
       st.current_pitch = imu_packet.pitch;
       st.current_yaw = imu_packet.yaw;
 
-      st.time = imu_packet.timeseries; //时间戳
+      // st.time = imu_packet.timeseries; //时间戳
       // RCLCPP_INFO(get_logger(), "时间戳%d", st.time);
 
-      // 发布TF变换
-      auto t = std::make_unique<geometry_msgs::msg::TransformStamped>();
-      t->header.stamp = this->now() + rclcpp::Duration::from_seconds(timestamp_offset_);
-      t->header.frame_id = "odom";
-      t->child_frame_id = "gimbal_link";
+      // 发布TF变换（默认关闭，避免干扰底盘定位主链）
+      if (publish_tf_ && tf_broadcaster_) {
+        auto t = std::make_unique<geometry_msgs::msg::TransformStamped>();
+        t->header.stamp = this->now() + rclcpp::Duration::from_seconds(timestamp_offset_);
+        t->header.frame_id = "odom";
+        t->child_frame_id = "gimbal_link";
 
-      tf2::Quaternion q;
-      q.setRPY(imu_packet.roll, imu_packet.pitch, imu_packet.yaw);
-      t->transform.rotation = tf2::toMsg(q);
-      tf_broadcaster_->sendTransform(*t);
+        tf2::Quaternion q;
+        q.setRPY(imu_packet.roll, imu_packet.pitch, imu_packet.yaw);
+        t->transform.rotation = tf2::toMsg(q);
+        tf_broadcaster_->sendTransform(*t);
+      }
 
       //导航部分////////////////////////////////////////
       // 发布导航状态////////////////////////////////////////////
@@ -224,7 +233,13 @@ void RMSerialDriver::processPacket(const std::vector<uint8_t> & data, uint16_t c
       if (!crc16::Verify_CRC16_Check_Sum(
             reinterpret_cast<const uint8_t *>(&classis_packet), sizeof(classis_packet))) {
         RCLCPP_ERROR(get_logger(), "Classis Data CRC error!");
+        break;
       }
+
+      // Publish measured chassis feedback velocity as an auxiliary EKF input.
+      // Assumption: classis_packet.vx / vy / vz are measured body-frame velocities,
+      // where vz is yaw rate. If your MCU uses different fields or units, change here.
+      publishWheelTwist(classis_packet.vx, classis_packet.vy, classis_packet.vz);
       break;
     }
     case 0x504: {
@@ -250,6 +265,31 @@ void RMSerialDriver::processPacket(const std::vector<uint8_t> & data, uint16_t c
       break;
     }
   }
+}
+
+void RMSerialDriver::publishWheelTwist(float vx, float vy, float wz)
+{
+  geometry_msgs::msg::TwistWithCovarianceStamped msg;
+  msg.header.stamp = this->now();
+  msg.header.frame_id = "base_link";
+
+  msg.twist.twist.linear.x = vx;
+  msg.twist.twist.linear.y = vy;
+  msg.twist.twist.linear.z = 0.0;
+  msg.twist.twist.angular.x = 0.0;
+  msg.twist.twist.angular.y = 0.0;
+  msg.twist.twist.angular.z = wz;
+
+  msg.twist.covariance = {
+    0.05, 0.0, 0.0, 0.0, 0.0, 0.0,
+    0.0, 0.05, 0.0, 0.0, 0.0, 0.0,
+    0.0, 0.0, 99999.0, 0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0, 99999.0, 0.0, 0.0,
+    0.0, 0.0, 0.0, 0.0, 99999.0, 0.0,
+    0.0, 0.0, 0.0, 0.0, 0.0, 0.08
+  };
+
+  wheel_twist_pub_->publish(msg);
 }
 
 void RMSerialDriver::sendData(const auto_aim_interfaces::msg::Target::SharedPtr msg)

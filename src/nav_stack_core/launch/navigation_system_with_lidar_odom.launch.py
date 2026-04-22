@@ -12,8 +12,9 @@ from launch_ros.parameter_descriptions import ParameterValue
 def generate_launch_description():
     pkg_share = get_package_share_directory('nav_stack_core')
     nav2_bringup_share = get_package_share_directory('nav2_bringup')
+    slam_toolbox_share = get_package_share_directory('slam_toolbox')
 
-    default_xacro = os.path.join(pkg_share, 'description', 'minimal_lidar_robot.urdf.xacro')
+    default_xacro = os.path.join(pkg_share, 'description', 'minimal_lidar_robot.xacro')
     default_slam = os.path.join(pkg_share, 'config', 'slam_toolbox_online.yaml')
     default_nav2 = os.path.join(pkg_share, 'config', 'nav2_params_min.yaml')
 
@@ -24,6 +25,7 @@ def generate_launch_description():
     robot_description = ParameterValue(Command(['xacro ', xacro_path]), value_type=str)
 
     nav2_launch = os.path.join(nav2_bringup_share, 'launch', 'navigation_launch.py')
+    slam_launch = os.path.join(slam_toolbox_share, 'launch', 'online_async_launch.py')
 
     return LaunchDescription([
         DeclareLaunchArgument('xacro_path', default_value=default_xacro),
@@ -36,12 +38,12 @@ def generate_launch_description():
             output='screen',
             parameters=[{'robot_description': robot_description}],
         ),
-        Node(
-            package='slam_toolbox',
-            executable='async_slam_toolbox_node',
-            name='slam_toolbox',
-            output='screen',
-            parameters=[slam_params_file],
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(slam_launch),
+            launch_arguments={
+                'use_sim_time': 'false',
+                'slam_params_file': slam_params_file,
+            }.items(),
         ),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(nav2_launch),
@@ -55,5 +57,6 @@ def generate_launch_description():
             executable='rviz2',
             name='rviz2',
             output='screen',
+            arguments=['-d', os.path.join(pkg_share, 'rviz', 'nav_stack.rviz')],
         ),
     ])

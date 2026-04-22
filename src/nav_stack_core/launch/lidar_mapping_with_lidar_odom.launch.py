@@ -10,7 +10,7 @@ from launch_ros.parameter_descriptions import ParameterValue
 
 def generate_launch_description():
     pkg_share = get_package_share_directory('nav_stack_core')
-    default_xacro = os.path.join(pkg_share, 'description', 'minimal_lidar_robot.urdf.xacro')
+    default_xacro = os.path.join(pkg_share, 'description', 'minimal_lidar_robot.xacro')
     default_slam = os.path.join(pkg_share, 'config', 'slam_toolbox_online.yaml')
 
     xacro_path = LaunchConfiguration('xacro_path')

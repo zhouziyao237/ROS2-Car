@@ -31,7 +31,7 @@ struct IMUPacket
   // float vy;
   uint8_t roboid;
   uint8_t id;
-  uint8_t timeseries; //测试时间戳
+  // uint8_t timeseries; //测试时间戳
   uint16_t crc16;
 } __attribute__((packed, aligned(1)));
 

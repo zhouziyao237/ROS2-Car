@@ -51,6 +51,7 @@ ament_target_dependencies(nav_stack_mode_manager_node
 )
 
 install(PROGRAMS
+  scripts/cmd_vel_mode_mux.py 
   scripts/fake_odom_publisher.py
   scripts/odom_tf_broadcaster.py
   DESTINATION lib/${PROJECT_NAME}
