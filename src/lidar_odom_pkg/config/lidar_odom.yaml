@@ -4,12 +4,25 @@ scan_match_odom:
     odom_topic: /odom
     odom_frame: odom
     base_frame: base_link
-    rate_hint_hz: 12.0
-    min_range: 0.08
-    max_range: 20.0
-    max_points: 180
-    icp_iterations: 8
-    max_corr_dist: 0.45
-    downsample_step: 6
     publish_tf: true
-    publish_debug_pose: false
+
+    min_range: 0.18
+    max_range: 12.0
+    downsample_step: 5
+
+    icp_max_iterations: 8
+    icp_max_corr_dist: 0.20
+    min_correspondences: 30
+
+    min_motion_trans: 0.004
+    min_motion_rot: 0.004
+    reject_trans_above: 0.08
+    reject_rot_above: 0.12
+
+    use_ekf: true
+    ekf_qx: 0.0008
+    ekf_qy: 0.0008
+    ekf_qyaw: 0.0005
+    ekf_rx: 0.06
+    ekf_ry: 0.06
+    ekf_ryaw: 0.04
