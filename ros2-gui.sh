@@ -6,7 +6,7 @@
 
 # ========== Configuration (Modify these to match your setup) ==========
 CONTAINER_NAME="my-ros2"           # Container name
-IMAGE_NAME="my-ros2-env"                # Your Docker image name
+IMAGE_NAME="my-ros2-with-lidar"                # Your Docker image name
 WORKSPACE_VOLUME="ros2_workspace"   # Docker volume for persistent workspace
 HOST_MOUNT_DIR="/home/ros2-server/ros2-car"   # Host directory to mount into container
 # ======================================================================
@@ -69,6 +69,8 @@ start_container() {
             -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
             -v "$HOME/.Xauthority:/root/.Xauthority:ro" \
             -v "$HOST_MOUNT_DIR:/host-home" \
+            --privileged \
+            -v /dev:/dev \
             "${extra_args[@]}" \
             "$IMAGE_NAME" \
             bash -c "while true; do sleep 3600; done"
