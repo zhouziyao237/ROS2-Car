@@ -54,6 +54,8 @@ install(PROGRAMS
   scripts/cmd_vel_mode_mux.py 
   scripts/fake_odom_publisher.py
   scripts/odom_tf_broadcaster.py
+  scripts/serial_imu_bridge.py
+  scripts/wheel_twist_odom.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

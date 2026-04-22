@@ -1,93 +1,133 @@
-# nav_stack_core
+# nav_stack_core 操作手册（轮速 + 雷达 + IMU 融合，边建图边导航）
 
-一个把 SLAM、Nav2、waypoint、里程计模式切换集中到一起的 ROS 2 Humble 集成包。
+这份手册对应当前工程里已经接好的链路：
 
-这版额外内置了一个最小可用的 xacro：
+- 雷达：`/scan`
+- 轮速反馈：`/wheel/twist`
+- 底盘 AHRS（来自串口）：`/serial/gimbal_joint_state` -> `/imu/data_serial`
+- 融合里程计：`/odometry/filtered`（EKF）
+- 控制复用：`/cmd_vel_manual` + `/cmd_vel` -> `/cmd_vel_selected`
 
-- `description/minimal_lidar_robot.urdf.xacro`
+默认一键启动入口：`mapping_nav_with_serial.launch.py`。
 
-适合你现在这种场景：
-
-- 激光雷达 frame = `laser`
-- LaserScan topic = `/scan`
-- 先只跑 2D 激光雷达建图
-- 机器人本体模型暂时没有现成 urdf/xacro
-
-## 1. 直接只跑雷达建图
+## 1. 编译与启动
 
 ```bash
-cd ~/your_ws
 source /opt/ros/humble/setup.bash
-colcon build --packages-select nav_stack_core
+cd /host-home
+colcon build --packages-select lslidar_driver rm_serial_driver nav_stack_core
 source install/setup.bash
 
-ros2 launch nav_stack_core lidar_mapping.launch.py
+ros2 launch nav_stack_core mapping_nav_with_serial.launch.py
 ```
 
-这个 launch 会启动：
+这个 launch 会同时拉起：
 
-- `robot_state_publisher`
-- `slam_toolbox` 在线建图
-- `rviz2`
+- `rm_serial_driver`（串口底盘）
+- `lslidar_driver`（雷达）
+- `scan_match_odom`（雷达里程计）
+- `wheel_twist_odom`（轮速积分）
+- `serial_imu_bridge`（AHRS -> sensor_msgs/Imu）
+- `robot_localization ekf_node`
+- `slam_toolbox`（在线建图）
+- `Nav2` 全套节点
+- `RViz2`
 
-默认使用内置 xacro：
+## 2. RViz 显示说明（已配置）
 
-- `base_link`
-- `laser`
-- `camera_link`
+当前 `rviz/nav_stack.rviz` 已经包含以下关键显示：
 
-其中 `laser` 是通过固定关节挂在 `base_link` 上。
+- `Map`：`/map`
+- `Global Path`：`/plan`（全局规划轨迹）
+- `Local Path`：`/local_plan`（局部轨迹）
+- `Fused Odom`：`/odometry/filtered`（箭头+轨迹，表示车体运动方向）
+- `LaserScan`：`/scan`
+- `TF` / `RobotModel` / `Grid`
 
-## 2. 调整激光雷达安装位姿
+固定坐标系是 `map`。
 
-如果你的雷达不是安装在车体中心，可以直接传 xacro 参数：
+如果你只想单独打开这套 RViz：
 
 ```bash
-ros2 launch nav_stack_core lidar_mapping.launch.py \
-  xacro_args:="laser_x:=0.12 laser_y:=0.0 laser_z:=0.22 laser_yaw:=0.0"
+ros2 run rviz2 rviz2 -d /host-home/src/nav_stack_core/rviz/nav_stack.rviz
 ```
 
-## 3. 用你自己的 xacro 替换
+## 3. 手动控制 / 自动导航
 
-之后你有正式机器人模型时，可以继续复用这个包，只需要换掉路径：
+默认模式是 `manual`。
+
+切换手动模式：
 
 ```bash
-ros2 launch nav_stack_core lidar_mapping.launch.py \
-  xacro_path:=/absolute/path/to/your_robot.urdf.xacro
+ros2 topic pub /control_mode std_msgs/msg/String "{data: manual}" -1
 ```
 
-## 4. 跑完整导航系统
+手动发速度（示例：前进）：
 
 ```bash
-ros2 launch nav_stack_core navigation_system.launch.py \
-  xacro_path:=/absolute/path/to/your_robot.urdf.xacro \
-  use_slam:=true \
-  odom_mode:=lidar
+ros2 topic pub /cmd_vel_manual geometry_msgs/msg/Twist \
+"{linear: {x: 0.20, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" -r 10
 ```
 
-如果你暂时没有自己的 xacro，也可以直接用内置默认模型：
+停下：
 
 ```bash
-ros2 launch nav_stack_core navigation_system.launch.py \
-  use_slam:=true \
-  odom_mode:=lidar
+ros2 topic pub /cmd_vel_manual geometry_msgs/msg/Twist \
+"{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" -1
 ```
 
-## 5. 现在这版要满足的前提
-
-为了让 `slam_toolbox` 正常建图，你至少还需要下面这些条件成立：
-
-- `/scan` 持续发布 `sensor_msgs/LaserScan`
-- scan 消息的 frame_id 是 `laser`
-- 系统里存在 `odom -> base_link` 变换，或者有等价的里程计链路
-- `base_link -> laser` 由内置 xacro 提供
-
-如果你只有 `laser` 和 `/scan`，但还没有 `odom -> base_link`，那建图通常会不稳定，甚至直接报 TF 问题。
-
-## 6. 快速检查
+切换自动模式：
 
 ```bash
-ros2 topic echo /scan --once
-ros2 run tf2_ros tf2_echo base_link laser
+ros2 topic pub /control_mode std_msgs/msg/String "{data: auto}" -1
+```
+
+然后在 RViz 点 `2D Goal Pose` 下发目标点。
+
+- Nav2 会输出 `/plan`、`/local_plan`
+- 底盘最终收到的是 `/cmd_vel_selected`
+
+## 4. 必查健康状态（最常用）
+
+```bash
+ros2 lifecycle get /controller_server
+ros2 lifecycle get /bt_navigator
+ros2 topic hz /scan
+ros2 topic hz /wheel/twist
+ros2 topic hz /imu/data_serial
+ros2 topic hz /odometry/filtered
+ros2 run tf2_ros tf2_echo map odom
 ros2 run tf2_ros tf2_echo odom base_link
 ```
+
+正常预期：
+
+- `controller_server`、`bt_navigator` 为 `active [3]`
+- `/scan`、`/odometry/filtered` 有稳定频率
+- TF 链路连通：`map -> odom -> base_link`
+
+## 5. 常见问题快速定位
+
+1. RViz 里 `No map received`
+- 先看 `/scan` 是否连续发布。
+- 再看 `map -> odom -> base_link` 是否断链。
+- 若 TF 断开，`slam_toolbox` 不会稳定出图。
+
+2. 有轨迹但车不动
+- 检查当前模式是否 `auto`。
+- 查看 `/cmd_vel_selected` 是否有非零速度。
+- 查看串口节点日志是否持续打印 `Wheel feedback vx/vy/wz`。
+
+3. `map` 和 `base_link` 不是同一棵树
+- 说明 TF 仍有多树问题，优先检查 EKF 输出 `/odometry/filtered` 与 `odom` 链接。
+
+## 6. 保存地图（建图完成后）
+
+```bash
+ros2 run nav2_map_server map_saver_cli -f /host-home/maps/my_map
+```
+
+会生成：
+
+- `/host-home/maps/my_map.yaml`
+- `/host-home/maps/my_map.pgm`

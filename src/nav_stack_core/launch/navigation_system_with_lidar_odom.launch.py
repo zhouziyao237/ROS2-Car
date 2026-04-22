@@ -26,6 +26,7 @@ def generate_launch_description():
 
     nav2_launch = os.path.join(nav2_bringup_share, 'launch', 'navigation_launch.py')
     slam_launch = os.path.join(slam_toolbox_share, 'launch', 'online_async_launch.py')
+    default_rviz = os.path.join(pkg_share, 'rviz', 'nav_stack.rviz')
 
     return LaunchDescription([
         DeclareLaunchArgument('xacro_path', default_value=default_xacro),
@@ -57,6 +58,6 @@ def generate_launch_description():
             executable='rviz2',
             name='rviz2',
             output='screen',
-            arguments=['-d', os.path.join(pkg_share, 'rviz', 'nav_stack.rviz')],
+            arguments=['-d', default_rviz],
         ),
     ])

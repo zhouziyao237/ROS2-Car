@@ -34,6 +34,12 @@ def generate_launch_description():
         )
     )
 
+    ekf_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(nav_pkg, 'launch', 'ekf_wheel_lidar_imu.launch.py')
+        )
+    )
+
     # 这里假设你已经有这个 launch，里面负责：
     # robot_state_publisher + slam_toolbox + nav2 + rviz
     nav_with_slam_launch = IncludeLaunchDescription(
@@ -58,16 +64,30 @@ def generate_launch_description():
         }]
     )
 
-    odom_tf_broadcaster_node = Node(
+    serial_imu_bridge_node = Node(
         package='nav_stack_core',
-        executable='odom_tf_broadcaster.py',
-        name='odom_tf_broadcaster',
+        executable='serial_imu_bridge.py',
+        name='serial_imu_bridge',
         output='screen',
         parameters=[{
-            'odom_topic': '/lidar/odom',
-            'parent_frame': 'odom',
-            'child_frame': 'base_link',
-            'use_msg_child_frame': True
+            'input_topic': '/serial/gimbal_joint_state',
+            'output_topic': '/imu/data_serial',
+            'imu_frame_id': 'imu_link',
+            'assume_roll_zero': False
+        }]
+    )
+
+    wheel_twist_odom_node = Node(
+        package='nav_stack_core',
+        executable='wheel_twist_odom.py',
+        name='wheel_twist_odom',
+        output='screen',
+        parameters=[{
+            'input_topic': '/wheel/twist',
+            'odom_topic': '/wheel/odom',
+            'odom_frame': 'wheel_odom',
+            'base_frame': 'base_link',
+            'publish_tf': True
         }]
     )
 
@@ -75,7 +95,9 @@ def generate_launch_description():
         serial_driver_launch,
         lidar_launch,
         lidar_odom_launch,
+        ekf_launch,
+        serial_imu_bridge_node,
+        wheel_twist_odom_node,
         cmd_vel_mux_node,
-        odom_tf_broadcaster_node,
         nav_with_slam_launch,
     ])

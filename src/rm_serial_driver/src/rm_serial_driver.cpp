@@ -19,7 +19,9 @@
 #include <geometry_msgs/msg/twist_with_covariance_stamped.hpp>
 
 // C++ system
+#include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <functional>
 #include <map>
 #include <memory>
@@ -33,6 +35,21 @@
 
 namespace rm_serial_driver
 {
+namespace
+{
+constexpr size_t kMaxFrameLength = 256;
+
+template<typename T>
+bool decodePacketPrefix(const std::vector<uint8_t> & frame, T & packet)
+{
+  if (frame.size() < sizeof(T)) {
+    return false;
+  }
+  std::memcpy(&packet, frame.data(), sizeof(T));
+  return true;
+}
+}  // namespace
+
 RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions & options)
 : Node("rm_serial_driver", options),
   owned_ctx_{new IoContext(2)},
@@ -116,63 +133,68 @@ RMSerialDriver::~RMSerialDriver()
 void RMSerialDriver::receiveData()
 {
   constexpr size_t BUFFER_SIZE = 1024;
-  std::vector<uint8_t> buffer(BUFFER_SIZE);
-  std::vector<uint8_t> data;
+  std::vector<uint8_t> read_buffer(BUFFER_SIZE);
+  rx_buffer_.clear();
 
   while (rclcpp::ok()) {
     try {
       // 读取数据到缓冲区
-      size_t bytes_read = serial_driver_->port()->receive(buffer);
+      const size_t bytes_read = serial_driver_->port()->receive(read_buffer);
 
       if (bytes_read == 0) {
         continue;
       }
 
-      // 处理缓冲区中的数据
-      for (size_t i = 0; i < bytes_read; i++) {
-        if (buffer[i] == 0xA5) {  // 找到帧头
-          if (i + sizeof(Header) > bytes_read) {
-            break;  // 数据不完整，等待下一次接收
-          }
+      // 持续缓存，解决半包/粘包问题
+      rx_buffer_.insert(rx_buffer_.end(), read_buffer.begin(), read_buffer.begin() + bytes_read);
 
-          Header header;
-          std::copy(
-            buffer.begin() + i, buffer.begin() + i + sizeof(Header),
-            reinterpret_cast<uint8_t *>(&header));
-
-          if (!crc8::Verify_CRC8_Check_Sum(
-                reinterpret_cast<const uint8_t *>(&header), sizeof(header) - 2)) {
-            continue;  // CRC校验失败
-          }
-
-          size_t total_length = 0;
-          switch (header.cmd_id) {
-            case 0x502:
-              total_length = sizeof(IMUPacket);
-              break;
-            case 0x503:
-              total_length = sizeof(classisPacket);
-              break;
-            case 0x504:
-              total_length = sizeof(bottonPacket);
-              break;
-            case 0x505:
-              total_length = sizeof(bassPacket);
-              break;
-            default:
-              continue;
-          }
-
-          if (i + total_length > bytes_read) {
-            break;  // 数据不完整，等待下一次接收
-          }
-
-          data.resize(total_length);
-          std::copy(buffer.begin() + i, buffer.begin() + i + total_length, data.begin());
-
-          processPacket(data, header.cmd_id);
-          i += total_length - 1;  // 跳过已处理的数据
+      while (rx_buffer_.size() >= sizeof(Header)) {
+        auto it = std::find(rx_buffer_.begin(), rx_buffer_.end(), 0xA5);
+        if (it == rx_buffer_.end()) {
+          rx_buffer_.clear();
+          break;
         }
+        if (it != rx_buffer_.begin()) {
+          rx_buffer_.erase(rx_buffer_.begin(), it);
+        }
+
+        if (rx_buffer_.size() < sizeof(Header)) {
+          break;
+        }
+
+        Header header{};
+        std::memcpy(&header, rx_buffer_.data(), sizeof(Header));
+        if (!crc8::Verify_CRC8_Check_Sum(
+              reinterpret_cast<const uint8_t *>(&header), sizeof(Header) - 2)) {
+          // 帧头CRC错误，滑窗一字节继续找
+          rx_buffer_.erase(rx_buffer_.begin());
+          continue;
+        }
+
+        const size_t total_length = sizeof(Header) + header.data_length + 2;
+        if (total_length < sizeof(Header) + 2 || total_length > kMaxFrameLength) {
+          RCLCPP_WARN_THROTTLE(
+            get_logger(), *get_clock(), 1000,
+            "Drop abnormal serial frame: cmd=0x%04X len=%zu", header.cmd_id, total_length);
+          rx_buffer_.erase(rx_buffer_.begin());
+          continue;
+        }
+
+        if (rx_buffer_.size() < total_length) {
+          break;  // 数据不完整，等待下一次接收
+        }
+
+        std::vector<uint8_t> frame(rx_buffer_.begin(), rx_buffer_.begin() + total_length);
+        rx_buffer_.erase(rx_buffer_.begin(), rx_buffer_.begin() + total_length);
+
+        if (!crc16::Verify_CRC16_Check_Sum(frame.data(), frame.size())) {
+          RCLCPP_WARN_THROTTLE(
+            get_logger(), *get_clock(), 1000,
+            "Frame CRC16 error: cmd=0x%04X len=%zu", header.cmd_id, frame.size());
+          continue;
+        }
+
+        processPacket(frame, header.cmd_id);
       }
     } catch (const std::exception & ex) {
       RCLCPP_ERROR_THROTTLE(
@@ -186,10 +208,10 @@ void RMSerialDriver::processPacket(const std::vector<uint8_t> & data, uint16_t c
 {
   switch (cmd_id) {
     case 0x502: {
-      IMUPacket imu_packet = fromVector<IMUPacket>(data);
-      if (!crc16::Verify_CRC16_Check_Sum(
-            reinterpret_cast<const uint8_t *>(&imu_packet), sizeof(imu_packet))) {
-        RCLCPP_ERROR(get_logger(), "IMU Data CRC error! %zu", data.size());
+      IMUPacket imu_packet{};
+      if (!decodePacketPrefix(data, imu_packet)) {
+        RCLCPP_WARN(
+          get_logger(), "IMU frame too short: %zu < %zu", data.size(), sizeof(IMUPacket));
         return;
       }
 
@@ -221,6 +243,7 @@ void RMSerialDriver::processPacket(const std::vector<uint8_t> & data, uint16_t c
       // 发布导航状态////////////////////////////////////////////
       auto twist_msg = std::make_unique<geometry_msgs::msg::Twist>();
       twist_msg->angular.x = imu_packet.pitch;  // pitch
+      twist_msg->angular.y = imu_packet.roll;   // roll
       twist_msg->angular.z = imu_packet.yaw;    // yaw
       nav_state_pub_->publish(*twist_msg);
 
@@ -229,10 +252,10 @@ void RMSerialDriver::processPacket(const std::vector<uint8_t> & data, uint16_t c
       break;
     }
     case 0x503: {
-      classisPacket classis_packet = fromVector<classisPacket>(data);
-      if (!crc16::Verify_CRC16_Check_Sum(
-            reinterpret_cast<const uint8_t *>(&classis_packet), sizeof(classis_packet))) {
-        RCLCPP_ERROR(get_logger(), "Classis Data CRC error!");
+      classisPacket classis_packet{};
+      if (!decodePacketPrefix(data, classis_packet)) {
+        RCLCPP_WARN(
+          get_logger(), "Classis frame too short: %zu < %zu", data.size(), sizeof(classisPacket));
         break;
       }
 
@@ -240,21 +263,25 @@ void RMSerialDriver::processPacket(const std::vector<uint8_t> & data, uint16_t c
       // Assumption: classis_packet.vx / vy / vz are measured body-frame velocities,
       // where vz is yaw rate. If your MCU uses different fields or units, change here.
       publishWheelTwist(classis_packet.vx, classis_packet.vy, classis_packet.vz);
+      RCLCPP_INFO_THROTTLE(
+        get_logger(), *get_clock(), 1000,
+        "Wheel feedback vx=%.3f vy=%.3f wz=%.3f", classis_packet.vx, classis_packet.vy,
+        classis_packet.vz);
       break;
     }
     case 0x504: {
-      bottonPacket botton_packet = fromVector<bottonPacket>(data);
-      if (!crc16::Verify_CRC16_Check_Sum(
-            reinterpret_cast<const uint8_t *>(&botton_packet), sizeof(botton_packet))) {
-        RCLCPP_ERROR(get_logger(), "Button Data CRC error!");
+      bottonPacket botton_packet{};
+      if (!decodePacketPrefix(data, botton_packet)) {
+        RCLCPP_WARN(
+          get_logger(), "Button frame too short: %zu < %zu", data.size(), sizeof(bottonPacket));
       }
       break;
     }
     case 0x505: {
-      bassPacket bass_packet = fromVector<bassPacket>(data);
-      if (!crc16::Verify_CRC16_Check_Sum(
-            reinterpret_cast<const uint8_t *>(&bass_packet), sizeof(bass_packet))) {
-        RCLCPP_ERROR(get_logger(), "Bass Data CRC error!");
+      bassPacket bass_packet{};
+      if (!decodePacketPrefix(data, bass_packet)) {
+        RCLCPP_WARN(
+          get_logger(), "Bass frame too short: %zu < %zu", data.size(), sizeof(bassPacket));
         return;
       }
 
