@@ -11,7 +11,7 @@ ekf_filter_node:
     base_link_frame: base_link
     world_frame: odom
 
-    # lidar odometry contributes pose x,y,yaw
+    # Primary localization source: lidar odometry (/scan based)
     odom0: /lidar/odom
     odom0_config: [true,  true,  false,
                    false, false, true,
@@ -22,7 +22,7 @@ ekf_filter_node:
     odom0_differential: false
     odom0_relative: false
 
-    # wheel feedback contributes body-frame velocity vx, vy, wz
+    # Wheel feedback is auxiliary only (lower trust via covariance in rm_serial_driver)
     twist0: /wheel/twist
     twist0_config: [false, false, false,
                     false, false, false,

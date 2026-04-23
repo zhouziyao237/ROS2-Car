@@ -24,7 +24,7 @@ class WheelTwistOdom(Node):
         self.declare_parameter("odom_topic", "/wheel/odom")
         self.declare_parameter("odom_frame", "wheel_odom")
         self.declare_parameter("base_frame", "base_link")
-        self.declare_parameter("publish_tf", True)
+        self.declare_parameter("publish_tf", False)
 
         self.input_topic = str(self.get_parameter("input_topic").value)
         self.odom_topic = str(self.get_parameter("odom_topic").value)
@@ -44,7 +44,7 @@ class WheelTwistOdom(Node):
         )
 
         self.get_logger().info(
-            f"Integrating {self.input_topic} -> {self.odom_topic}, TF {self.odom_frame}->{self.base_frame}"
+            f"Integrating {self.input_topic} -> {self.odom_topic}, publish_tf={self.publish_tf}"
         )
 
     def callback(self, msg: TwistWithCovarianceStamped):

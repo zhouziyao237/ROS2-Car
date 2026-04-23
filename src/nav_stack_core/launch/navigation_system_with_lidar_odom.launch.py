@@ -17,21 +17,22 @@ def generate_launch_description():
     default_xacro = os.path.join(pkg_share, 'description', 'minimal_lidar_robot.xacro')
     default_slam = os.path.join(pkg_share, 'config', 'slam_toolbox_online.yaml')
     default_nav2 = os.path.join(pkg_share, 'config', 'nav2_params_min.yaml')
+    default_rviz = os.path.join(pkg_share, 'rviz', 'nav_stack.rviz')
 
     xacro_path = LaunchConfiguration('xacro_path')
     slam_params_file = LaunchConfiguration('slam_params_file')
     nav2_params_file = LaunchConfiguration('nav2_params_file')
+    rviz_config = LaunchConfiguration('rviz_config')
 
     robot_description = ParameterValue(Command(['xacro ', xacro_path]), value_type=str)
 
     nav2_launch = os.path.join(nav2_bringup_share, 'launch', 'navigation_launch.py')
     slam_launch = os.path.join(slam_toolbox_share, 'launch', 'online_async_launch.py')
-    default_rviz = os.path.join(pkg_share, 'rviz', 'nav_stack.rviz')
-
     return LaunchDescription([
         DeclareLaunchArgument('xacro_path', default_value=default_xacro),
         DeclareLaunchArgument('slam_params_file', default_value=default_slam),
         DeclareLaunchArgument('nav2_params_file', default_value=default_nav2),
+        DeclareLaunchArgument('rviz_config', default_value=default_rviz),
         Node(
             package='robot_state_publisher',
             executable='robot_state_publisher',
@@ -51,13 +52,28 @@ def generate_launch_description():
             launch_arguments={
                 'params_file': nav2_params_file,
                 'use_sim_time': 'false',
+                'autostart': 'true',
+                'use_respawn': 'true',
+                'log_level': 'info',
             }.items(),
+        ),
+        Node(
+            package='nav_stack_core',
+            executable='goal_pose_bridge.py',
+            name='goal_pose_bridge',
+            output='screen',
+            parameters=[{
+                'goal_topic': '/goal_pose',
+                'action_name': '/navigate_to_pose',
+                'marker_topic': '/goal_markers',
+                'cancel_previous_goal': True,
+            }],
         ),
         Node(
             package='rviz2',
             executable='rviz2',
             name='rviz2',
             output='screen',
-            arguments=['-d', default_rviz],
+            arguments=['-d', rviz_config],
         ),
     ])

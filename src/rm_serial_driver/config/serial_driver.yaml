@@ -8,3 +8,12 @@
 
     publish_tf: false
     wheel_twist_topic: /wheel/twist
+    wheel_vx_scale: 1.0
+    wheel_vy_scale: 1.0
+    wheel_wz_scale: 1.0
+    wheel_cov_vx: 0.30
+    wheel_cov_vy: 0.30
+    wheel_cov_wz: 0.50
+    cmd_vx_scale: 1.0
+    cmd_vy_scale: 1.0
+    cmd_wz_scale: 1.0

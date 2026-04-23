@@ -63,6 +63,15 @@ RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions & options)
   timestamp_offset_ = this->declare_parameter("timestamp_offset", 0.0);
   publish_tf_ = this->declare_parameter("publish_tf", false);
   wheel_twist_topic_ = this->declare_parameter("wheel_twist_topic", std::string("/wheel/twist"));
+  wheel_vx_scale_ = this->declare_parameter("wheel_vx_scale", 1.0);
+  wheel_vy_scale_ = this->declare_parameter("wheel_vy_scale", 1.0);
+  wheel_wz_scale_ = this->declare_parameter("wheel_wz_scale", 1.0);
+  wheel_cov_vx_ = this->declare_parameter("wheel_cov_vx", 0.30);
+  wheel_cov_vy_ = this->declare_parameter("wheel_cov_vy", 0.30);
+  wheel_cov_wz_ = this->declare_parameter("wheel_cov_wz", 0.50);
+  cmd_vx_scale_ = this->declare_parameter("cmd_vx_scale", 1.0);
+  cmd_vy_scale_ = this->declare_parameter("cmd_vy_scale", 1.0);
+  cmd_wz_scale_ = this->declare_parameter("cmd_wz_scale", 1.0);
   if (publish_tf_) {
     tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
   }
@@ -83,7 +92,7 @@ RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions & options)
 
   // 创建导航指令订阅器
   nav_cmd_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
-    "/red_standard_robot1/cmd_vel", 10,
+    "cmd_vel", 10,
     std::bind(&RMSerialDriver::sendNavigationCmd, this, std::placeholders::_1));
 
   try {
@@ -265,8 +274,11 @@ void RMSerialDriver::processPacket(const std::vector<uint8_t> & data, uint16_t c
       publishWheelTwist(classis_packet.vx, classis_packet.vy, classis_packet.vz);
       RCLCPP_INFO_THROTTLE(
         get_logger(), *get_clock(), 1000,
-        "Wheel feedback vx=%.3f vy=%.3f wz=%.3f", classis_packet.vx, classis_packet.vy,
-        classis_packet.vz);
+        "Wheel feedback raw(vx=%.3f vy=%.3f wz=%.3f) scaled(vx=%.3f vy=%.3f wz=%.3f)",
+        classis_packet.vx, classis_packet.vy, classis_packet.vz,
+        classis_packet.vx * wheel_vx_scale_,
+        classis_packet.vy * wheel_vy_scale_,
+        classis_packet.vz * wheel_wz_scale_);
       break;
     }
     case 0x504: {
@@ -296,24 +308,28 @@ void RMSerialDriver::processPacket(const std::vector<uint8_t> & data, uint16_t c
 
 void RMSerialDriver::publishWheelTwist(float vx, float vy, float wz)
 {
+  const double sx = static_cast<double>(vx) * wheel_vx_scale_;
+  const double sy = static_cast<double>(vy) * wheel_vy_scale_;
+  const double swz = static_cast<double>(wz) * wheel_wz_scale_;
+
   geometry_msgs::msg::TwistWithCovarianceStamped msg;
   msg.header.stamp = this->now();
   msg.header.frame_id = "base_link";
 
-  msg.twist.twist.linear.x = vx;
-  msg.twist.twist.linear.y = vy;
+  msg.twist.twist.linear.x = sx;
+  msg.twist.twist.linear.y = sy;
   msg.twist.twist.linear.z = 0.0;
   msg.twist.twist.angular.x = 0.0;
   msg.twist.twist.angular.y = 0.0;
-  msg.twist.twist.angular.z = wz;
+  msg.twist.twist.angular.z = swz;
 
   msg.twist.covariance = {
-    0.05, 0.0, 0.0, 0.0, 0.0, 0.0,
-    0.0, 0.05, 0.0, 0.0, 0.0, 0.0,
+    wheel_cov_vx_, 0.0, 0.0, 0.0, 0.0, 0.0,
+    0.0, wheel_cov_vy_, 0.0, 0.0, 0.0, 0.0,
     0.0, 0.0, 99999.0, 0.0, 0.0, 0.0,
     0.0, 0.0, 0.0, 99999.0, 0.0, 0.0,
     0.0, 0.0, 0.0, 0.0, 99999.0, 0.0,
-    0.0, 0.0, 0.0, 0.0, 0.0, 0.08
+    0.0, 0.0, 0.0, 0.0, 0.0, wheel_cov_wz_
   };
 
   wheel_twist_pub_->publish(msg);
@@ -409,9 +425,13 @@ void RMSerialDriver::sendNavigationCmd(const geometry_msgs::msg::Twist::SharedPt
     packet.header.cmd_id = 0x405;
     crc8::Append_CRC8_Check_Sum(reinterpret_cast<uint8_t *>(&packet.header), sizeof(Header) - 2);
 
-    packet.vx = msg->linear.x;
-    packet.vy = msg->linear.y;
-    packet.wz = msg->angular.z;
+    const float vx = static_cast<float>(msg->linear.x * cmd_vx_scale_);
+    const float vy = static_cast<float>(msg->linear.y * cmd_vy_scale_);
+    const float wz = static_cast<float>(msg->angular.z * cmd_wz_scale_);
+
+    packet.vx = vx;
+    packet.vy = vy;
+    packet.wz = wz;
 
     crc16::Append_CRC16_Check_Sum(reinterpret_cast<uint8_t *>(&packet), sizeof(packet));
 
@@ -422,8 +442,11 @@ void RMSerialDriver::sendNavigationCmd(const geometry_msgs::msg::Twist::SharedPt
 
     serial_driver_->port()->send(data);
 
-    RCLCPP_INFO(
-      get_logger(), "[发送导航指令] vx:%.2f, vy:%.2f, wz:%.2f", packet.vx, packet.vy, packet.wz);
+    RCLCPP_DEBUG_THROTTLE(
+      get_logger(), *get_clock(), 1000,
+      "[发送导航指令] raw(vx:%.2f, vy:%.2f, wz:%.2f) scaled(vx:%.2f, vy:%.2f, wz:%.2f)",
+      msg->linear.x, msg->linear.y, msg->angular.z,
+      packet.vx, packet.vy, packet.wz);
   } catch (const std::exception & ex) {
     RCLCPP_ERROR(get_logger(), "发送导航指令失败: %s", ex.what());
     reopenPort();

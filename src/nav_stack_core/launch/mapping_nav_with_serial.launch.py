@@ -55,7 +55,9 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'manual_topic': '/cmd_vel_manual',
+            'manual_topic_alt': '/red_standard_robot1/cmd_vel',
             'auto_topic': '/cmd_vel',
+            'auto_topic_alt': '/cmd_vel_nav',
             'output_topic': '/cmd_vel_selected',
             'mode_topic': '/control_mode',
             'publish_rate': 20.0,
@@ -87,7 +89,7 @@ def generate_launch_description():
             'odom_topic': '/wheel/odom',
             'odom_frame': 'wheel_odom',
             'base_frame': 'base_link',
-            'publish_tf': True
+            'publish_tf': False
         }]
     )
 

@@ -84,7 +84,18 @@ private:
 
   // 新增：轮上速度辅助里程计输出
   std::string wheel_twist_topic_;
+  double wheel_vx_scale_ = 1.0;
+  double wheel_vy_scale_ = 1.0;
+  double wheel_wz_scale_ = 1.0;
+  double wheel_cov_vx_ = 0.30;
+  double wheel_cov_vy_ = 0.30;
+  double wheel_cov_wz_ = 0.50;
   rclcpp::Publisher<geometry_msgs::msg::TwistWithCovarianceStamped>::SharedPtr wheel_twist_pub_;
+
+  // Navigation command scaling (for chassis unit/deadband mismatch tuning)
+  double cmd_vx_scale_ = 1.0;
+  double cmd_vy_scale_ = 1.0;
+  double cmd_wz_scale_ = 1.0;
 
   // Keep stream bytes across receive() calls to handle half-packets/sticky packets.
   std::vector<uint8_t> rx_buffer_;

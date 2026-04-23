@@ -12,7 +12,9 @@ class CmdVelModeMux(Node):
         super().__init__('cmd_vel_mode_mux')
 
         self.declare_parameter('manual_topic', '/cmd_vel_manual')
+        self.declare_parameter('manual_topic_alt', '/red_standard_robot1/cmd_vel')
         self.declare_parameter('auto_topic', '/cmd_vel')
+        self.declare_parameter('auto_topic_alt', '/cmd_vel_nav')
         self.declare_parameter('output_topic', '/cmd_vel_selected')
         self.declare_parameter('mode_topic', '/control_mode')
         self.declare_parameter('publish_rate', 20.0)
@@ -20,7 +22,9 @@ class CmdVelModeMux(Node):
         self.declare_parameter('default_mode', 'manual')
 
         self.manual_topic = self.get_parameter('manual_topic').value
+        self.manual_topic_alt = self.get_parameter('manual_topic_alt').value
         self.auto_topic = self.get_parameter('auto_topic').value
+        self.auto_topic_alt = self.get_parameter('auto_topic_alt').value
         self.output_topic = self.get_parameter('output_topic').value
         self.mode_topic = self.get_parameter('mode_topic').value
         self.publish_rate = float(self.get_parameter('publish_rate').value)
@@ -29,19 +33,27 @@ class CmdVelModeMux(Node):
 
         self.manual_msg = Twist()
         self.auto_msg = Twist()
+        self.auto_msg_alt = Twist()
         self.last_manual_time = None
         self.last_auto_time = None
+        self.last_auto_alt_time = None
 
         self.pub = self.create_publisher(Twist, self.output_topic, 10)
 
         self.create_subscription(Twist, self.manual_topic, self.manual_cb, 10)
+        if isinstance(self.manual_topic_alt, str) and self.manual_topic_alt.strip():
+            self.create_subscription(Twist, self.manual_topic_alt, self.manual_cb, 10)
         self.create_subscription(Twist, self.auto_topic, self.auto_cb, 10)
+        if isinstance(self.auto_topic_alt, str) and self.auto_topic_alt.strip():
+            self.create_subscription(Twist, self.auto_topic_alt, self.auto_alt_cb, 10)
         self.create_subscription(String, self.mode_topic, self.mode_cb, 10)
 
         self.timer = self.create_timer(1.0 / self.publish_rate, self.timer_cb)
 
         self.get_logger().info(
-            f'CmdVel Mux started. mode={self.mode}, manual={self.manual_topic}, auto={self.auto_topic}, out={self.output_topic}'
+            f'CmdVel Mux started. mode={self.mode}, manual={self.manual_topic}, '
+            f'manual_alt={self.manual_topic_alt}, auto={self.auto_topic}, '
+            f'auto_alt={self.auto_topic_alt}, out={self.output_topic}'
         )
 
     def now_sec(self):
@@ -53,6 +65,17 @@ class CmdVelModeMux(Node):
             return False
         return (self.now_sec() - last_time) <= self.cmd_timeout
 
+    @staticmethod
+    def is_nonzero_twist(msg: Twist, eps: float = 1e-4) -> bool:
+        return (
+            abs(msg.linear.x) > eps or
+            abs(msg.linear.y) > eps or
+            abs(msg.linear.z) > eps or
+            abs(msg.angular.x) > eps or
+            abs(msg.angular.y) > eps or
+            abs(msg.angular.z) > eps
+        )
+
     def manual_cb(self, msg: Twist):
         self.manual_msg = msg
         self.last_manual_time = self.now_sec()
@@ -60,6 +83,10 @@ class CmdVelModeMux(Node):
     def auto_cb(self, msg: Twist):
         self.auto_msg = msg
         self.last_auto_time = self.now_sec()
+
+    def auto_alt_cb(self, msg: Twist):
+        self.auto_msg_alt = msg
+        self.last_auto_alt_time = self.now_sec()
 
     def mode_cb(self, msg: String):
         new_mode = msg.data.strip().lower()
@@ -80,8 +107,18 @@ class CmdVelModeMux(Node):
             if self.is_fresh(self.last_manual_time):
                 out = self.manual_msg
         else:  # auto
-            if self.is_fresh(self.last_auto_time):
+            auto_fresh = self.is_fresh(self.last_auto_time)
+            auto_alt_fresh = self.is_fresh(self.last_auto_alt_time)
+
+            # Prefer a non-zero command if available to avoid being masked by a zero stream.
+            if auto_fresh and self.is_nonzero_twist(self.auto_msg):
                 out = self.auto_msg
+            elif auto_alt_fresh and self.is_nonzero_twist(self.auto_msg_alt):
+                out = self.auto_msg_alt
+            elif auto_fresh:
+                out = self.auto_msg
+            elif auto_alt_fresh:
+                out = self.auto_msg_alt
 
         # 简单防 NaN
         for v in [

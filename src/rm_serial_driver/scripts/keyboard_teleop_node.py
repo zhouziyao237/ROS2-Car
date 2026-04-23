@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+import os
 import sys
 import select
 import termios
@@ -66,7 +66,23 @@ class KeyboardTeleop(Node):
         self.publisher = self.create_publisher(Twist, self.cmd_vel_topic, 10)
 
         # 非阻塞键盘读取设置
-        self.settings = termios.tcgetattr(sys.stdin)
+        # ros2 launch 下 stdin 可能不是 TTY，这里优先使用 /dev/tty
+        self.key_file = None
+        self.key_fd = None
+        try:
+            self.key_file = open('/dev/tty', 'rb', buffering=0)
+            self.key_fd = self.key_file.fileno()
+            self.settings = termios.tcgetattr(self.key_fd)
+            self.get_logger().info("Keyboard input source: /dev/tty")
+        except Exception:
+            if sys.stdin.isatty():
+                self.key_fd = sys.stdin.fileno()
+                self.settings = termios.tcgetattr(self.key_fd)
+                self.get_logger().info("Keyboard input source: stdin")
+            else:
+                raise RuntimeError(
+                    "No interactive TTY found. Please run from an interactive terminal."
+                )
 
         # 打印帮助信息
         self.get_logger().info(f"Publishing to '{self.cmd_vel_topic}'")
@@ -92,22 +108,22 @@ class KeyboardTeleop(Node):
 
     def get_key(self):
         """非阻塞读取键盘输入，支持多字节键（如箭头）"""
-        tty.setraw(sys.stdin.fileno())
-        rlist, _, _ = select.select([sys.stdin], [], [], 0.1)
+        tty.setraw(self.key_fd)
+        rlist, _, _ = select.select([self.key_fd], [], [], 0.1)
         if rlist:
-            key = sys.stdin.read(1)
+            key = os.read(self.key_fd, 1).decode(errors='ignore')
             # 处理转义序列（箭头键以 \x1b 开头）
             if key == '\x1b':
                 # 尝试读取后续两个字符（超时很短）
                 seq = key
                 for _ in range(2):
-                    rlist, _, _ = select.select([sys.stdin], [], [], 0.01)
+                    rlist, _, _ = select.select([self.key_fd], [], [], 0.01)
                     if rlist:
-                        seq += sys.stdin.read(1)
+                        seq += os.read(self.key_fd, 1).decode(errors='ignore')
                 key = seq
         else:
             key = ''
-        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.settings)
+        termios.tcsetattr(self.key_fd, termios.TCSADRAIN, self.settings)
         return key
 
     def publish_cmd(self):
@@ -187,7 +203,10 @@ class KeyboardTeleop(Node):
             # 停止机器人
             twist = Twist()
             self.publisher.publish(twist)
-            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.settings)
+            if self.key_fd is not None:
+                termios.tcsetattr(self.key_fd, termios.TCSADRAIN, self.settings)
+            if self.key_file is not None:
+                self.key_file.close()
             self.get_logger().info("Keyboard Teleop Node stopped.")
 
 def main(args=None):

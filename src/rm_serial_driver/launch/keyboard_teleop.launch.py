@@ -44,7 +44,7 @@ def generate_launch_description():
 
     keyboard_teleop_node = Node(
         package="rm_serial_driver",
-        executable="rm_serial_driver_node",
+        executable="keyboard_teleop_node.py",
         name="keyboard_teleop",
         output="screen",
         emulate_tty=True,
@@ -52,10 +52,8 @@ def generate_launch_description():
             {
                 "speed": LaunchConfiguration("speed"),
                 "turn": LaunchConfiguration("turn"),
+                "cmd_vel_topic": LaunchConfiguration("cmd_vel_topic"),
             }
-        ],
-        remappings=[
-            ("cmd_vel", LaunchConfiguration("cmd_vel_topic")),
         ],
     )
 
