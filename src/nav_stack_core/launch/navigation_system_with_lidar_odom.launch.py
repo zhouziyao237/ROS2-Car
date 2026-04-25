@@ -16,7 +16,7 @@ def generate_launch_description():
     slam_toolbox_share = get_package_share_directory('slam_toolbox')
 
     default_xacro = os.path.join(pkg_share, 'description', 'minimal_lidar_robot.xacro')
-    default_slam = os.path.join(pkg_share, 'config', 'slam_toolbox_online.yaml')
+    default_slam = os.path.join(pkg_share, 'config', 'slam_toolbox_online_highres.yaml')
     default_nav2 = os.path.join(pkg_share, 'config', 'nav2_params_min.yaml')
     default_rviz = os.path.join(pkg_share, 'rviz', 'nav_stack.rviz')
 

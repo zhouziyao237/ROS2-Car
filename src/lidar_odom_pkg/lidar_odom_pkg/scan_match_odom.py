@@ -274,6 +274,12 @@ class ScanMatchOdom(Node):
         self.declare_parameter('external_odom_topic', '/wheel/odom')
         self.declare_parameter('external_imu_topic', '/imu/data')
         self.declare_parameter('external_cmd_vel_topic', '/cmd_vel_selected')
+        self.declare_parameter('control_mode_topic', '/control_mode')
+        self.declare_parameter('chassis_control_mode_topic', '/chassis_control_mode')
+        self.declare_parameter('chassis_control_mode_timeout', 1.0)
+        self.declare_parameter('control_mode_default', 'manual')
+        self.declare_parameter('manual_prior_source', 'internal')
+        self.declare_parameter('manual_disable_scan_deskew', True)
         self.declare_parameter('external_twist_timeout', 0.35)
         self.declare_parameter('external_prior_weight', 0.90)
         self.declare_parameter('use_scan_deskew', False)
@@ -338,6 +344,9 @@ class ScanMatchOdom(Node):
         self.prior_cmd_stamp = -1e30
         self.prior_imu_wz = 0.0
         self.prior_imu_stamp = -1e30
+        self.control_mode = self.control_mode_default
+        self.chassis_control_mode = None
+        self.chassis_control_mode_stamp = -1e30
         self.last_deskew_source = 'none'
         self.last_used_prior_source = 'internal'
         self.last_used_prior_twist = (0.0, 0.0, 0.0)
@@ -366,6 +375,12 @@ class ScanMatchOdom(Node):
             self.external_odom_sub = None
             self.external_imu_sub = None
             self.external_cmd_sub = None
+        self.control_mode_sub = self.create_subscription(
+            String, self.control_mode_topic, self.control_mode_callback, 10
+        ) if self.control_mode_topic else None
+        self.chassis_control_mode_sub = self.create_subscription(
+            String, self.chassis_control_mode_topic, self.chassis_control_mode_callback, 10
+        ) if self.chassis_control_mode_topic else None
 
         self.prev_points: Optional[Array2] = None
         self.prev_base_angles: Optional[Array2] = None
@@ -396,7 +411,8 @@ class ScanMatchOdom(Node):
             f'Listening {self.scan_topic}, publishing {self.odom_topic}, '
             f'frames {self.odom_frame}->{self.base_frame}, angle_windows_deg={self.angle_windows_deg}, '
             f'scan_yaw_offset_deg={math.degrees(self.scan_yaw_offset):.1f}, '
-            f'prior_source={self.prior_source}, deskew={self.use_scan_deskew}'
+            f'prior_source={self.prior_source}, deskew={self.use_scan_deskew}, '
+            f'control_mode={self.control_mode}'
         )
 
     def load_parameters(self) -> None:
@@ -454,6 +470,13 @@ class ScanMatchOdom(Node):
         self.external_odom_topic = str(self.get_parameter('external_odom_topic').value)
         self.external_imu_topic = str(self.get_parameter('external_imu_topic').value)
         self.external_cmd_vel_topic = str(self.get_parameter('external_cmd_vel_topic').value)
+        self.control_mode_topic = str(self.get_parameter('control_mode_topic').value)
+        self.chassis_control_mode_topic = str(self.get_parameter('chassis_control_mode_topic').value)
+        self.chassis_control_mode_timeout = max(
+            0.02, float(self.get_parameter('chassis_control_mode_timeout').value))
+        self.control_mode_default = str(self.get_parameter('control_mode_default').value).strip().lower()
+        self.manual_prior_source = str(self.get_parameter('manual_prior_source').value).strip().lower()
+        self.manual_disable_scan_deskew = bool(self.get_parameter('manual_disable_scan_deskew').value)
         self.external_twist_timeout = max(0.02, float(self.get_parameter('external_twist_timeout').value))
         self.external_prior_weight = clamp(float(self.get_parameter('external_prior_weight').value), 0.0, 1.0)
         self.use_scan_deskew = bool(self.get_parameter('use_scan_deskew').value)
@@ -514,10 +537,57 @@ class ScanMatchOdom(Node):
         self.prior_cmd_wz = float(msg.angular.z)
         self.prior_cmd_stamp = self.now_sec()
 
+    def control_mode_callback(self, msg: String) -> None:
+        mode = str(msg.data).strip().lower()
+        if mode not in ('manual', 'auto'):
+            return
+        if mode != self.control_mode:
+            self.control_mode = mode
+            self.get_logger().info(
+                f'Control mode switched to {self.get_effective_control_mode()}; '
+                f'prior_source={self.get_effective_prior_source()}, '
+                f'deskew={"off" if not self.should_use_scan_deskew() else "on"}'
+            )
+
+    def chassis_control_mode_callback(self, msg: String) -> None:
+        mode = str(msg.data).strip().lower()
+        if mode not in ('manual', 'auto'):
+            return
+        changed = (mode != self.chassis_control_mode)
+        self.chassis_control_mode = mode
+        self.chassis_control_mode_stamp = self.now_sec()
+        if changed:
+            self.get_logger().info(
+                f'Chassis control mode switched to {self.chassis_control_mode}; '
+                f'effective_mode={self.get_effective_control_mode()}, '
+                f'prior_source={self.get_effective_prior_source()}, '
+                f'deskew={"off" if not self.should_use_scan_deskew() else "on"}'
+            )
+
+    def get_effective_control_mode(self) -> str:
+        if (
+            self.chassis_control_mode == 'manual' and
+            (self.now_sec() - self.chassis_control_mode_stamp) <= self.chassis_control_mode_timeout
+        ):
+            return 'manual'
+        return self.control_mode
+
     def is_prior_fresh(self, stamp_sec: float, prior_stamp: float) -> bool:
         if prior_stamp < -1e20:
             return False
         return abs(float(stamp_sec) - float(prior_stamp)) <= self.external_twist_timeout
+
+    def get_effective_prior_source(self) -> str:
+        if self.get_effective_control_mode() == 'manual':
+            return self.manual_prior_source
+        return self.prior_source
+
+    def should_use_scan_deskew(self) -> bool:
+        if not self.use_scan_deskew:
+            return False
+        if self.get_effective_control_mode() == 'manual' and self.manual_disable_scan_deskew:
+            return False
+        return True
 
     def get_external_body_twist(self, stamp_sec: Optional[float] = None) -> Tuple[float, float, float, str]:
         """Return body-frame velocity prior (vx, vy, wz, source)."""
@@ -528,7 +598,7 @@ class ScanMatchOdom(Node):
         imu_fresh = self.is_prior_fresh(stamp_sec, self.prior_imu_stamp)
         cmd_fresh = self.is_prior_fresh(stamp_sec, self.prior_cmd_stamp)
 
-        src = self.prior_source
+        src = self.get_effective_prior_source()
         if src == 'internal' or not (self.use_external_twist_prior or self.use_scan_deskew):
             return self.filtered_vx_body, self.filtered_vy_body, self.filtered_wz, 'internal'
 
@@ -610,7 +680,7 @@ class ScanMatchOdom(Node):
         y_b = s * x_l + c * y_l + self.scan_y_offset
         pts = np.stack([x_b, y_b], axis=1).astype(np.float64)
 
-        if self.use_scan_deskew and pts.shape[0] > 0:
+        if self.should_use_scan_deskew() and pts.shape[0] > 0:
             stamp_sec = self.msg_stamp_to_sec(msg.header.stamp)
             vx, vy, wz, src = self.get_external_body_twist(stamp_sec)
             self.last_deskew_source = src
@@ -1091,7 +1161,11 @@ def main(args=None) -> None:
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        try:
+            if rclpy.ok():
+                rclpy.shutdown()
+        except Exception:
+            pass
 
 
 if __name__ == '__main__':

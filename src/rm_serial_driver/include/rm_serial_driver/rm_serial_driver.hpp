@@ -14,6 +14,7 @@
 #include <rclcpp/subscription.hpp>
 #include <serial_driver/serial_driver.hpp>
 #include <std_msgs/msg/float64.hpp>
+#include <std_msgs/msg/string.hpp>
 #include <std_srvs/srv/trigger.hpp>
 #include <visualization_msgs/msg/marker.hpp>
 
@@ -46,6 +47,7 @@ private:
 
   // 新增：发布轮上真实反馈速度
   void publishWheelTwist(float vx, float vy, float wz);
+  void publishChassisControlMode(uint8_t control_mode);
 
   // Serial port
   std::unique_ptr<IoContext> owned_ctx_;
@@ -77,6 +79,7 @@ private:
   // For debug usage
   rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr latency_pub_;
   rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr marker_pub_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr chassis_control_mode_pub_;
 
   // Navigation subscriber / publisher
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr nav_cmd_sub_;
@@ -96,6 +99,8 @@ private:
   double cmd_vx_scale_ = 1.0;
   double cmd_vy_scale_ = 1.0;
   double cmd_wz_scale_ = 1.0;
+  int chassis_manual_mode_value_ = 1;
+  std::string last_chassis_control_mode_ = "unknown";
 
   // Keep stream bytes across receive() calls to handle half-packets/sticky packets.
   std::vector<uint8_t> rx_buffer_;

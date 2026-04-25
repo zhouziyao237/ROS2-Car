@@ -17,7 +17,7 @@ def generate_launch_description():
     default_lidar_odom_params = os.path.join(nav_pkg, 'config', 'm10p_lidar_odom_nav.yaml')
     default_ekf_params = os.path.join(nav_pkg, 'config', 'ekf_wheel_lidar_imu.yaml')
     default_xacro = os.path.join(nav_pkg, 'description', 'minimal_lidar_robot.xacro')
-    default_slam = os.path.join(nav_pkg, 'config', 'slam_toolbox_online.yaml')
+    default_slam = os.path.join(nav_pkg, 'config', 'slam_toolbox_online_highres.yaml')
     default_rviz = os.path.join(nav_pkg, 'rviz', 'nav_stack.rviz')
 
     serial_cmd_vel_topic = LaunchConfiguration('serial_cmd_vel_topic')

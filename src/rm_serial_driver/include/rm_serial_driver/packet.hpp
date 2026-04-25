@@ -42,6 +42,7 @@ struct chassisCurrentStatusPacket
   float speed_y;
   float speed_turn;
   uint8_t chassis_enabled;
+  uint8_t control_mode;  // 1 = RC/manual override, 0 = auto/host-controlled
   uint16_t crc16;
 } __attribute__((packed, aligned(1)));
 

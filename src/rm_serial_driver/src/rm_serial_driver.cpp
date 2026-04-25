@@ -17,6 +17,7 @@
 #include <serial_driver/serial_driver.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <geometry_msgs/msg/twist_with_covariance_stamped.hpp>
+#include <std_msgs/msg/string.hpp>
 
 // C++ system
 #include <algorithm>
@@ -72,6 +73,7 @@ RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions & options)
   cmd_vx_scale_ = this->declare_parameter("cmd_vx_scale", 1.0);
   cmd_vy_scale_ = this->declare_parameter("cmd_vy_scale", 1.0);
   cmd_wz_scale_ = this->declare_parameter("cmd_wz_scale", 1.0);
+  chassis_manual_mode_value_ = this->declare_parameter("chassis_manual_mode_value", 1);
   if (publish_tf_) {
     tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
   }
@@ -83,6 +85,9 @@ RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions & options)
     this->create_publisher<geometry_msgs::msg::Twist>("/serial/gimbal_joint_state", 10);
   wheel_twist_pub_ =
     this->create_publisher<geometry_msgs::msg::TwistWithCovarianceStamped>(wheel_twist_topic_, 10);
+  chassis_control_mode_pub_ =
+    this->create_publisher<std_msgs::msg::String>(
+    "/chassis_control_mode", rclcpp::QoS(1).reliable().transient_local());
 
   // Detect parameter client
   detector_param_client_ = std::make_shared<rclcpp::AsyncParametersClient>(this, "armor_detector");
@@ -271,13 +276,15 @@ void RMSerialDriver::processPacket(const std::vector<uint8_t> & data, uint16_t c
 
       // 0x0503 current chassis status from MCU:
       // speed_x / speed_y are body-frame linear speeds, speed_turn is yaw rate.
+      publishChassisControlMode(chassis_status.control_mode);
       publishWheelTwist(
         chassis_status.speed_x, chassis_status.speed_y, chassis_status.speed_turn);
       RCLCPP_INFO_THROTTLE(
         get_logger(), *get_clock(), 1000,
-        "Chassis status enabled=%u raw(vx=%.3f vy=%.3f wz=%.3f) "
+        "Chassis status enabled=%u mode=%s raw(vx=%.3f vy=%.3f wz=%.3f) "
         "scaled(vx=%.3f vy=%.3f wz=%.3f)",
         static_cast<unsigned int>(chassis_status.chassis_enabled),
+        (static_cast<int>(chassis_status.control_mode) == chassis_manual_mode_value_) ? "manual" : "auto",
         chassis_status.speed_x, chassis_status.speed_y, chassis_status.speed_turn,
         chassis_status.speed_x * wheel_vx_scale_,
         chassis_status.speed_y * wheel_vy_scale_,
@@ -336,6 +343,19 @@ void RMSerialDriver::publishWheelTwist(float vx, float vy, float wz)
   };
 
   wheel_twist_pub_->publish(msg);
+}
+
+void RMSerialDriver::publishChassisControlMode(uint8_t control_mode)
+{
+  const std::string mode =
+    (static_cast<int>(control_mode) == chassis_manual_mode_value_) ? "manual" : "auto";
+  std_msgs::msg::String msg;
+  msg.data = mode;
+  chassis_control_mode_pub_->publish(msg);
+  if (mode != last_chassis_control_mode_) {
+    last_chassis_control_mode_ = mode;
+    RCLCPP_INFO(get_logger(), "Chassis control mode updated from 0x0503: %s", mode.c_str());
+  }
 }
 
 void RMSerialDriver::sendData(const auto_aim_interfaces::msg::Target::SharedPtr msg)

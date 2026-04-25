@@ -17,6 +17,8 @@ class CmdVelModeMux(Node):
         self.declare_parameter('auto_topic_alt', '/cmd_vel_nav')
         self.declare_parameter('output_topic', '/cmd_vel_selected')
         self.declare_parameter('mode_topic', '/control_mode')
+        self.declare_parameter('chassis_mode_topic', '/chassis_control_mode')
+        self.declare_parameter('chassis_mode_timeout', 1.0)
         self.declare_parameter('publish_rate', 20.0)
         self.declare_parameter('cmd_timeout', 0.5)
         self.declare_parameter('default_mode', 'manual')
@@ -27,9 +29,14 @@ class CmdVelModeMux(Node):
         self.auto_topic_alt = self.get_parameter('auto_topic_alt').value
         self.output_topic = self.get_parameter('output_topic').value
         self.mode_topic = self.get_parameter('mode_topic').value
+        self.chassis_mode_topic = self.get_parameter('chassis_mode_topic').value
+        self.chassis_mode_timeout = float(self.get_parameter('chassis_mode_timeout').value)
         self.publish_rate = float(self.get_parameter('publish_rate').value)
         self.cmd_timeout = float(self.get_parameter('cmd_timeout').value)
-        self.mode = str(self.get_parameter('default_mode').value).strip().lower()
+        self.requested_mode = str(self.get_parameter('default_mode').value).strip().lower()
+        self.mode = self.requested_mode
+        self.chassis_mode = None
+        self.last_chassis_mode_time = None
 
         self.manual_msg = Twist()
         self.auto_msg = Twist()
@@ -47,13 +54,16 @@ class CmdVelModeMux(Node):
         if isinstance(self.auto_topic_alt, str) and self.auto_topic_alt.strip():
             self.create_subscription(Twist, self.auto_topic_alt, self.auto_alt_cb, 10)
         self.create_subscription(String, self.mode_topic, self.mode_cb, 10)
+        if isinstance(self.chassis_mode_topic, str) and self.chassis_mode_topic.strip():
+            self.create_subscription(String, self.chassis_mode_topic, self.chassis_mode_cb, 10)
 
         self.timer = self.create_timer(1.0 / self.publish_rate, self.timer_cb)
 
         self.get_logger().info(
             f'CmdVel Mux started. mode={self.mode}, manual={self.manual_topic}, '
             f'manual_alt={self.manual_topic_alt}, auto={self.auto_topic}, '
-            f'auto_alt={self.auto_topic_alt}, out={self.output_topic}'
+            f'auto_alt={self.auto_topic_alt}, out={self.output_topic}, '
+            f'chassis_mode_topic={self.chassis_mode_topic}'
         )
 
     def now_sec(self):
@@ -64,6 +74,11 @@ class CmdVelModeMux(Node):
         if last_time is None:
             return False
         return (self.now_sec() - last_time) <= self.cmd_timeout
+
+    def is_chassis_mode_fresh(self):
+        if self.last_chassis_mode_time is None:
+            return False
+        return (self.now_sec() - self.last_chassis_mode_time) <= self.chassis_mode_timeout
 
     @staticmethod
     def is_nonzero_twist(msg: Twist, eps: float = 1e-4) -> bool:
@@ -94,13 +109,39 @@ class CmdVelModeMux(Node):
             self.get_logger().warn(f'Ignore invalid mode: {new_mode}')
             return
 
-        if new_mode != self.mode:
-            self.mode = new_mode
-            self.get_logger().info(f'Switched control mode to: {self.mode}')
+        if new_mode != self.requested_mode:
+            self.requested_mode = new_mode
+            self.refresh_effective_mode()
+
+    def chassis_mode_cb(self, msg: String):
+        new_mode = msg.data.strip().lower()
+        if new_mode not in ['manual', 'auto']:
+            self.get_logger().warn(f'Ignore invalid chassis mode: {new_mode}')
+            return
+
+        self.chassis_mode = new_mode
+        self.last_chassis_mode_time = self.now_sec()
+        self.refresh_effective_mode()
+
+    def get_effective_mode(self):
+        chassis_fresh = self.is_chassis_mode_fresh() and self.chassis_mode is not None
+        if chassis_fresh and self.chassis_mode == 'manual':
+            return 'manual'
+        return self.requested_mode
+
+    def refresh_effective_mode(self):
+        effective_mode = self.get_effective_mode()
+        if effective_mode != self.mode:
+            self.mode = effective_mode
+            self.get_logger().info(
+                f'Switched effective control mode to: {self.mode} '
+                f'(requested={self.requested_mode}, chassis={self.chassis_mode})'
+            )
             # 模式切换时先发一次零速度，避免残留命令
             self.pub.publish(Twist())
 
     def timer_cb(self):
+        self.refresh_effective_mode()
         out = Twist()
 
         if self.mode == 'manual':
