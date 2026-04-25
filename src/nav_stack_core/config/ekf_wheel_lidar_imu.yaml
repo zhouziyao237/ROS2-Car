@@ -5,38 +5,46 @@ ekf_filter_node:
     two_d_mode: true
     publish_tf: true
     print_diagnostics: true
+    transform_time_offset: 0.0
+    transform_timeout: 0.2
 
     map_frame: map
     odom_frame: odom
     base_link_frame: base_link
     world_frame: odom
 
-    # Primary localization source: lidar odometry (/scan based)
-    odom0: /lidar/odom
+    # Short-term odom is wheel odom integrated in wheel_twist_odom.py.
+    # That node uses wheel linear velocity for x/y and IMU yaw for heading, so
+    # EKF should trust its planar motion but let the IMU own yaw directly.
+    odom0: /wheel/odom
     odom0_config: [true,  true,  false,
-                   false, false, true,
                    false, false, false,
+                   true,  true,  false,
                    false, false, false,
                    false, false, false]
-    odom0_queue_size: 10
+    odom0_queue_size: 20
+    odom0_nodelay: true
     odom0_differential: false
     odom0_relative: false
 
-    # Wheel feedback is auxiliary only (lower trust via covariance in rm_serial_driver)
-    twist0: /wheel/twist
-    twist0_config: [false, false, false,
-                    false, false, false,
-                    true,  true,  false,
-                    false, false, true,
-                    false, false, false]
-    twist0_queue_size: 10
+    # LiDAR odom only corrects planar position so it does not fight IMU yaw.
+    odom1: /lidar/odom
+    odom1_config: [true,  true,  false,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false]
+    odom1_queue_size: 10
+    odom1_nodelay: true
+    odom1_differential: false
+    odom1_relative: false
 
-    # IMU from rm_serial (bridged to sensor_msgs/Imu)
-    imu0: /imu/data_serial
+    # Serial IMU bridges to /imu/data in imu_link. Fuse yaw and yaw rate only.
+    imu0: /imu/data
     imu0_config: [false, false, false,
                   false, false, true,
                   false, false, false,
-                  false, false, false,
+                  false, false, true,
                   false, false, false]
     imu0_queue_size: 20
     imu0_differential: false

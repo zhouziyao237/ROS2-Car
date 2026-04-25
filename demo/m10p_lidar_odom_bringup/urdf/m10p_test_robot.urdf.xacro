@@ -1,0 +1,321 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="m10p_test_robot">
+  <xacro:arg name="use_sim_time" default="true"/>
+
+  <!--
+    M10P 120-degree LiDAR odometry simulation robot.
+    Coordinate convention:
+      base_link is the ground projection of the robot center.
+      +X front, +Y left, +Z up.
+
+    This file fixes the RViz wheel placement by using the same wheel convention as
+    the reference URDF:
+      - cylinder visual rotated by roll = pi/2
+      - wheel joint axis = 0 1 0
+      - left/right wheel joint origins are symmetric on Y
+      - wheel separation matches the actual joint origins and diff_drive plugin
+  -->
+
+  <xacro:property name="PI_CONST" value="3.141592653589793"/>
+
+  <!-- chassis -->
+  <xacro:property name="base_length" value="0.42"/>
+  <xacro:property name="base_width" value="0.32"/>
+  <xacro:property name="base_height" value="0.09"/>
+  <!-- base_link is on ground, so the chassis visual center is above ground. -->
+  <xacro:property name="base_center_z" value="0.110"/>
+
+  <!-- wheels -->
+  <xacro:property name="wheel_radius" value="0.065"/>
+  <xacro:property name="wheel_width" value="0.045"/>
+  <!-- Keep wheels close to the chassis side: base_width/2 + wheel_width/2 ~= 0.1825 -->
+  <xacro:property name="wheel_separation" value="0.365"/>
+  <xacro:property name="wheel_x" value="-0.030"/>
+  <xacro:property name="wheel_z" value="${wheel_radius}"/>
+
+  <!-- low-friction support balls -->
+  <xacro:property name="support_radius" value="0.018"/>
+  <xacro:property name="front_support_x" value="0.170"/>
+  <xacro:property name="rear_support_x" value="-0.185"/>
+
+  <!-- lidar -->
+  <xacro:property name="lidar_x" value="0.120"/>
+  <xacro:property name="lidar_z" value="0.230"/>
+
+  <material name="base_gray"><color rgba="0.22 0.22 0.22 1.0"/></material>
+  <material name="wheel_black"><color rgba="0.01 0.01 0.01 1.0"/></material>
+  <material name="lidar_blue"><color rgba="0.05 0.12 0.80 1.0"/></material>
+  <material name="support_black"><color rgba="0.01 0.01 0.01 1.0"/></material>
+
+  <!-- ===================== links ===================== -->
+
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 ${base_center_z}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${base_length} ${base_width} ${base_height}"/>
+      </geometry>
+      <material name="base_gray"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${base_center_z}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${base_length} ${base_width} ${base_height}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <origin xyz="0 0 ${base_center_z}" rpy="0 0 0"/>
+      <mass value="6.0"/>
+      <inertia ixx="0.060" ixy="0" ixz="0" iyy="0.080" iyz="0" izz="0.120"/>
+    </inertial>
+  </link>
+
+  <link name="left_wheel_link">
+    <visual>
+      <!-- Cylinder's native axis is Z; rotate it to the Y axis for a side wheel. -->
+      <origin xyz="0 0 0" rpy="${PI_CONST/2.0} 0 0"/>
+      <geometry>
+        <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+      </geometry>
+      <material name="wheel_black"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="${PI_CONST/2.0} 0 0"/>
+      <geometry>
+        <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.45"/>
+      <inertia ixx="0.0010" ixy="0" ixz="0" iyy="0.0010" iyz="0" izz="0.0010"/>
+    </inertial>
+  </link>
+
+  <link name="right_wheel_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="${PI_CONST/2.0} 0 0"/>
+      <geometry>
+        <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+      </geometry>
+      <material name="wheel_black"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="${PI_CONST/2.0} 0 0"/>
+      <geometry>
+        <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.45"/>
+      <inertia ixx="0.0010" ixy="0" ixz="0" iyy="0.0010" iyz="0" izz="0.0010"/>
+    </inertial>
+  </link>
+
+  <link name="front_support_link">
+    <visual>
+      <geometry>
+        <sphere radius="${support_radius}"/>
+      </geometry>
+      <material name="support_black"/>
+    </visual>
+    <collision>
+      <geometry>
+        <sphere radius="${support_radius}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.03"/>
+      <inertia ixx="0.000002" ixy="0" ixz="0" iyy="0.000002" iyz="0" izz="0.000002"/>
+    </inertial>
+  </link>
+
+  <link name="rear_support_link">
+    <visual>
+      <geometry>
+        <sphere radius="${support_radius}"/>
+      </geometry>
+      <material name="support_black"/>
+    </visual>
+    <collision>
+      <geometry>
+        <sphere radius="${support_radius}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.03"/>
+      <inertia ixx="0.000002" ixy="0" ixz="0" iyy="0.000002" iyz="0" izz="0.000002"/>
+    </inertial>
+  </link>
+
+  <link name="m10p_laser_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.03965" length="0.039"/>
+      </geometry>
+      <material name="lidar_blue"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.03965" length="0.039"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.20"/>
+      <inertia ixx="0.00015" ixy="0" ixz="0" iyy="0.00015" iyz="0" izz="0.00020"/>
+    </inertial>
+  </link>
+
+  <!-- ===================== joints ===================== -->
+
+  <joint name="left_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="left_wheel_link"/>
+    <origin xyz="${wheel_x} ${wheel_separation/2.0} ${wheel_z}" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+
+  <joint name="right_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="right_wheel_link"/>
+    <origin xyz="${wheel_x} ${-wheel_separation/2.0} ${wheel_z}" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+
+  <joint name="front_support_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="front_support_link"/>
+    <origin xyz="${front_support_x} 0 ${support_radius}" rpy="0 0 0"/>
+  </joint>
+
+  <joint name="rear_support_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="rear_support_link"/>
+    <origin xyz="${rear_support_x} 0 ${support_radius}" rpy="0 0 0"/>
+  </joint>
+
+  <joint name="m10p_laser_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="m10p_laser_link"/>
+    <origin xyz="${lidar_x} 0 ${lidar_z}" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ===================== Gazebo visuals and contacts ===================== -->
+
+  <gazebo reference="base_link">
+    <material>Gazebo/DarkGrey</material>
+  </gazebo>
+
+  <gazebo reference="left_wheel_link">
+    <material>Gazebo/Black</material>
+    <mu1>1.4</mu1>
+    <mu2>1.4</mu2>
+    <kp>100000.0</kp>
+    <kd>1.0</kd>
+  </gazebo>
+
+  <gazebo reference="right_wheel_link">
+    <material>Gazebo/Black</material>
+    <mu1>1.4</mu1>
+    <mu2>1.4</mu2>
+    <kp>100000.0</kp>
+    <kd>1.0</kd>
+  </gazebo>
+
+  <gazebo reference="front_support_link">
+    <material>Gazebo/Black</material>
+    <mu1>0.01</mu1>
+    <mu2>0.01</mu2>
+    <kp>100000.0</kp>
+    <kd>1.0</kd>
+  </gazebo>
+
+  <gazebo reference="rear_support_link">
+    <material>Gazebo/Black</material>
+    <mu1>0.01</mu1>
+    <mu2>0.01</mu2>
+    <kp>100000.0</kp>
+    <kd>1.0</kd>
+  </gazebo>
+
+  <gazebo reference="m10p_laser_link">
+    <material>Gazebo/Blue</material>
+  </gazebo>
+
+  <!-- ===================== Gazebo plugins ===================== -->
+
+  <gazebo>
+    <plugin name="diff_drive" filename="libgazebo_ros_diff_drive.so">
+      <ros>
+        <namespace>/</namespace>
+        <remapping>cmd_vel:=cmd_vel</remapping>
+        <remapping>odom:=odom_truth</remapping>
+      </ros>
+
+      <update_rate>50</update_rate>
+      <left_joint>left_wheel_joint</left_joint>
+      <right_joint>right_wheel_joint</right_joint>
+
+      <wheel_separation>${wheel_separation}</wheel_separation>
+      <wheel_diameter>${2.0 * wheel_radius}</wheel_diameter>
+
+      <max_wheel_torque>30</max_wheel_torque>
+      <max_wheel_acceleration>3.0</max_wheel_acceleration>
+
+      <publish_odom>true</publish_odom>
+      <publish_odom_tf>false</publish_odom_tf>
+      <publish_wheel_tf>false</publish_wheel_tf>
+      <publish_wheel_joint_state>false</publish_wheel_joint_state>
+      <odometry_frame>odom_truth</odometry_frame>
+      <robot_base_frame>base_link</robot_base_frame>
+    </plugin>
+
+    <!-- Same style as the reference URDF: Gazebo publishes the wheel joint states. -->
+    <plugin name="wheel_joint_state" filename="libgazebo_ros_joint_state_publisher.so">
+      <ros>
+        <remapping>~/out:=joint_states</remapping>
+      </ros>
+      <update_rate>50</update_rate>
+      <joint_name>left_wheel_joint</joint_name>
+      <joint_name>right_wheel_joint</joint_name>
+    </plugin>
+  </gazebo>
+
+  <gazebo reference="m10p_laser_link">
+    <sensor name="m10p_laser" type="ray">
+      <always_on>true</always_on>
+      <visualize>true</visualize>
+      <update_rate>10</update_rate>
+      <pose>0 0 0 0 0 0</pose>
+      <ray>
+        <scan>
+          <horizontal>
+            <!-- 120-degree forward FOV: -60 deg to +60 deg. -->
+            <samples>241</samples>
+            <resolution>1</resolution>
+            <min_angle>-${PI_CONST/3.0}</min_angle>
+            <max_angle>${PI_CONST/3.0}</max_angle>
+          </horizontal>
+        </scan>
+        <range>
+          <min>0.18</min>
+          <max>12.0</max>
+          <resolution>0.01</resolution>
+        </range>
+        <noise>
+          <type>gaussian</type>
+          <mean>0.0</mean>
+          <stddev>0.005</stddev>
+        </noise>
+      </ray>
+      <plugin name="laser_scan" filename="libgazebo_ros_ray_sensor.so">
+        <ros>
+          <remapping>~/out:=scan</remapping>
+        </ros>
+        <output_type>sensor_msgs/LaserScan</output_type>
+        <frame_name>m10p_laser_link</frame_name>
+      </plugin>
+    </sensor>
+  </gazebo>
+</robot>

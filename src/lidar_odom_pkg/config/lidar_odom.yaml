@@ -1,33 +1,97 @@
 scan_match_odom:
   ros__parameters:
-    scan_topic: /scan
+    # Topics / frames
+    scan_topic: /scan_front
     odom_topic: /lidar/odom
+    diagnostics_topic: /lidar/odom_debug
     odom_frame: odom
     base_frame: base_link
-    publish_tf: false
+    publish_tf: false     # 如果后面交给 robot_localization/Nav2 管 TF，这里保持 false
 
+    # LaserScan 有效数据取段：角度单位是 degree，按原始 LaserScan 坐标过滤
     min_range: 0.18
     max_range: 12.0
-    downsample_step: 5
+    downsample_step: 3
+    use_angle_filter: true
+    angle_windows_deg: [-60.0, 60.0]
 
-    icp_max_iterations: 8
-    icp_max_corr_dist: 0.20
-    min_correspondences: 30
-    reject_mean_err_above: 0.08
+    # 雷达相对 base_link 的 2D 外参/方位补偿
+    scan_yaw_offset_deg: 0.0            # 雷达正前方不等于 base_link x+ 时改这里，如侧装 90.0
+    scan_x_offset: 0.10                 # 雷达在 base_link 下的 x 偏移，单位 m
+    scan_y_offset: 0.0                  # 雷达在 base_link 下的 y 偏移，单位 m
+    invert_scan_x: false
+    invert_scan_y: false
 
-    min_motion_trans: 0.004
-    min_motion_rot: 0.004
-    static_lock_trans: 0.006
-    static_lock_rot: 0.006
-    reject_trans_above: 0.08
-    reject_rot_above: 0.12
+    # ICP scan matching
+    icp_max_iterations: 12
+    icp_max_corr_dist: 0.12
+    icp_trim_ratio: 0.85
+    icp_converge_trans: 0.0002
+    icp_converge_rot: 0.0003
+    min_correspondences: 50
+    reject_mean_err_above: 0.06
 
-    use_ekf: true
-    ekf_qx: 0.0008
-    ekf_qy: 0.0008
-    ekf_qyaw: 0.0005
-    ekf_rx: 0.06
-    ekf_ry: 0.06
-    ekf_ryaw: 0.04
+    # Motion gate: 按你的底盘扫描频率调，大跳变直接丢弃
+    min_motion_trans: 0.002
+    min_motion_rot: 0.003
+    static_lock_trans: 0.003
+    static_lock_rot: 0.003
+    reject_trans_above: 0.12
+    reject_rot_above: 0.18
+    max_dt: 0.25
 
-    vel_alpha: 0.2
+    # Kalman 前预测 + 更新
+    use_kalman_predict: true
+    use_kalman_update: true
+    kalman_q_pos: 0.003
+    kalman_q_yaw: 0.002
+    kalman_q_vel: 0.08
+    kalman_q_wz: 0.05
+    kalman_r_x: 0.03
+    kalman_r_y: 0.04
+    kalman_r_yaw: 0.04
+    velocity_feedback_alpha: 0.35
+
+    # 外部短时先验：轮里程计 + IMU + 当前控制速度
+    use_external_twist_prior: true
+    prior_source: auto
+    external_odom_topic: /wheel/odom
+    external_imu_topic: /imu/data
+    external_cmd_vel_topic: /cmd_vel_selected
+    external_twist_timeout: 0.35
+    external_prior_weight: 0.90
+    use_scan_deskew: true
+    deskew_center_scan: true
+    deskew_max_time: 0.12
+
+    # 可观测性/几何门控：前向扇区点太多、左右不平衡时，降低 y/yaw 信任
+    use_adaptive_constraint: true
+    sigma_ref_x: 0.020
+    sigma_ref_y: 0.012
+    sigma_ref_yaw: 0.020
+    alpha_x_min: 0.60
+    alpha_x_max: 1.00
+    alpha_y_min: 0.00
+    alpha_y_max: 1.00
+    alpha_yaw_min: 0.20
+    alpha_yaw_max: 1.00
+    dy_prior: 0.0
+    dyaw_prior: 0.0
+    use_scan_geometry_gate: true
+    geometry_sector_deadzone_deg: 8.0
+    geometry_weight_y: 0.60
+    geometry_weight_yaw: 0.55
+
+    # Odometry covariance，给后续 EKF/SLAM 融合使用
+    publish_dynamic_covariance: true
+    min_cov_x: 0.002
+    min_cov_y: 0.004
+    min_cov_yaw: 0.006
+    max_cov_x: 0.20
+    max_cov_y: 0.30
+    max_cov_yaw: 0.30
+
+    # Twist smoothing / debug
+    vel_alpha: 0.20
+    debug_log_period: 20
+    publish_debug: true

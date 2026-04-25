@@ -261,24 +261,27 @@ void RMSerialDriver::processPacket(const std::vector<uint8_t> & data, uint16_t c
       break;
     }
     case 0x503: {
-      classisPacket classis_packet{};
-      if (!decodePacketPrefix(data, classis_packet)) {
+      chassisCurrentStatusPacket chassis_status{};
+      if (!decodePacketPrefix(data, chassis_status)) {
         RCLCPP_WARN(
-          get_logger(), "Classis frame too short: %zu < %zu", data.size(), sizeof(classisPacket));
+          get_logger(), "Chassis status frame too short: %zu < %zu",
+          data.size(), sizeof(chassisCurrentStatusPacket));
         break;
       }
 
-      // Publish measured chassis feedback velocity as an auxiliary EKF input.
-      // Assumption: classis_packet.vx / vy / vz are measured body-frame velocities,
-      // where vz is yaw rate. If your MCU uses different fields or units, change here.
-      publishWheelTwist(classis_packet.vx, classis_packet.vy, classis_packet.vz);
+      // 0x0503 current chassis status from MCU:
+      // speed_x / speed_y are body-frame linear speeds, speed_turn is yaw rate.
+      publishWheelTwist(
+        chassis_status.speed_x, chassis_status.speed_y, chassis_status.speed_turn);
       RCLCPP_INFO_THROTTLE(
         get_logger(), *get_clock(), 1000,
-        "Wheel feedback raw(vx=%.3f vy=%.3f wz=%.3f) scaled(vx=%.3f vy=%.3f wz=%.3f)",
-        classis_packet.vx, classis_packet.vy, classis_packet.vz,
-        classis_packet.vx * wheel_vx_scale_,
-        classis_packet.vy * wheel_vy_scale_,
-        classis_packet.vz * wheel_wz_scale_);
+        "Chassis status enabled=%u raw(vx=%.3f vy=%.3f wz=%.3f) "
+        "scaled(vx=%.3f vy=%.3f wz=%.3f)",
+        static_cast<unsigned int>(chassis_status.chassis_enabled),
+        chassis_status.speed_x, chassis_status.speed_y, chassis_status.speed_turn,
+        chassis_status.speed_x * wheel_vx_scale_,
+        chassis_status.speed_y * wheel_vy_scale_,
+        chassis_status.speed_turn * wheel_wz_scale_);
       break;
     }
     case 0x504: {

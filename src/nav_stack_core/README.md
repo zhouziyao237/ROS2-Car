@@ -26,13 +26,37 @@ source install/setup.bash
 ```bash
 source /opt/ros/humble/setup.bash
 cd $WS
-colcon build --packages-select lslidar_driver rm_serial_driver nav_stack_core
+colcon build --packages-select lslidar_driver lidar_odom_pkg rm_serial_driver nav_stack_core
 source install/setup.bash
 
 ros2 launch nav_stack_core mapping_nav_with_serial.launch.py
 ```
 
 该入口会启动：串口底盘、雷达、雷达里程计、EKF、slam_toolbox、Nav2、RViz2。
+
+如果雷达串口不是默认的 `/dev/ttyUSB0`，或底盘前进/转向符号和 ROS 坐标不一致，可以直接在 launch 参数里覆盖：
+
+```bash
+ros2 launch nav_stack_core mapping_nav_with_serial.launch.py \
+  lidar_serial_port:=/dev/ttyACM0 \
+  cmd_vx_scale:=-1.0 \
+  wheel_vx_scale:=-1.0 \
+  cmd_wz_scale:=-1.0 \
+  wheel_wz_scale:=-1.0 \
+  imu_yaw_scale:=-1.0
+```
+
+当前 TF 架构固定为：
+
+- `map -> odom`：`slam_toolbox`
+- `odom -> base_link`：`robot_localization/ekf_node`
+- `base_link -> laser`、`base_link -> imu_link`：`robot_state_publisher`
+
+以下节点都不会发布 `odom -> base_link`：
+
+- `scan_match_odom`
+- `wheel_twist_odom`
+- `rm_serial_driver`
 
 ## 2. 必须先确认 Nav2 已激活
 
@@ -149,3 +173,27 @@ ros2 run tf2_ros tf2_echo odom base_link
 - 日志中 `LaserRangeScan contains xxx range readings, expected yyy` 为雷达点数波动告警，通常不会直接导致路径完全不显示。
 - 当前控制参数已偏向“先跑通平移控制”，并放宽了朝向约束，便于 `vx/vy` 主控底盘先稳定导航。
 - 当前全局/局部代价地图参数也偏调试友好：机器人半径和膨胀半径较小，目的是先确认 `/plan -> /cmd_vel_nav -> /cmd_vel_selected` 链路能跑通；实车稳定后再按车体尺寸调大。
+
+## 8. 定位与 TF 验证
+
+启动后先执行下面这些命令，逐项核对传感器输入、融合输出和 TF 归属：
+
+```bash
+ros2 topic echo /wheel/odom --once
+ros2 topic echo /imu/data --once
+ros2 topic echo /lidar/odom --once
+ros2 topic echo /odometry/filtered --once
+ros2 run tf2_ros tf2_echo odom base_link
+ros2 run tf2_ros tf2_echo base_link laser
+ros2 run tf2_ros tf2_echo map odom
+ros2 topic echo /tf | grep -A 8 "child_frame_id: base_link"
+```
+
+验收时重点看：
+
+- `/tf` 中只保留一条 `odom -> base_link`，来源应是 `ekf_node`
+- `base_link -> laser` 和 `base_link -> imu_link` 应是 fixed TF，零旋转对应四元数 `0 0 0 1`
+- 车前进时 `/wheel/odom.twist.twist.linear.x` 不应为 `0`
+- 左转时 `/imu/data.angular_velocity.z` 应为正
+- `/lidar/odom` 只发话题，不发 `odom -> base_link` TF
+- Nav2 不再出现 `map/base_link transform missing`

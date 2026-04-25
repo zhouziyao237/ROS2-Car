@@ -57,6 +57,7 @@ install(PROGRAMS
   scripts/goal_pose_bridge.py
   scripts/serial_imu_bridge.py
   scripts/wheel_twist_odom.py
+  scripts/front_scan_filter.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

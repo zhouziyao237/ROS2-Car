@@ -35,13 +35,13 @@ struct IMUPacket
   uint16_t crc16;
 } __attribute__((packed, aligned(1)));
 
-struct classisPacket
+struct chassisCurrentStatusPacket
 {
   Header header;
-  float vx;
-  float vy;
-  float vz;
-  uint8_t enable;
+  float speed_x;
+  float speed_y;
+  float speed_turn;
+  uint8_t chassis_enabled;
   uint16_t crc16;
 } __attribute__((packed, aligned(1)));
 

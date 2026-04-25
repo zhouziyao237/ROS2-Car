@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
@@ -17,13 +18,13 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'params_file',
             default_value=default_params,
-            description='Path to lidar odometry parameter file'
+            description='Path to lidar odometry parameter file',
         ),
         Node(
             package='lidar_odom_pkg',
             executable='scan_match_odom.py',
             name='scan_match_odom',
             output='screen',
-            parameters=[params_file]
-        )
+            parameters=[params_file],
+        ),
     ])
