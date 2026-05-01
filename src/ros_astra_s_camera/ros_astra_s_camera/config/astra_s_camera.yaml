@@ -1,0 +1,62 @@
+openni2:
+  # Environment variables OPENNI2_REDIST and OPENNI2_DRIVERS_PATH have higher priority than these values.
+  redist: "/host-home/Software/OpenNi2/sdk/libs"
+  drivers: "/host-home/Software/OpenNi2/sdk/libs/OpenNI2/Drivers"
+
+calibration:
+  # Checkerboard internal corner count, not square count.
+  board_size: "8x11"
+  square_size_m: "0.030"
+
+  # Relative paths are resolved from the installed package share directory.
+  rgb_info_uri: "calib/rgb_Astra_Orbbec.yaml"
+  depth_info_uri: "calib/depth_Astra_Orbbec.yaml"
+
+rgbd_position_node:
+  ros__parameters:
+    rgb_topic: "/camera/rgb/image_raw"
+    depth_topic: "/camera/depth/image"
+    camera_info_topic: "/camera/rgb/camera_info"
+
+    target_pixel_topic: "/astra_s/target_pixel"
+    target_position_topic: "/astra_s/target_position_mm"
+    target_point_topic: "/astra_s/target_point"
+    debug_image_topic: "/astra_s/debug_rgbd_image"
+
+    camera_frame: "camera_rgb_optical_frame"
+
+    # /camera/depth/image is a registered 32FC1 depth image in meters.
+    depth_unit: "m"
+    min_depth_mm: 150.0
+    max_depth_mm: 5000.0
+    sample_radius: 1
+    sync_queue_size: 5
+    sync_slop_sec: 0.05
+    target_sync_slop_sec: 0.08
+    target_history_size: 30
+
+    use_center_when_no_target: true
+    publish_debug_image: false
+    publish_target_point_m: true
+
+    # Depth size calibration: real_depth_mm = raw_depth_mm * scale + offset
+    depth_scale_correction: 1.0
+    depth_offset_mm: 0.0
+
+    # RGB pixel to depth pixel mapping.
+    rgb_to_depth_offset_u: 0.0
+    rgb_to_depth_offset_v: 0.0
+    rgb_to_depth_scale_u: 1.0
+    rgb_to_depth_scale_v: 1.0
+
+    # Simple installation offset compensation in mm. Keep zero if you want pure camera optical frame.
+    camera_to_base_x_mm: 0.0
+    camera_to_base_y_mm: 0.0
+    camera_to_base_z_mm: 0.0
+
+depth_calibration_node:
+  ros__parameters:
+    depth_topic: "/camera/depth/image"
+    sample_radius: 10
+    min_depth_mm: 150.0
+    max_depth_mm: 5000.0

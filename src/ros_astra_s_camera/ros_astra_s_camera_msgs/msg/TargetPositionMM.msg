@@ -1,0 +1,10 @@
+std_msgs/Header header
+string target_id
+float64 x_mm
+float64 y_mm
+float64 z_mm
+float64 u
+float64 v
+float64 depth_mm
+float64 confidence
+bool valid

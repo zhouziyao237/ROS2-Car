@@ -30,13 +30,17 @@
   <xacro:property name="wheel_width" value="0.045"/>
   <!-- Keep wheels close to the chassis side: base_width/2 + wheel_width/2 ~= 0.1825 -->
   <xacro:property name="wheel_separation" value="0.365"/>
-  <xacro:property name="wheel_x" value="-0.030"/>
+  <!-- Move the wheel axle slightly forward so the chassis center is not hanging in front of it. -->
+  <xacro:property name="wheel_x" value="-0.010"/>
   <xacro:property name="wheel_z" value="${wheel_radius}"/>
 
   <!-- low-friction support balls -->
   <xacro:property name="support_radius" value="0.018"/>
-  <xacro:property name="front_support_x" value="0.170"/>
-  <xacro:property name="rear_support_x" value="-0.185"/>
+  <!-- Front/rear support points are trimmed to avoid a nose-down stance under load. -->
+  <xacro:property name="front_support_x" value="0.180"/>
+  <xacro:property name="rear_support_x" value="-0.170"/>
+  <xacro:property name="front_support_z" value="${support_radius + 0.0015}"/>
+  <xacro:property name="rear_support_z" value="${support_radius - 0.0015}"/>
 
   <!-- lidar -->
   <xacro:property name="lidar_x" value="0.120"/>
@@ -186,13 +190,13 @@
   <joint name="front_support_joint" type="fixed">
     <parent link="base_link"/>
     <child link="front_support_link"/>
-    <origin xyz="${front_support_x} 0 ${support_radius}" rpy="0 0 0"/>
+    <origin xyz="${front_support_x} 0 ${front_support_z}" rpy="0 0 0"/>
   </joint>
 
   <joint name="rear_support_joint" type="fixed">
     <parent link="base_link"/>
     <child link="rear_support_link"/>
-    <origin xyz="${rear_support_x} 0 ${support_radius}" rpy="0 0 0"/>
+    <origin xyz="${rear_support_x} 0 ${rear_support_z}" rpy="0 0 0"/>
   </joint>
 
   <joint name="m10p_laser_joint" type="fixed">

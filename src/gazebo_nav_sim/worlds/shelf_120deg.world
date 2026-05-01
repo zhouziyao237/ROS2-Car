@@ -1,0 +1,113 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <world name="shelf_120deg_world">
+    <physics name="default_physics" default="0" type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>1000</real_time_update_rate>
+    </physics>
+
+    <plugin name="gazebo_ros_init" filename="libgazebo_ros_init.so"/>
+    <plugin name="gazebo_ros_factory" filename="libgazebo_ros_factory.so"/>
+
+    <include>
+      <uri>model://sun</uri>
+    </include>
+
+    <include>
+      <uri>model://ground_plane</uri>
+    </include>
+
+    <!-- Outer walls -->
+    <model name="wall_north">
+      <static>true</static>
+      <pose>0 4.0 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>10 0.12 1.0</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>10 0.12 1.0</size></box></geometry><material><ambient>0.5 0.5 0.5 1</ambient></material></visual>
+      </link>
+    </model>
+    <model name="wall_south">
+      <static>true</static>
+      <pose>0 -4.0 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>10 0.12 1.0</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>10 0.12 1.0</size></box></geometry><material><ambient>0.5 0.5 0.5 1</ambient></material></visual>
+      </link>
+    </model>
+    <model name="wall_east">
+      <static>true</static>
+      <pose>5.0 0 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.12 8 1.0</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>0.12 8 1.0</size></box></geometry><material><ambient>0.5 0.5 0.5 1</ambient></material></visual>
+      </link>
+    </model>
+    <model name="wall_west">
+      <static>true</static>
+      <pose>-5.0 0 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.12 8 1.0</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>0.12 8 1.0</size></box></geometry><material><ambient>0.5 0.5 0.5 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <!-- Shelves forming three aisles -->
+    <model name="shelf_a_left">
+      <static>true</static>
+      <pose>-1.8 0.8 0.55 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.35 4.8 1.1</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>0.35 4.8 1.1</size></box></geometry><material><ambient>0.65 0.35 0.1 1</ambient></material></visual>
+      </link>
+    </model>
+    <model name="shelf_a_right">
+      <static>true</static>
+      <pose>-0.6 0.8 0.55 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.35 4.8 1.1</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>0.35 4.8 1.1</size></box></geometry><material><ambient>0.65 0.35 0.1 1</ambient></material></visual>
+      </link>
+    </model>
+    <model name="shelf_b_left">
+      <static>true</static>
+      <pose>0.6 0.8 0.55 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.35 4.8 1.1</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>0.35 4.8 1.1</size></box></geometry><material><ambient>0.65 0.35 0.1 1</ambient></material></visual>
+      </link>
+    </model>
+    <model name="shelf_b_right">
+      <static>true</static>
+      <pose>1.8 0.8 0.55 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.35 4.8 1.1</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>0.35 4.8 1.1</size></box></geometry><material><ambient>0.65 0.35 0.1 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <!-- Floor tag markers at aisle entrances: non-vision helper; sim_tag_zone_publisher uses these coordinates -->
+    <model name="tag_zone_1_floor">
+      <static>true</static>
+      <pose>-1.2 -2.4 0.006 0 0 0</pose>
+      <link name="link">
+        <visual name="visual"><geometry><box><size>0.5 0.5 0.01</size></box></geometry><material><ambient>0 1 0 1</ambient><diffuse>0 1 0 1</diffuse></material></visual>
+      </link>
+    </model>
+    <model name="tag_zone_2_floor">
+      <static>true</static>
+      <pose>1.2 -2.4 0.006 0 0 0</pose>
+      <link name="link">
+        <visual name="visual"><geometry><box><size>0.5 0.5 0.01</size></box></geometry><material><ambient>0 0 1 1</ambient><diffuse>0 0 1 1</diffuse></material></visual>
+      </link>
+    </model>
+    <model name="target_box">
+      <static>true</static>
+      <pose>1.2 2.4 0.18 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.35 0.35 0.35</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>0.35 0.35 0.35</size></box></geometry><material><ambient>1 0 0 1</ambient><diffuse>1 0 0 1</diffuse></material></visual>
+      </link>
+    </model>
+  </world>
+</sdf>

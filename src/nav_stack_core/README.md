@@ -5,6 +5,9 @@
 - 在 RViz2 里稳定看到规划路径：`/plan`、`/local_plan`
 - 车辆按规划路径运动（自动模式）
 
+当前 README 默认以 `mapping_nav_with_serial_wheel_heading.launch.py` 为准。
+也就是：当前推荐使用轮上角速度积分航向，不把 `/imu/data` 接进建图导航主链路。
+
 ## 0. 先统一工作空间
 
 不要混用 `/host-home` 和 `/workspace`。  
@@ -29,12 +32,43 @@ cd $WS
 colcon build --packages-select lslidar_driver lidar_odom_pkg rm_serial_driver nav_stack_core
 source install/setup.bash
 
+ros2 launch nav_stack_core mapping_nav_with_serial_wheel_heading.launch.py
+```
+
+当前实车推荐入口是 `mapping_nav_with_serial_wheel_heading.launch.py`。
+它使用“轮速平移 + 轮上角速度积分航向”，不用 IMU 参与航向融合。
+
+旧入口 `mapping_nav_with_serial.launch.py` 仍然保留，但只建议用于对比或排查 IMU 行为：
+
+```bash
 ros2 launch nav_stack_core mapping_nav_with_serial.launch.py
 ```
 
 该入口会启动：串口底盘、雷达、雷达里程计、EKF、slam_toolbox、Nav2、RViz2。
+区别是：
+
+- `mapping_nav_with_serial_wheel_heading.launch.py`：`wheel_twist_odom` 用轮上角速度积分航向，EKF 和 lidar odom 先验也不再吃 `/imu/data`
+- `mapping_nav_with_serial.launch.py`：`wheel_twist_odom` 用 IMU 提供航向，EKF 也会融合 `/imu/data`
+
+为什么当前默认不用 IMU 航向：
+
+- 当前串口 IMU 的 yaw 在实车上有明显低频漂移，静止时朝向也会慢慢跑
+- 一旦把 IMU yaw 接进 `wheel_twist_odom`、EKF 和 lidar odom 先验，漂移会同时影响三层航向链
+- 实际表现通常是地图慢转、路径抖动、原地不动时朝向还在变化
+- 轮上角速度虽然也会累计误差，但短时间内更稳定，而且会被 LiDAR odom 持续纠偏
 
 如果雷达串口不是默认的 `/dev/ttyUSB0`，或底盘前进/转向符号和 ROS 坐标不一致，可以直接在 launch 参数里覆盖：
+
+```bash
+ros2 launch nav_stack_core mapping_nav_with_serial_wheel_heading.launch.py \
+  lidar_serial_port:=/dev/ttyACM0 \
+  cmd_vx_scale:=-1.0 \
+  wheel_vx_scale:=-1.0 \
+  cmd_wz_scale:=-1.0 \
+  wheel_wz_scale:=-1.0
+```
+
+如果你要对比旧的 IMU 航向版，再用：
 
 ```bash
 ros2 launch nav_stack_core mapping_nav_with_serial.launch.py \
@@ -45,6 +79,11 @@ ros2 launch nav_stack_core mapping_nav_with_serial.launch.py \
   wheel_wz_scale:=-1.0 \
   imu_yaw_scale:=-1.0
 ```
+
+说明：
+
+- 轮上方向版保留了 `imu_yaw_scale`、`imu_yaw_offset_deg` 等 launch 参数兼容旧命令行
+- 但该模式下这些 `imu_*` 参数不会参与航向计算
 
 当前 TF 架构固定为：
 
@@ -66,6 +105,7 @@ ros2 launch nav_stack_core mapping_nav_with_serial.launch.py \
 ros2 lifecycle get /controller_server
 ros2 lifecycle get /bt_navigator
 ros2 action info /navigate_to_pose
+ros2 action info /navigate_through_poses
 ```
 
 预期：
@@ -73,6 +113,7 @@ ros2 action info /navigate_to_pose
 - `/controller_server` = `active [3]`
 - `/bt_navigator` = `active [3]`
 - `/navigate_to_pose` 有 `Action servers: 1`
+- `/navigate_through_poses` 有 `Action servers: 1`
 
 如果 `bt_navigator` 是 `inactive`，执行：
 
@@ -121,6 +162,26 @@ ros2 topic pub /control_mode std_msgs/msg/String "{data: auto}" -1
 ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
 "{pose: {header: {frame_id: map}, pose: {position: {x: 0.8, y: 0.0, z: 0.0}, orientation: {w: 1.0}}}}"
 ```
+
+后面如果要做多点导航，当前栈已经可以直接调用 `/navigate_through_poses`：
+
+```bash
+ros2 action send_goal /navigate_through_poses nav2_msgs/action/NavigateThroughPoses \
+"{poses: [
+  {header: {frame_id: map}, pose: {position: {x: 1.0, y: 0.0, z: 0.0}, orientation: {w: 1.0}}},
+  {header: {frame_id: map}, pose: {position: {x: 1.0, y: 1.0, z: 0.0}, orientation: {z: 0.7071, w: 0.7071}}}
+]}"
+```
+
+详细接口说明见：
+
+- [docs/multi_waypoint_navigation.md](docs/multi_waypoint_navigation.md)
+
+如果后面要把航点固化到配置文件，参考：
+
+- `src/nav_stack_core/config/waypoints_example.yaml`
+
+建议后续做一个自己的小节点或脚本：读取 YAML 后调用 `/navigate_through_poses`，这样最贴合现在这套建图/导航入口。
 
 检查控制链：
 
@@ -180,7 +241,6 @@ ros2 run tf2_ros tf2_echo odom base_link
 
 ```bash
 ros2 topic echo /wheel/odom --once
-ros2 topic echo /imu/data --once
 ros2 topic echo /lidar/odom --once
 ros2 topic echo /odometry/filtered --once
 ros2 run tf2_ros tf2_echo odom base_link
@@ -189,11 +249,18 @@ ros2 run tf2_ros tf2_echo map odom
 ros2 topic echo /tf | grep -A 8 "child_frame_id: base_link"
 ```
 
+如果你是在对比旧的 IMU 航向版，再额外检查：
+
+```bash
+ros2 topic echo /imu/data --once
+```
+
 验收时重点看：
 
 - `/tf` 中只保留一条 `odom -> base_link`，来源应是 `ekf_node`
 - `base_link -> laser` 和 `base_link -> imu_link` 应是 fixed TF，零旋转对应四元数 `0 0 0 1`
 - 车前进时 `/wheel/odom.twist.twist.linear.x` 不应为 `0`
-- 左转时 `/imu/data.angular_velocity.z` 应为正
+- 轮上方向版左转时，`/wheel/odom.pose.pose.orientation` 与 `/odometry/filtered.pose.pose.orientation` 应连续变化
+- 旧的 IMU 航向版左转时，`/imu/data.angular_velocity.z` 应为正
 - `/lidar/odom` 只发话题，不发 `odom -> base_link` TF
 - Nav2 不再出现 `map/base_link transform missing`

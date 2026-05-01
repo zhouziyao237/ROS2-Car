@@ -1,0 +1,131 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+  - Class: rviz_common/Tool Properties
+    Name: Tool Properties
+  - Class: rviz_common/Views
+    Name: Views
+
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Enabled: true
+      Name: Grid
+      Cell Size: 1
+      Plane: XY
+      Reference Frame: map
+
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Marker Scale: 0.4
+      Frames:
+        All Enabled: true
+
+    - Class: rviz_default_plugins/RobotModel
+      Enabled: true
+      Name: RobotModel
+      Description Topic:
+        Value: /robot_description
+      Visual Enabled: true
+      Collision Enabled: false
+
+    - Class: rviz_default_plugins/LaserScan
+      Enabled: true
+      Name: LaserScan 120deg
+      Topic:
+        Value: /scan
+      Style: Points
+      Size (m): 0.04
+      Color Transformer: FlatColor
+      Color: 255; 0; 0
+      Use Fixed Frame: true
+
+    - Class: rviz_default_plugins/Map
+      Enabled: true
+      Name: SLAM Map
+      Topic:
+        Value: /map
+      Color Scheme: map
+      Draw Behind: true
+      Alpha: 0.75
+      Use Timestamp: false
+
+    - Class: rviz_default_plugins/Path
+      Enabled: true
+      Name: Nav2 Plan
+      Topic:
+        Value: /plan
+      Color: 25; 255; 0
+      Line Width: 0.04
+      Buffer Length: 1
+
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Virtual Tag Markers
+      Topic:
+        Value: /sim_tag_markers
+
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Mission Markers
+      Topic:
+        Value: /mission_markers
+
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Shelf Search Markers
+      Topic:
+        Value: /shelf_search_markers
+
+    - Class: rviz_default_plugins/Pose
+      Enabled: true
+      Name: Current Anchor Pose
+      Topic:
+        Value: /current_anchor_pose
+      Shape: Arrow
+      Color: 255; 25; 0
+      Axes Length: 0.5
+      Axes Radius: 0.03
+
+  Enabled: true
+  Global Options:
+    Fixed Frame: map
+    Background Color: 48; 48; 48
+    Frame Rate: 30
+  Name: root
+
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/SetInitialPose
+      Topic:
+        Value: /initialpose
+    - Class: rviz_default_plugins/SetGoal
+      Topic:
+        Value: /waypoint_pose
+
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 10
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0
+      Name: Current View
+      Pitch: 1.57
+      Target Frame: map
+      Yaw: 0
+    Saved: ~
+
+Window Geometry:
+  Height: 900
+  Width: 1400
+  X: 80
+  Y: 40

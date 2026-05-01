@@ -2,6 +2,7 @@
 import math
 
 import rclpy
+from action_msgs.srv import CancelGoal
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from std_msgs.msg import String
@@ -22,6 +23,9 @@ class CmdVelModeMux(Node):
         self.declare_parameter('publish_rate', 20.0)
         self.declare_parameter('cmd_timeout', 0.5)
         self.declare_parameter('default_mode', 'manual')
+        self.declare_parameter('cancel_nav_on_manual', True)
+        self.declare_parameter('navigate_to_pose_action_name', '/navigate_to_pose')
+        self.declare_parameter('navigate_through_poses_action_name', '/navigate_through_poses')
 
         self.manual_topic = self.get_parameter('manual_topic').value
         self.manual_topic_alt = self.get_parameter('manual_topic_alt').value
@@ -34,6 +38,13 @@ class CmdVelModeMux(Node):
         self.publish_rate = float(self.get_parameter('publish_rate').value)
         self.cmd_timeout = float(self.get_parameter('cmd_timeout').value)
         self.requested_mode = str(self.get_parameter('default_mode').value).strip().lower()
+        self.cancel_nav_on_manual = bool(self.get_parameter('cancel_nav_on_manual').value)
+        self.navigate_to_pose_action_name = str(
+            self.get_parameter('navigate_to_pose_action_name').value
+        ).strip()
+        self.navigate_through_poses_action_name = str(
+            self.get_parameter('navigate_through_poses_action_name').value
+        ).strip()
         self.mode = self.requested_mode
         self.chassis_mode = None
         self.last_chassis_mode_time = None
@@ -46,6 +57,9 @@ class CmdVelModeMux(Node):
         self.last_auto_alt_time = None
 
         self.pub = self.create_publisher(Twist, self.output_topic, 10)
+        self.nav_cancel_clients = []
+        self.register_nav_cancel_client(self.navigate_to_pose_action_name)
+        self.register_nav_cancel_client(self.navigate_through_poses_action_name)
 
         self.create_subscription(Twist, self.manual_topic, self.manual_cb, 10)
         if isinstance(self.manual_topic_alt, str) and self.manual_topic_alt.strip():
@@ -63,8 +77,20 @@ class CmdVelModeMux(Node):
             f'CmdVel Mux started. mode={self.mode}, manual={self.manual_topic}, '
             f'manual_alt={self.manual_topic_alt}, auto={self.auto_topic}, '
             f'auto_alt={self.auto_topic_alt}, out={self.output_topic}, '
-            f'chassis_mode_topic={self.chassis_mode_topic}'
+            f'chassis_mode_topic={self.chassis_mode_topic}, '
+            f'cancel_nav_on_manual={self.cancel_nav_on_manual}'
         )
+
+    @staticmethod
+    def action_cancel_service_name(action_name: str) -> str:
+        return f"{action_name.rstrip('/')}/_action/cancel_goal"
+
+    def register_nav_cancel_client(self, action_name: str):
+        if not action_name:
+            return
+        service_name = self.action_cancel_service_name(action_name)
+        client = self.create_client(CancelGoal, service_name)
+        self.nav_cancel_clients.append((action_name, client))
 
     def now_sec(self):
         t = self.get_clock().now().nanoseconds
@@ -132,6 +158,7 @@ class CmdVelModeMux(Node):
     def refresh_effective_mode(self):
         effective_mode = self.get_effective_mode()
         if effective_mode != self.mode:
+            previous_mode = self.mode
             self.mode = effective_mode
             self.get_logger().info(
                 f'Switched effective control mode to: {self.mode} '
@@ -139,6 +166,40 @@ class CmdVelModeMux(Node):
             )
             # 模式切换时先发一次零速度，避免残留命令
             self.pub.publish(Twist())
+            if self.cancel_nav_on_manual and self.mode == 'manual' and previous_mode != 'manual':
+                self.cancel_active_navigation_tasks()
+
+    def cancel_active_navigation_tasks(self):
+        cancel_sent = False
+        for action_name, client in self.nav_cancel_clients:
+            if not client.wait_for_service(timeout_sec=0.1):
+                self.get_logger().warn(
+                    f'Skip cancel for {action_name}: cancel service not available.'
+                )
+                continue
+
+            # Empty CancelGoal request means "cancel all goals" on this action server.
+            future = client.call_async(CancelGoal.Request())
+            future.add_done_callback(
+                lambda future, action_name=action_name: self.cancel_done_cb(action_name, future)
+            )
+            cancel_sent = True
+
+        if cancel_sent:
+            self.get_logger().info(
+                'Manual takeover detected. Requested cancellation of active navigation goals.'
+            )
+
+    def cancel_done_cb(self, action_name: str, future):
+        try:
+            response = future.result()
+        except Exception as exc:
+            self.get_logger().error(f'Failed to cancel goals on {action_name}: {exc}')
+            return
+
+        self.get_logger().info(
+            f'Cancel response from {action_name}: goals_canceling={len(response.goals_canceling)}.'
+        )
 
     def timer_cb(self):
         self.refresh_effective_mode()

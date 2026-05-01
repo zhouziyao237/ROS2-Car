@@ -1,0 +1,182 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+        - /TF1
+        - /RGB Image1
+        - /Depth Image1
+        - /RGBD Debug Image1
+        - /Target Point1
+      Splitter Ratio: 0.5
+    Tree Height: 650
+  - Class: rviz_common/Views
+    Name: Views
+
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+      Value: true
+      Alpha: 0.5
+      Cell Size: 0.2
+      Color: 160; 160; 160
+      Line Style:
+        Line Width: 0.03
+        Value: Lines
+      Normal Cell Count: 0
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Plane: XY
+      Plane Cell Count: 20
+      Reference Frame: camera_link
+
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Enabled: true
+      Value: true
+      Frame Timeout: 15
+      Frames:
+        All Enabled: true
+      Marker Scale: 0.25
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Update Interval: 0
+      Tree:
+        {}
+
+    - Class: rviz_default_plugins/Image
+      Name: RGB Image
+      Enabled: true
+      Value: true
+      Topic:
+        Value: /camera/rgb/image_raw
+        Depth: 10
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+      Normalize Range: true
+      Min Value: 0
+      Max Value: 255
+      Median window: 5
+
+    - Class: rviz_default_plugins/Image
+      Name: Depth Image
+      Enabled: true
+      Value: true
+      Topic:
+        Value: /camera/depth/image
+        Depth: 10
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+      Normalize Range: true
+      Min Value: 0
+      Max Value: 5000
+      Median window: 5
+
+    - Class: rviz_default_plugins/Image
+      Name: RGBD Debug Image
+      Enabled: false
+      Value: false
+      Topic:
+        Value: /astra_s/debug_rgbd_image
+        Depth: 10
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+      Normalize Range: true
+      Min Value: 0
+      Max Value: 255
+      Median window: 5
+
+    - Class: rviz_default_plugins/PointStamped
+      Name: Target Point
+      Enabled: true
+      Value: true
+      Topic:
+        Value: /astra_s/target_point
+        Depth: 10
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+      Color: 255; 25; 0
+      Radius: 0.05
+      History Length: 1
+
+    - Class: rviz_default_plugins/PointCloud2
+      Name: Depth PointCloud
+      Enabled: false
+      Value: false
+      Topic:
+        Value: /camera/depth/points
+        Depth: 10
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+      Queue Size: 10
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.01
+      Style: Points
+      Color Transformer: RGB8
+
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: camera_link
+    Frame Rate: 30
+  Name: root
+
+  Tools:
+    - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Value: true
+
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Name: Current View
+      Value: Orbit
+      Target Frame: camera_link
+      Distance: 2
+      Pitch: 0.55
+      Yaw: 2.8
+      Near Clip Distance: 0.01
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0
+      Focal Shape Fixed Size: true
+      Focal Shape Size: 0.05
+      Invert Z Axis: false
+      Enable Stereo Rendering:
+        Value: false
+        Stereo Eye Separation: 0.06
+        Stereo Focal Distance: 1
+        Swap Stereo Eyes: false
+    Saved: []
+
+Window Geometry:
+  Displays:
+    collapsed: false
+  Views:
+    collapsed: false
+  Height: 900
+  Width: 1400
+  X: 50
+  Y: 50

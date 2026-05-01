@@ -14,7 +14,8 @@
 - 再跑通激光雷达里程计
 - 再实现在线建图
 - 最后再做边建图边导航
-- 后续可接入 IMU 做融合增强
+- 当前实车先使用轮上方向里程计
+- 后续等 IMU yaw 漂移问题解决后，再考虑接入融合增强
 
 ---
 
@@ -40,7 +41,9 @@ map -> odom -> base_link -> laser
 
 ```text
 lslidar_driver        -> /scan
-lidar_odom_pkg        -> /odom + odom->base_link
+wheel_twist_odom      -> /wheel/odom
+lidar_odom_pkg        -> /lidar/odom
+robot_localization    -> /odometry/filtered + odom->base_link
 robot_state_publisher -> base_link->laser
 slam_toolbox          -> /map + map->odom
 Nav2                  -> /cmd_vel
@@ -55,6 +58,7 @@ teleop_twist_keyboard -> /cmd_vel_manual
 - 键盘手动控制输出 `/cmd_vel_manual`
 - `cmd_vel_mode_mux` 根据当前模式在手动和自动之间切换
 - 串口底盘节点只订阅一个最终控制话题：`/cmd_vel_selected`
+- 当前实车推荐使用轮上角速度积分航向，不把 IMU yaw 接进主航向链
 
 ---
 
@@ -85,7 +89,8 @@ teleop_twist_keyboard -> /cmd_vel_manual
 
 - 这是当前最关键的一层
 - 没有这层时，`slam_toolbox` 很难稳定建图
-- 后续建议把 IMU 融进来，但第一阶段先跑通纯雷达里程计
+- 在当前集成导航方案中，`lidar_odom_pkg` 主要负责发布 `/lidar/odom`
+- `odom -> base_link` 由 `robot_localization/ekf_node` 根据 `/wheel/odom` 和 `/lidar/odom` 发布
 
 ### 3.3 `nav_stack_core`
 
@@ -139,13 +144,13 @@ ros2 topic echo /map --once --qos-durability transient_local --qos-reliability r
 - 底盘能执行最终的 `/cmd_vel_selected`
 - 地图在移动中持续更新
 
-### 阶段 4：加 IMU 融合
+### 阶段 4：评估 IMU 融合
 
 目标：
 
-- 提高旋转稳定性
-- 降低漂移
-- 优化走廊 / 白墙 / 静止场景的表现
+- 先确认 IMU yaw 漂移是否已经被解决
+- 再评估是否值得重新接入航向融合
+- 若重新启用，目标仍然是优化走廊 / 白墙 / 静止场景的表现
 
 ---
 
@@ -267,8 +272,19 @@ ros2 launch nav_stack_core lidar_mapping_with_lidar_odom.launch.py
 ### 8.4 边建图边导航 + 串口执行 + 模式切换
 
 ```bash
-ros2 launch nav_stack_core mapping_nav_with_serial.launch.py
+ros2 launch nav_stack_core mapping_nav_with_serial_wheel_heading.launch.py
 ```
+
+说明：
+
+- 当前推荐入口是 `mapping_nav_with_serial_wheel_heading.launch.py`
+- 旧的 `mapping_nav_with_serial.launch.py` 仍可保留作 IMU 航向对比，但不作为默认方案
+
+### 8.5 多点导航接口文档
+
+详细说明见：
+
+- [nav_stack_core/docs/multi_waypoint_navigation.md](nav_stack_core/docs/multi_waypoint_navigation.md)
 
 ---
 
@@ -350,14 +366,42 @@ reject_rot_above: 0.12
 
 ---
 
-## 11. 后续 IMU 融合建议
+## 11. 当前为什么不用 IMU 航向
+
+当前实车边建图边导航默认使用：
+
+```bash
+ros2 launch nav_stack_core mapping_nav_with_serial_wheel_heading.launch.py
+```
+
+也就是：
+
+- 轮速负责平移速度
+- 轮上角速度负责短时航向积分
+- LiDAR odom 负责持续纠偏
+- EKF 使用 `/wheel/odom` 和 `/lidar/odom`
+
+当前不把 IMU yaw 接进主航向链的原因是：
+
+- 串口 IMU 的 yaw 在实车上有明显漂移，静止时朝向也可能缓慢变化
+- 如果把 IMU yaw 重新接入 `wheel_twist_odom`、EKF 和 lidar odom 先验，漂移会被多层放大
+- 实际现象通常是地图慢转、规划路径摆动、原地不动时姿态也在变化
+- 对当前底盘而言，轮上角速度的短时一致性比 IMU yaw 更好，更适合作为现阶段航向来源
+
+后续如果满足下面条件，再考虑恢复 IMU 融合：
+
+- IMU 零偏稳定
+- yaw 标定与安装方向确认无误
+- 静止时朝向不再持续漂移
+- 实车测试能证明融合后比轮上方向版更稳
 
 后续推荐路线：
 
 ```text
-/scan -> lidar_odom_pkg -> /odom
-/imu/data -> IMU
-lidar odom + imu -> robot_localization(ekf_node)
+/scan -> lidar_odom_pkg -> /lidar/odom
+/wheel/twist -> wheel_twist_odom -> /wheel/odom
+/imu/data -> IMU（仅在漂移问题解决后再接回）
+wheel odom + lidar odom + imu -> robot_localization(ekf_node)
 /odometry/filtered -> 提供更稳的 odom -> base_link
 slam_toolbox -> map -> odom
 Nav2 -> /cmd_vel
@@ -365,8 +409,9 @@ Nav2 -> /cmd_vel
 
 说明：
 
-- 激光雷达 odom 负责主位姿估计
-- IMU 负责稳定旋转、角速度、短时预测
+- 激光雷达 odom 负责持续纠偏
+- 轮上方向里程计负责当前默认的短时航向与平移先验
+- IMU 若后续恢复接入，主要负责补充角速度和短时预测
 - 最终推荐用 `robot_localization` 做融合，而不是把所有东西都塞进驱动节点里
 
 ---
@@ -380,7 +425,7 @@ Nav2 -> /cmd_vel
 3. 跑通 `slam_toolbox` 在线建图
 4. 串口节点只接收最终 `/cmd_vel_selected`
 5. 用模式切换器在 `manual` / `auto` 之间切换
-6. 后续再加入 IMU 融合增强稳定性
+6. 当前默认使用轮上方向里程计，IMU 融合仅作为后续可选增强
 
 一句话总结：
 
