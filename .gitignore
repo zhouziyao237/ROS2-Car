@@ -6,6 +6,7 @@ my_lidar/SDK_V3.0/build/
 build/
 log/
 install/
+Software/OpenNi2
 
 build_win32/
 .vscode/
