@@ -1,0 +1,60 @@
+ocr_node:
+  ros__parameters:
+    input_mode: topic
+    image_path: ""
+    save_path: ""
+    exit_after_image: true
+
+    image_topic: /camera/rgb/image_raw
+    request_topic: /vision/ocr_requests
+    result_topic: /vision/ocr_results
+    debug_image_topic: /vision/ocr_debug_image
+
+    # 模型配置：检测/方向分类用 INT8，识别用 FP32
+    det_model: weights/det_static_qdq_int8.onnx
+    cls_model: weights/cls_static_qdq_int8.onnx
+    rec_model: weights/rec_fp32.onnx
+    rec_yml: weights/inference.yml
+
+    # 检测参数：比 960 快一些，但仍保留较好小字检测能力
+    det_limit_side_len: 736
+    det_db_thresh: 0.3
+    det_db_box_thresh: 0.6
+    det_db_unclip_ratio: 1.5
+    det_min_size: 3
+
+    # 结果过滤
+    drop_score: 0.5
+
+    # 识别参数：接近官方 3x48x320，速度和精度比较稳
+    rec_img_h: 48
+    rec_max_img_w: 320
+    rec_use_dynamic_width: false
+    rec_batch_size: 6
+
+    # 方向分类：默认关闭，标签方向固定时速度更好
+    use_cls: false
+    cls_thresh: 0.9
+
+    # crop：不额外大幅扩，避免误检；给一点轻微边界保护
+    crop_padding_ratio: 0.03
+
+    # 线程配置：避免抢占 YOLO / Nav2 / 深度相机资源
+    det_num_threads: 1
+    cls_num_threads: 1
+    rec_num_threads: 2
+
+    # 正式运行关闭调试输出
+    publish_debug_image: false
+    save_debug_image: false
+    log_recognized_text: false
+
+    # ROI 过滤
+    min_roi_width: 30
+    min_roi_height: 15
+
+    # 图像同步缓存
+    image_cache_size: 10
+    max_image_time_diff_ms: 80.0
+    use_nearest_image_if_exact_stamp_missing: true
+    ocr_queue_size: 4

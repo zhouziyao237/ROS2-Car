@@ -1,0 +1,7 @@
+<library path="mecanum_drive_plugin">
+  <class name="mecanum_gazebo_plugin/MecanumDrivePlugin"
+         type="gazebo::MecanumDrivePlugin"
+         base_class_type="gazebo::ModelPlugin">
+    <description>Custom mecanum drive plugin using /mecanum_cmd</description>
+  </class>
+</library>

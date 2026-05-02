@@ -1,0 +1,12 @@
+# ignore VS Project files
+my_lidar/build
+my_lidar/lidar_src/build/
+my_lidar/SDK_V3.0/build/
+
+build/
+log/
+install/
+
+build_win32/
+.vscode/
+bin/

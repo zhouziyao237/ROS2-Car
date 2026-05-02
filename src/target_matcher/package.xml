@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>target_matcher</name>
+  <version>0.0.2</version>
+  <description>YOLO + OCR target matcher with Kalman tracking, OCR cache, index reuse, ROI expansion, and matched target output.</description>
+  <maintainer email="user@example.com">user</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>builtin_interfaces</exec_depend>
+  <exec_depend>yolo_msg</exec_depend>
+  <exec_depend>ocr_msg</exec_depend>
+  <exec_depend>target_matcher_msg</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

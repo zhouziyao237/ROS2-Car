@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>astra_s_cam</name>
+  <version>0.1.0</version>
+  <description>Standalone ROS2 Humble package for Orbbec Astra S using OpenNI2 SDK, with RGB/Depth publishing, RGB-D millimeter localization, RViz2 config, and calibration helpers.</description>
+
+  <maintainer email="user@example.com">astra_s_cam maintainer</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>tf2_ros</depend>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>message_filters</exec_depend>
+  <exec_depend>camera_calibration</exec_depend>
+  <exec_depend>rviz2</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

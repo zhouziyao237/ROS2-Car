@@ -1,0 +1,86 @@
+target_matcher_node:
+  ros__parameters:
+    # =====================
+    # Inputs
+    # =====================
+    yolo_topic: /yolov5/detections
+    ocr_request_topic: /vision/ocr_requests
+    ocr_result_topic: /vision/ocr_results
+    target_code_topic: /target_code
+    enable_topic: /target_matcher/enable
+
+    # =====================
+    # Backward-compatible outputs
+    # =====================
+    matched_index_topic: /target_matcher/matched_index
+    matched_detection_topic: /target_matcher/matched_detection
+    tracked_detections_topic: /target_matcher/tracked_detections
+    debug_text_topic: /target_matcher/debug_text
+
+    # =====================
+    # Dedicated outputs
+    # =====================
+    tracked_targets_topic: /target_matcher/tracked_targets
+    matched_target_topic: /target_matcher/matched_target
+
+    # =====================
+    # Tracking
+    # 当前目标：先让 OCR 请求稳定发出来
+    # =====================
+    track_iou_threshold: 0.10
+    track_center_distance_threshold: 1.2
+    max_missing_frames: 60
+
+    # 不能太高，否则 YOLO 有框但 matcher 丢掉
+    # 调试阶段建议 0.20
+    min_yolo_confidence: 0.20
+
+    # =====================
+    # OCR trigger mode
+    # 调试阶段必须 true
+    # true = 只要有检测框就 OCR
+    # 等 OCR 链路通了再改 false
+    # =====================
+    only_need_ocr: true
+
+    # =====================
+    # OCR cache policy
+    # =====================
+    ocr_min_confidence: 0.30
+    ocr_retry_interval_sec: 0.5
+    ocr_cache_timeout_sec: 30.0
+
+    # 调试阶段必须 false
+    # 否则同一个 track OCR 一次失败后就不再重试
+    avoid_repeat_ocr: false
+
+    # =====================
+    # OCR ROI
+    # 1.2 通常比较稳
+    # 如果裁掉字符边缘，升到 1.3
+    # 如果识别到太多旁边文字，降到 1.0 或 1.1
+    # =====================
+    ocr_roi_expand_scale: 1.2
+    image_width: 640
+    image_height: 480
+
+    # =====================
+    # Resource / task control
+    # =====================
+    reuse_track_indices: true
+
+    # 调试阶段直接开启
+    tracking_enabled: true
+
+    # 仍允许收到 target_code 后自动开启
+    auto_enable_on_target_code: true
+
+    # 调试阶段必须 false
+    # false = 不要求 target_code 存在也可以发 OCR 请求
+    require_target_code_for_ocr: false
+
+    # =====================
+    # Debug / initial target
+    # =====================
+    publish_debug_text: true
+    target_code: ""

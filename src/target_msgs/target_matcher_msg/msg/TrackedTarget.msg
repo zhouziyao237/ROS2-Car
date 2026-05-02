@@ -1,0 +1,14 @@
+std_msgs/Header header
+int32 index
+string track_id
+string class_name
+int32 class_id
+float32 yolo_confidence
+bool need_ocr
+yolo_msg/Box2D box
+int32 age
+int32 missing_frames
+bool has_ocr
+target_matcher_msg/OcrCache ocr_cache
+bool matched
+string matched_token

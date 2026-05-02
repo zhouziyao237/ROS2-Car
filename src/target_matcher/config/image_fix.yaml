@@ -1,0 +1,20 @@
+rgb_flip_node:
+  ros__parameters:
+    enable_flip: true
+
+    input_topic: /camera/rgb/image_raw
+    output_topic: /camera/rgb/image_unmirrored
+
+    # OpenCV flipCode:
+    #  1  = 水平翻转，解决左右镜像
+    #  0  = 上下翻转
+    # -1  = 上下+左右翻转
+    flip_code: 1
+
+    # Astra/OpenNI 图像通常是 BEST_EFFORT
+    input_reliability: best_effort
+
+    # 输出给 YOLO/OCR，建议 reliable，兼容普通订阅
+    output_reliability: reliable
+
+    qos_depth: 1

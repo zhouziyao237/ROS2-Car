@@ -1,0 +1,9 @@
+bool ocr_done
+bool ocr_pending
+target_matcher_msg/OcrLine[] lines
+string merged_text
+string norm_text
+float32 avg_confidence
+float32 score
+builtin_interfaces/Time last_ocr_stamp
+int32 fail_count

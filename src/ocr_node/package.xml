@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>ocr_node</name>
+  <version>0.0.1</version>
+  <description>Time-synchronized PP-OCRv5 ONNXRuntime OCR extraction node without PaddleOCR runtime.</description>
+  <maintainer email="user@example.com">user</maintainer>
+  <license>Apache-2.0</license>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>ocr_msg</exec_depend>
+  <exec_depend>yolo_msg</exec_depend>
+  <!-- Python package dependencies installed separately: onnxruntime, opencv-python, numpy, pyyaml, shapely, pyclipper -->
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
