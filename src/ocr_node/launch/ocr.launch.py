@@ -12,7 +12,7 @@ def generate_launch_description():
     config_file = os.path.join(
         pkg_share,
         "config",
-        "ocr_realtime.yaml",
+        "ocr_realtimes.yaml",
     )
 
     return LaunchDescription([

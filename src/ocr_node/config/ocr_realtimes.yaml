@@ -1,0 +1,112 @@
+ocr_node:
+  ros__parameters:
+    # =====================
+    # 基础运行模式
+    # =====================
+    input_mode: topic
+    image_path: ""
+    save_path: ""
+    exit_after_image: true
+
+    # =====================
+    # Topic 配置
+    # 必须和 YOLO 使用同一张图
+    # =====================
+    image_topic: /camera/rgb/image_unmirrored
+    request_topic: /vision/ocr_requests
+    result_topic: /vision/ocr_results
+    debug_image_topic: /vision/ocr_debug_image
+
+    # =====================
+    # 模型配置
+    # =====================
+    det_model: weights/det_static_qdq_int8.onnx
+    cls_model: weights/cls_static_qdq_int8.onnx
+    rec_model: weights/rec_fp32.onnx
+    rec_yml: weights/inference.yml
+
+    # =====================
+    # 文本检测参数
+    # 736 比 960 省资源；如果小字识别明显变差，再改回 960
+    # =====================
+    det_limit_side_len: 736
+    det_db_thresh: 0.30
+    det_db_box_thresh: 0.55
+    det_db_unclip_ratio: 1.5
+    det_min_size: 5
+
+    # =====================
+    # OCR 结果过滤
+    # 太低会输出大量乱码；太高可能漏掉模糊码
+    # =====================
+    drop_score: 0.45
+
+    # =====================
+    # 文本识别参数
+    # =====================
+    rec_img_h: 48
+    rec_max_img_w: 320
+    rec_use_dynamic_width: false
+    rec_batch_size: 2
+
+    # =====================
+    # 方向分类
+    # 标签方向固定时关闭
+    # =====================
+    use_cls: false
+    cls_thresh: 0.9
+
+    # =====================
+    # Crop 参数
+    # 正式运行不要扩太大
+    # =====================
+    crop_padding_ratio: 0.04
+
+    # =====================
+    # ROI 输入 OCR 前图像增强
+    # 保留轻量增强，关闭 binary 兜底以降低耗时
+    # =====================
+    enable_roi_preprocess: true
+    roi_preprocess_min_short_side: 96
+    roi_preprocess_max_scale: 2.0
+    roi_preprocess_try_variants: true
+    roi_preprocess_use_clahe: true
+    roi_preprocess_use_sharpen: true
+    roi_preprocess_use_binary: false
+    roi_preprocess_clahe_clip_limit: 2.0
+    roi_preprocess_clahe_tile_grid_size: 8
+    roi_preprocess_adaptive_block_size: 31
+    roi_preprocess_adaptive_c: 7
+
+    # =====================
+    # 线程配置
+    # 避免和 YOLO / 相机 / Nav2 抢 CPU
+    # =====================
+    ort_num_threads: 1
+    det_num_threads: 1
+    cls_num_threads: 1
+    rec_num_threads: 1
+
+    # =====================
+    # 调试输出
+    # 正式运行必须关闭
+    # =====================
+    publish_debug_image: false
+    save_debug_image: false
+    log_recognized_text: false
+
+    # =====================
+    # ROI 过滤
+    # 太小的误框不送 OCR
+    # =====================
+    min_roi_width: 45
+    min_roi_height: 20
+
+    # =====================
+    # 图像同步缓存 / OCR 队列
+    # 队列不要太大，避免积压导致 CPU 和延迟上升
+    # =====================
+    image_cache_size: 20
+    max_image_time_diff_ms: 250.0
+    use_nearest_image_if_exact_stamp_missing: true
+    ocr_queue_size: 3

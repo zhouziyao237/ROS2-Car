@@ -65,25 +65,35 @@ class TargetMatcherNode(Node):
         self.declare_parameter("tracked_targets_topic", "/target_matcher/tracked_targets")
         self.declare_parameter("matched_target_topic", "/target_matcher/matched_target")
 
-        self.declare_parameter("track_iou_threshold", 0.10)
-        self.declare_parameter("track_center_distance_threshold", 1.2)
-        self.declare_parameter("max_missing_frames", 60)
-        self.declare_parameter("min_yolo_confidence", 0.20)
-        self.declare_parameter("only_need_ocr", True)
+        # Tracking
+        self.declare_parameter("track_iou_threshold", 0.12)
+        self.declare_parameter("track_center_distance_threshold", 1.0)
+        self.declare_parameter("max_missing_frames", 25)
+        self.declare_parameter("min_yolo_confidence", 0.35)
 
-        self.declare_parameter("ocr_min_confidence", 0.30)
-        self.declare_parameter("ocr_retry_interval_sec", 0.5)
-        self.declare_parameter("ocr_cache_timeout_sec", 30.0)
-        self.declare_parameter("avoid_repeat_ocr", False)
+        # 正式模式默认：不是有框就 OCR
+        self.declare_parameter("only_need_ocr", False)
 
-        self.declare_parameter("ocr_roi_expand_scale", 1.2)
+        # OCR policy
+        self.declare_parameter("ocr_min_confidence", 0.35)
+        self.declare_parameter("ocr_retry_interval_sec", 2.0)
+        self.declare_parameter("ocr_cache_timeout_sec", 45.0)
+        self.declare_parameter("ocr_pending_timeout_sec", 3.0)
+        self.declare_parameter("avoid_repeat_ocr", True)
+
+        # OCR ROI
+        self.declare_parameter("ocr_roi_expand_scale", 1.10)
         self.declare_parameter("image_width", 640)
         self.declare_parameter("image_height", 480)
 
+        # 关键优化：限流 + 稳定 track 才 OCR
+        self.declare_parameter("max_ocr_requests_per_frame", 1)
+        self.declare_parameter("min_track_age_for_ocr", 2)
+
         self.declare_parameter("reuse_track_indices", True)
-        self.declare_parameter("tracking_enabled", True)
+        self.declare_parameter("tracking_enabled", False)
         self.declare_parameter("auto_enable_on_target_code", True)
-        self.declare_parameter("require_target_code_for_ocr", False)
+        self.declare_parameter("require_target_code_for_ocr", True)
 
         self.declare_parameter("publish_debug_text", True)
         self.declare_parameter("target_code", "")
@@ -115,11 +125,19 @@ class TargetMatcherNode(Node):
         self.ocr_min_confidence = float(self.get_parameter("ocr_min_confidence").value)
         self.ocr_retry_interval_sec = float(self.get_parameter("ocr_retry_interval_sec").value)
         self.ocr_cache_timeout_sec = float(self.get_parameter("ocr_cache_timeout_sec").value)
+        self.ocr_pending_timeout_sec = float(self.get_parameter("ocr_pending_timeout_sec").value)
         self.avoid_repeat_ocr = bool(self.get_parameter("avoid_repeat_ocr").value)
 
         self.ocr_roi_expand_scale = float(self.get_parameter("ocr_roi_expand_scale").value)
         self.image_width = int(self.get_parameter("image_width").value)
         self.image_height = int(self.get_parameter("image_height").value)
+
+        self.max_ocr_requests_per_frame = int(
+            self.get_parameter("max_ocr_requests_per_frame").value
+        )
+        self.min_track_age_for_ocr = int(
+            self.get_parameter("min_track_age_for_ocr").value
+        )
 
         self.reuse_track_indices = bool(self.get_parameter("reuse_track_indices").value)
         self.tracking_enabled = bool(self.get_parameter("tracking_enabled").value)
@@ -242,6 +260,10 @@ class TargetMatcherNode(Node):
         self.get_logger().info(f"ocr_roi_expand_scale={self.ocr_roi_expand_scale}")
         self.get_logger().info(f"require_target_code_for_ocr={self.require_target_code_for_ocr}")
         self.get_logger().info(f"avoid_repeat_ocr={self.avoid_repeat_ocr}")
+        self.get_logger().info(f"ocr_retry_interval_sec={self.ocr_retry_interval_sec}")
+        self.get_logger().info(f"ocr_pending_timeout_sec={self.ocr_pending_timeout_sec}")
+        self.get_logger().info(f"max_ocr_requests_per_frame={self.max_ocr_requests_per_frame}")
+        self.get_logger().info(f"min_track_age_for_ocr={self.min_track_age_for_ocr}")
 
     # =====================
     # Callbacks
@@ -286,12 +308,26 @@ class TargetMatcherNode(Node):
         tracks = self.tracker.update(detections)
         self.remove_dead_tracks(self.tracker.removed_track_ids)
 
-        for track in tracks:
+        # 关键优化：
+        # 每帧最多只对高置信度 track 发 max_ocr_requests_per_frame 个 OCR 请求。
+        tracks_sorted = sorted(
+            tracks,
+            key=lambda t: float(t.confidence),
+            reverse=True,
+        )
+
+        ocr_sent = 0
+
+        for track in tracks_sorted:
             self.ensure_track_slot(track)
             self.update_tracking_slot(track)
 
+            if ocr_sent >= self.max_ocr_requests_per_frame:
+                continue
+
             if self.should_request_ocr(track):
                 self.publish_ocr_request(track, msg.header)
+                ocr_sent += 1
 
         self.update_matches()
         self.publish_outputs()
@@ -385,14 +421,14 @@ class TargetMatcherNode(Node):
                 continue
 
             # 关键修复：
-            # 不再用 det.need_ocr 过滤。
-            # YOLO 节点一般不会给 need_ocr=True，所以这里不能卡住 OCR。
+            # 不再依赖 YOLO detection 的 need_ocr 字段。
+            # 否则正式模式下可能因为 det.need_ocr=False 而不发 OCR。
             converted.append({
                 "bbox": bbox,
                 "class_name": str(det.class_name),
                 "class_id": int(det.class_id),
                 "confidence": confidence,
-                "need_ocr": True if self.only_need_ocr else bool(getattr(det, "need_ocr", True)),
+                "need_ocr": True,
                 "source_target_id": str(det.target_id),
             })
 
@@ -446,7 +482,7 @@ class TargetMatcherNode(Node):
             "confidence": float(track.confidence),
             "missing_frames": int(track.missing_frames),
             "age": int(track.age),
-            "need_ocr": True if self.only_need_ocr else bool(track.need_ocr),
+            "need_ocr": True,
         }
 
     def remove_dead_tracks(self, removed_track_ids: List[str]):
@@ -480,19 +516,30 @@ class TargetMatcherNode(Node):
         if not self.tracking_enabled:
             return False
 
+        # 关键优化：
+        # 刚出现的瞬时误检不要马上 OCR。
+        if int(track.age) < self.min_track_age_for_ocr:
+            return False
+
         if self.require_target_code_for_ocr and not self.target_code.strip():
             return False
 
-        # 关键修复：
-        # only_need_ocr=True 时，不能再检查 track.need_ocr。
-        # 因为 YOLO detection 的 need_ocr 默认通常是 False。
-        # 调试模式下只要有合法 track，就允许 OCR。
         index = self.track_id_to_index[track.track_id]
         cache: OcrCache = self.ret_data[1][index]
         now = time.time()
 
+        # OCR 请求发出去但结果可能被 OCR 队列丢了。
+        # 如果 pending 太久，就释放 pending，允许后面重试。
         if cache.ocr_pending:
-            return False
+            if now - cache.last_request_time < self.ocr_pending_timeout_sec:
+                return False
+
+            cache.ocr_pending = False
+            cache.fail_count += 1
+            self.get_logger().warn(
+                f"OCR pending timeout: track_id={track.track_id}, "
+                f"index={index}, fail_count={cache.fail_count}"
+            )
 
         if cache.ocr_done and cache.avg_conf >= self.ocr_min_confidence:
             if self.avoid_repeat_ocr:
@@ -811,9 +858,10 @@ def main(args=None):
         pass
     finally:
         node.destroy_node()
+
         if rclpy.ok():
             rclpy.shutdown()
 
 
 if __name__ == "__main__":
-    main()
+    main()  

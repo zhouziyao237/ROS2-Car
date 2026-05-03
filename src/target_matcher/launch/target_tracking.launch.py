@@ -35,7 +35,7 @@ def generate_launch_description():
     matcher_config = os.path.join(
         matcher_share,
         "config",
-        "target_matcher.yaml",
+        "target_matchers.yaml",
     )
 
     image_fix_config = os.path.join(
@@ -78,13 +78,55 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "image_topic",
             default_value="/camera/rgb/image_unmirrored",
-            description="Processed image topic used by YOLO",
+            description="Processed image topic used by YOLO, OCR and overlay",
         ),
 
         DeclareLaunchArgument(
             "ocr_image_topic",
             default_value="/camera/rgb/image_unmirrored",
             description="Image topic used by OCR. Must match YOLO image_topic when using flipped image.",
+        ),
+
+        DeclareLaunchArgument(
+            "depth_topic",
+            default_value="/camera/depth/image_raw",
+            description="Registered depth image topic",
+        ),
+
+        DeclareLaunchArgument(
+            "camera_info_topic",
+            default_value="/camera/rgb/camera_info",
+            description="RGB camera info topic",
+        ),
+
+        DeclareLaunchArgument(
+            "use_matched_overlay",
+            default_value="true",
+            description="Whether to draw matched target box on RGB image",
+        ),
+
+        DeclareLaunchArgument(
+            "use_depth_locator",
+            default_value="true",
+            description="Whether to estimate 3D position of matched target from depth image",
+        ),
+
+        DeclareLaunchArgument(
+            "matched_overlay_topic",
+            default_value="/target_matcher/matched_overlay_image",
+            description="Output image topic with matched target highlighted",
+        ),
+
+        DeclareLaunchArgument(
+            "mirror_x_for_depth",
+            default_value="true",
+            description="Mirror x coordinate when RGB image is flipped but depth image is not",
+        ),
+
+        DeclareLaunchArgument(
+            "matched_stale_timeout_sec",
+            default_value="0.8",
+            description="Timeout for clearing stale matched overlay/depth target",
         ),
 
         DeclareLaunchArgument(
@@ -101,7 +143,7 @@ def generate_launch_description():
 
         DeclareLaunchArgument(
             "yolo_conf_thres",
-            default_value="0.15",
+            default_value="0.30",
             description="YOLO confidence threshold",
         ),
 
@@ -179,5 +221,42 @@ def generate_launch_description():
                     "target_code": LaunchConfiguration("target_code"),
                 },
             ],
+        ),
+
+        Node(
+            package="target_matcher",
+            executable="matched_overlay_node",
+            name="matched_overlay_node",
+            output="screen",
+            condition=IfCondition(LaunchConfiguration("use_matched_overlay")),
+            parameters=[{
+                "image_topic": LaunchConfiguration("image_topic"),
+                "matched_target_topic": "/target_matcher/matched_target",
+                "output_image_topic": LaunchConfiguration("matched_overlay_topic"),
+                "line_thickness": 3,
+                "show_text": True,
+                "draw_unmatched": False,
+                "stale_timeout_sec": LaunchConfiguration("matched_stale_timeout_sec"),
+            }],
+        ),
+
+        Node(
+            package="target_matcher",
+            executable="matched_depth_locator_node",
+            name="matched_depth_locator_node",
+            output="screen",
+            condition=IfCondition(LaunchConfiguration("use_depth_locator")),
+            parameters=[{
+                "matched_target_topic": "/target_matcher/matched_target",
+                "depth_topic": LaunchConfiguration("depth_topic"),
+                "camera_info_topic": LaunchConfiguration("camera_info_topic"),
+                "point_topic": "/target_matcher/matched_point",
+                "text_topic": "/target_matcher/matched_depth_text",
+                "mirror_x_for_depth": LaunchConfiguration("mirror_x_for_depth"),
+                "depth_window_radius": 4,
+                "min_depth_m": 0.15,
+                "max_depth_m": 5.0,
+                "stale_timeout_sec": LaunchConfiguration("matched_stale_timeout_sec"),
+            }],
         ),
     ])

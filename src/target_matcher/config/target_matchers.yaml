@@ -1,0 +1,47 @@
+ocr_node:
+  ros__parameters:
+    input_mode: topic
+    image_topic: /camera/rgb/image_unmirrored
+    request_topic: /vision/ocr_requests
+    result_topic: /vision/ocr_results
+    debug_image_topic: /vision/ocr_debug_image
+
+    det_model: weights/det_static_qdq_int8.onnx
+    cls_model: weights/cls_static_qdq_int8.onnx
+    rec_model: weights/rec_fp32.onnx
+    rec_yml: weights/inference.yml
+
+    det_limit_side_len: 736
+    det_db_thresh: 0.30
+    det_db_box_thresh: 0.55
+    det_db_unclip_ratio: 1.5
+    det_min_size: 5
+
+    drop_score: 0.35
+
+    rec_img_h: 48
+    rec_max_img_w: 320
+    rec_use_dynamic_width: false
+    rec_batch_size: 2
+
+    use_cls: false
+    cls_thresh: 0.9
+    crop_padding_ratio: 0.06
+
+    ort_num_threads: 1
+    det_num_threads: 1
+    cls_num_threads: 1
+    rec_num_threads: 1
+
+    publish_debug_image: false
+    save_debug_image: false
+    log_recognized_text: false
+
+    min_roi_width: 35
+    min_roi_height: 15
+
+    # 关键：这里也写大，避免 launch 没传成功时退回 3
+    image_cache_size: 30
+    max_image_time_diff_ms: 300.0
+    use_nearest_image_if_exact_stamp_missing: true
+    ocr_queue_size: 8
