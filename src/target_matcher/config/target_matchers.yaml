@@ -80,7 +80,7 @@ target_matcher_node:
     # 1.10 比较稳
     # 如果只识别到一部分编号，例如只出 2050，可以改 1.15
     # 如果读到旁边文字，例如“更多”“5元”，改 1.05
-    ocr_roi_expand_scale: 1.60
+    ocr_roi_expand_scale: 1.90
 
     image_width: 640
     image_height: 640

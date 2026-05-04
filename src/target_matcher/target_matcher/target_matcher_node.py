@@ -73,6 +73,16 @@ class TargetMatcherNode(Node):
         self.declare_parameter("track_center_distance_threshold", 1.0)
         self.declare_parameter("max_missing_frames", 25)
         self.declare_parameter("min_yolo_confidence", 0.25)
+        # Candidate suppression
+        self.declare_parameter("max_active_tracks", 8)
+        self.declare_parameter("max_detections_per_frame", 8)
+        self.declare_parameter("min_bbox_width", 45.0)
+        self.declare_parameter("min_bbox_height", 22.0)
+        self.declare_parameter("max_bbox_width", 260.0)
+        self.declare_parameter("max_bbox_height", 130.0)
+        self.declare_parameter("min_bbox_aspect", 1.4)
+        self.declare_parameter("max_bbox_aspect", 5.5)
+
 
         self.declare_parameter("only_need_ocr", False)
 
@@ -137,6 +147,8 @@ class TargetMatcherNode(Node):
         self.declare_parameter("calibration_enable_topic", "/target_matcher/calibration_enable")
 
         self.declare_parameter("stable_match_required_count", 2)
+        self.declare_parameter("direct_lock_min_ocr_conf", 0.80)
+
         self.declare_parameter("lock_lost_timeout_sec", 5.0)
         self.declare_parameter("hold_calibration_after_arrived", True)
 
@@ -162,6 +174,15 @@ class TargetMatcherNode(Node):
         )
         self.max_missing_frames = int(self.get_parameter("max_missing_frames").value)
         self.min_yolo_confidence = float(self.get_parameter("min_yolo_confidence").value)
+        self.max_active_tracks = int(self.get_parameter("max_active_tracks").value)
+        self.max_detections_per_frame = int(self.get_parameter("max_detections_per_frame").value)
+        self.min_bbox_width = float(self.get_parameter("min_bbox_width").value)
+        self.min_bbox_height = float(self.get_parameter("min_bbox_height").value)
+        self.max_bbox_width = float(self.get_parameter("max_bbox_width").value)
+        self.max_bbox_height = float(self.get_parameter("max_bbox_height").value)
+        self.min_bbox_aspect = float(self.get_parameter("min_bbox_aspect").value)
+        self.max_bbox_aspect = float(self.get_parameter("max_bbox_aspect").value)
+
         self.only_need_ocr = bool(self.get_parameter("only_need_ocr").value)
 
         self.ocr_min_confidence = float(self.get_parameter("ocr_min_confidence").value)
@@ -225,6 +246,9 @@ class TargetMatcherNode(Node):
 
         self.stable_match_required_count = int(
             self.get_parameter("stable_match_required_count").value
+        )
+        self.direct_lock_min_ocr_conf = float(
+            self.get_parameter("direct_lock_min_ocr_conf").value
         )
         self.lock_lost_timeout_sec = float(
             self.get_parameter("lock_lost_timeout_sec").value
@@ -397,6 +421,13 @@ class TargetMatcherNode(Node):
         self.get_logger().info(f"tracking_enabled={self.tracking_enabled}")
         self.get_logger().info(f"only_need_ocr={self.only_need_ocr}")
         self.get_logger().info(f"min_yolo_confidence={self.min_yolo_confidence}")
+        self.get_logger().info(f"max_active_tracks={self.max_active_tracks}")
+        self.get_logger().info(f"max_detections_per_frame={self.max_detections_per_frame}")
+        self.get_logger().info(
+            f"bbox_filter=w[{self.min_bbox_width},{self.max_bbox_width}], "
+            f"h[{self.min_bbox_height},{self.max_bbox_height}], "
+            f"aspect[{self.min_bbox_aspect},{self.max_bbox_aspect}]"
+        )
         self.get_logger().info(f"ocr_roi_expand_scale={self.ocr_roi_expand_scale}")
         self.get_logger().info(f"ocr_roi_expand_x={self.ocr_roi_expand_x}")
         self.get_logger().info(f"ocr_roi_expand_y={self.ocr_roi_expand_y}")
@@ -419,6 +450,7 @@ class TargetMatcherNode(Node):
         self.get_logger().info(f"reset_lock_topic={self.reset_lock_topic}")
         self.get_logger().info(f"calibration_enable_topic={self.calibration_enable_topic}")
         self.get_logger().info(f"stable_match_required_count={self.stable_match_required_count}")
+        self.get_logger().info(f"direct_lock_min_ocr_conf={self.direct_lock_min_ocr_conf}")
         self.get_logger().info(f"lock_lost_timeout_sec={self.lock_lost_timeout_sec}")
         self.get_logger().info(f"hold_calibration_after_arrived={self.hold_calibration_after_arrived}")
 
@@ -690,6 +722,9 @@ class TargetMatcherNode(Node):
                 reverse=True,
             )
 
+        if self.max_active_tracks > 0:
+            tracks_sorted = tracks_sorted[:self.max_active_tracks]
+
         ocr_sent = 0
 
         for track in tracks_sorted:
@@ -793,8 +828,23 @@ class TargetMatcherNode(Node):
                 continue
 
             bbox = bbox_to_list(det.box)
+            x1, y1, x2, y2 = bbox
 
-            if bbox[2] <= bbox[0] or bbox[3] <= bbox[1]:
+            if x2 <= x1 or y2 <= y1:
+                continue
+
+            w = float(x2 - x1)
+            h = float(y2 - y1)
+            aspect = w / max(1.0, h)
+
+            # 快递数字标签一般是横向长条。这里过滤掉太小、太大、比例不合理的框。
+            if w < self.min_bbox_width or h < self.min_bbox_height:
+                continue
+
+            if w > self.max_bbox_width or h > self.max_bbox_height:
+                continue
+
+            if aspect < self.min_bbox_aspect or aspect > self.max_bbox_aspect:
                 continue
 
             converted.append({
@@ -805,6 +855,11 @@ class TargetMatcherNode(Node):
                 "need_ocr": True,
                 "source_target_id": str(det.target_id),
             })
+
+        converted.sort(key=lambda x: float(x["confidence"]), reverse=True)
+
+        if self.max_detections_per_frame > 0:
+            converted = converted[:self.max_detections_per_frame]
 
         return converted
 
@@ -1040,14 +1095,38 @@ class TargetMatcherNode(Node):
         return bool(value) and re.fullmatch(r"\d+", value) is not None
 
     def strict_numeric_match(self, target_code: str, ocr_text: str):
+        """
+        数字目标匹配规则：
+        1. 忽略 OCR 里的非数字字符，例如 "E 2389" 可以匹配 2389。
+        2. 目标码必须完整出现，避免 3 错配 4309。
+        3. 支持 OCR 输出里混入空格、括号、字母、符号。
+        """
         target = re.sub(r"\D", "", str(target_code or ""))
+        raw_text = str(ocr_text or "")
+
         if not target:
             return False, ""
 
-        tokens = re.findall(r"\d+", str(ocr_text or ""))
+        # 常见 OCR 字符混淆，先做轻量纠正
+        # 注意这里只在数字匹配阶段使用，不改变原始 OCR 文本
+        fixed = raw_text
+        fixed = fixed.replace("O", "0").replace("o", "0")
+        fixed = fixed.replace("S", "5").replace("s", "5")
+        fixed = fixed.replace("I", "1").replace("l", "1")
+        fixed = fixed.replace("|", "1")
+
+        # 情况 1：连续数字 token 完整匹配
+        # 例如 "E 2389" -> ["2389"]
+        tokens = re.findall(r"\d+", fixed)
         for token in tokens:
             if token == target:
                 return True, token
+
+        # 情况 2：数字被空格/符号拆开，但合起来是目标
+        # 例如 "4 309" -> "4309"
+        digits_joined = "".join(tokens)
+        if target and target in digits_joined:
+            return True, target
 
         return False, ""
 
@@ -1174,7 +1253,13 @@ class TargetMatcherNode(Node):
             f"text={best_text}"
         )
 
-        if self.stable_candidate_count >= self.stable_match_required_count:
+        direct_lock = False
+        if self.is_numeric_target_code(self.target_code):
+            cache = self.ret_data[1][best_index]
+            if isinstance(cache, OcrCache) and cache.avg_conf >= self.direct_lock_min_ocr_conf:
+                direct_lock = True
+
+        if direct_lock or self.stable_candidate_count >= self.stable_match_required_count:
             self.lock_target(best_index, best_token, best_text)
 
     # =====================

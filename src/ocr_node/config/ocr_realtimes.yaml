@@ -21,7 +21,8 @@ ocr_node:
     # =====================
     det_model: weights/det_static_qdq_int8.onnx
     cls_model: weights/cls_static_qdq_int8.onnx
-    rec_model: weights/en_PP-OCRv3_fp32.onnx
+    rec_model: weights/en_PP-OCRv3_int8.onnx
+    # rec_model: weights/en_PP-OCRv3_fp32.onnx
     rec_yml: config/inference_en.yaml
 
     # =====================
