@@ -1,0 +1,57 @@
+network:
+  # =====================
+  # Network description
+  # =====================
+  type: yolov5
+
+  # 当前包版本使用 DepthAI 的 YoloDetectionNetwork 解析输出。
+  # 如果你的 blob 不是标准 YOLO parser 输出，后面要改 NeuralNetwork + 手写 decode。
+  parser: YoloDetectionNetwork
+
+  # 只加载 OAK/MyriadX 可运行的 .blob
+  # 相对路径会优先从 install/share/oak_vision_driver 解析
+  blob_path: weights/best.blob
+
+  # 必须和 .blob 输入尺寸一致
+  input_width: 640
+  input_height: 640
+
+  # YOLOv5 单类别模型：输出最后一维通常是 6 = xywh + obj + 1 class
+  num_classes: 1
+  coordinate_size: 4
+
+  confidence_threshold: 0.35
+  iou_threshold: 0.45
+
+  # YOLOv5 默认 anchors。若训练时改过 anchors，必须同步修改。
+  anchors:
+    - 10.0
+    - 13.0
+    - 16.0
+    - 30.0
+    - 33.0
+    - 23.0
+    - 30.0
+    - 61.0
+    - 62.0
+    - 45.0
+    - 59.0
+    - 119.0
+    - 116.0
+    - 90.0
+    - 156.0
+    - 198.0
+    - 373.0
+    - 326.0
+
+  # 对应 640 输入的 80/40/20 三个输出尺度
+  anchor_masks:
+    side80: [0, 1, 2]
+    side40: [3, 4, 5]
+    side20: [6, 7, 8]
+
+  class_names:
+    - target
+
+  # 发布给 target_matcher 时，是否标记这个框需要 OCR
+  need_ocr: true

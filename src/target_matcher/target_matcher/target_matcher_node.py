@@ -49,7 +49,7 @@ class TargetMatcherNode(Node):
         super().__init__("target_matcher_node")
 
         # =====================
-        # Parameters
+        # Basic topic parameters
         # =====================
         self.declare_parameter("yolo_topic", "/yolov5/detections")
         self.declare_parameter("ocr_request_topic", "/vision/ocr_requests")
@@ -65,31 +65,40 @@ class TargetMatcherNode(Node):
         self.declare_parameter("tracked_targets_topic", "/target_matcher/tracked_targets")
         self.declare_parameter("matched_target_topic", "/target_matcher/matched_target")
 
-        # Tracking
+        # =====================
+        # Tracking parameters
+        # =====================
         self.declare_parameter("track_iou_threshold", 0.12)
         self.declare_parameter("track_center_distance_threshold", 1.0)
         self.declare_parameter("max_missing_frames", 25)
         self.declare_parameter("min_yolo_confidence", 0.35)
 
-        # 正式模式默认：不是有框就 OCR
+        # Debug mode:
+        # True = every detection can OCR.
+        # Formal mode:
+        # False = target-code controlled OCR.
         self.declare_parameter("only_need_ocr", False)
 
+        # =====================
         # OCR policy
+        # =====================
         self.declare_parameter("ocr_min_confidence", 0.35)
-        self.declare_parameter("ocr_retry_interval_sec", 2.0)
-        self.declare_parameter("ocr_cache_timeout_sec", 45.0)
-        self.declare_parameter("ocr_pending_timeout_sec", 3.0)
+        self.declare_parameter("ocr_retry_interval_sec", 4.0)
+        self.declare_parameter("ocr_cache_timeout_sec", 60.0)
+        self.declare_parameter("ocr_pending_timeout_sec", 8.0)
         self.declare_parameter("avoid_repeat_ocr", True)
 
-        # OCR ROI
         self.declare_parameter("ocr_roi_expand_scale", 1.10)
         self.declare_parameter("image_width", 640)
         self.declare_parameter("image_height", 480)
 
-        # 关键优化：限流 + 稳定 track 才 OCR
+        # OCR throttling
         self.declare_parameter("max_ocr_requests_per_frame", 1)
-        self.declare_parameter("min_track_age_for_ocr", 2)
+        self.declare_parameter("min_track_age_for_ocr", 4)
 
+        # =====================
+        # Runtime control
+        # =====================
         self.declare_parameter("reuse_track_indices", True)
         self.declare_parameter("tracking_enabled", False)
         self.declare_parameter("auto_enable_on_target_code", True)
@@ -97,6 +106,27 @@ class TargetMatcherNode(Node):
 
         self.declare_parameter("publish_debug_text", True)
         self.declare_parameter("target_code", "")
+
+        # =====================
+        # Recognition mode / state machine
+        # =====================
+        # continuous:
+        #   keep doing OCR with throttling.
+        # lock_then_pose:
+        #   once target is locked, stop OCR and only output pose.
+        # pose_only:
+        #   OCR disabled. Only keep locked target / pose output.
+        self.declare_parameter("recognition_mode", "lock_then_pose")
+        self.declare_parameter("recognition_mode_topic", "/target_matcher/recognition_mode")
+
+        self.declare_parameter("state_topic", "/target_matcher/state")
+        self.declare_parameter("arrived_topic", "/target_matcher/arrived")
+        self.declare_parameter("reset_lock_topic", "/target_matcher/reset_lock")
+        self.declare_parameter("calibration_enable_topic", "/target_matcher/calibration_enable")
+
+        self.declare_parameter("stable_match_required_count", 2)
+        self.declare_parameter("lock_lost_timeout_sec", 5.0)
+        self.declare_parameter("hold_calibration_after_arrived", True)
 
         # =====================
         # Load parameters
@@ -145,8 +175,40 @@ class TargetMatcherNode(Node):
         self.require_target_code_for_ocr = bool(
             self.get_parameter("require_target_code_for_ocr").value
         )
+
         self.publish_debug_text = bool(self.get_parameter("publish_debug_text").value)
         self.target_code = str(self.get_parameter("target_code").value or "").strip()
+
+        self.recognition_mode = str(
+            self.get_parameter("recognition_mode").value
+        ).strip()
+
+        self.recognition_mode_topic = str(
+            self.get_parameter("recognition_mode_topic").value
+        )
+
+        self.state_topic = str(self.get_parameter("state_topic").value)
+        self.arrived_topic = str(self.get_parameter("arrived_topic").value)
+        self.reset_lock_topic = str(self.get_parameter("reset_lock_topic").value)
+        self.calibration_enable_topic = str(
+            self.get_parameter("calibration_enable_topic").value
+        )
+
+        self.stable_match_required_count = int(
+            self.get_parameter("stable_match_required_count").value
+        )
+        self.lock_lost_timeout_sec = float(
+            self.get_parameter("lock_lost_timeout_sec").value
+        )
+        self.hold_calibration_after_arrived = bool(
+            self.get_parameter("hold_calibration_after_arrived").value
+        )
+
+        if self.recognition_mode not in ["continuous", "lock_then_pose", "pose_only"]:
+            self.get_logger().warn(
+                f"Invalid recognition_mode={self.recognition_mode}, fallback to lock_then_pose."
+            )
+            self.recognition_mode = "lock_then_pose"
 
         if self.auto_enable_on_target_code and self.target_code:
             self.tracking_enabled = True
@@ -169,6 +231,26 @@ class TargetMatcherNode(Node):
         self.track_id_to_index: Dict[str, int] = {}
         self.free_indices: List[int] = []
         self.last_header = None
+
+        # =====================
+        # State machine runtime
+        # =====================
+        self.state = "IDLE"
+
+        self.robot_arrived = False
+        self.calibration_enabled = False
+
+        self.locked_track_id = ""
+        self.locked_index = -1
+        self.locked_token = ""
+        self.locked_text = ""
+        self.lock_start_time = 0.0
+        self.last_lock_seen_time = 0.0
+
+        self.stable_candidate_index = -1
+        self.stable_candidate_token = ""
+        self.stable_candidate_count = 0
+        self.stable_candidate_last_ocr_time = 0.0
 
         # =====================
         # Subscribers
@@ -198,6 +280,27 @@ class TargetMatcherNode(Node):
             Bool,
             self.enable_topic,
             self.on_enable,
+            10,
+        )
+
+        self.create_subscription(
+            String,
+            self.recognition_mode_topic,
+            self.on_recognition_mode,
+            10,
+        )
+
+        self.create_subscription(
+            Bool,
+            self.arrived_topic,
+            self.on_arrived,
+            10,
+        )
+
+        self.create_subscription(
+            Bool,
+            self.reset_lock_topic,
+            self.on_reset_lock,
             10,
         )
 
@@ -246,6 +349,18 @@ class TargetMatcherNode(Node):
             10,
         )
 
+        self.state_pub = self.create_publisher(
+            String,
+            self.state_topic,
+            10,
+        )
+
+        self.calibration_enable_pub = self.create_publisher(
+            Bool,
+            self.calibration_enable_topic,
+            10,
+        )
+
         self.get_logger().info("target_matcher_node started.")
         self.get_logger().info(f"yolo_topic={self.yolo_topic}")
         self.get_logger().info(f"ocr_request_topic={self.ocr_request_topic}")
@@ -254,6 +369,7 @@ class TargetMatcherNode(Node):
         self.get_logger().info(f"enable_topic={self.enable_topic}")
         self.get_logger().info(f"tracked_targets_topic={self.tracked_targets_topic}")
         self.get_logger().info(f"matched_target_topic={self.matched_target_topic}")
+
         self.get_logger().info(f"tracking_enabled={self.tracking_enabled}")
         self.get_logger().info(f"only_need_ocr={self.only_need_ocr}")
         self.get_logger().info(f"min_yolo_confidence={self.min_yolo_confidence}")
@@ -265,6 +381,158 @@ class TargetMatcherNode(Node):
         self.get_logger().info(f"max_ocr_requests_per_frame={self.max_ocr_requests_per_frame}")
         self.get_logger().info(f"min_track_age_for_ocr={self.min_track_age_for_ocr}")
 
+        self.get_logger().info(f"recognition_mode={self.recognition_mode}")
+        self.get_logger().info(f"recognition_mode_topic={self.recognition_mode_topic}")
+        self.get_logger().info(f"state_topic={self.state_topic}")
+        self.get_logger().info(f"arrived_topic={self.arrived_topic}")
+        self.get_logger().info(f"reset_lock_topic={self.reset_lock_topic}")
+        self.get_logger().info(f"calibration_enable_topic={self.calibration_enable_topic}")
+        self.get_logger().info(f"stable_match_required_count={self.stable_match_required_count}")
+        self.get_logger().info(f"lock_lost_timeout_sec={self.lock_lost_timeout_sec}")
+        self.get_logger().info(f"hold_calibration_after_arrived={self.hold_calibration_after_arrived}")
+
+        if self.target_code:
+            self.set_state("SEARCHING")
+        else:
+            self.set_state("IDLE")
+
+    # =====================
+    # State machine helpers
+    # =====================
+    def set_state(self, state: str):
+        state = str(state)
+
+        if self.state == state:
+            return
+
+        self.state = state
+
+        msg = String()
+        msg.data = self.state
+        self.state_pub.publish(msg)
+
+        self.get_logger().info(f"state updated: {self.state}")
+
+    def publish_calibration_enable(self, enabled: bool):
+        enabled = bool(enabled)
+
+        if self.calibration_enabled == enabled:
+            return
+
+        self.calibration_enabled = enabled
+
+        msg = Bool()
+        msg.data = self.calibration_enabled
+        self.calibration_enable_pub.publish(msg)
+
+        self.get_logger().info(f"calibration_enable={self.calibration_enabled}")
+
+    def on_recognition_mode(self, msg: String):
+        mode = str(msg.data or "").strip()
+
+        if mode not in ["continuous", "lock_then_pose", "pose_only"]:
+            self.get_logger().warn(
+                f"Invalid recognition_mode: {mode}. "
+                f"Allowed: continuous, lock_then_pose, pose_only"
+            )
+            return
+
+        self.recognition_mode = mode
+
+        self.get_logger().info(
+            f"recognition_mode updated: {self.recognition_mode}"
+        )
+
+        if self.recognition_mode == "pose_only":
+            self.publish_debug("Recognition mode changed to pose_only: OCR disabled.")
+
+    def on_arrived(self, msg: Bool):
+        self.robot_arrived = bool(msg.data)
+
+        if self.robot_arrived:
+            self.get_logger().info("Robot arrived signal received.")
+
+            if self.locked_track_id:
+                self.set_state("CALIBRATION_ENABLED")
+                self.publish_calibration_enable(True)
+            else:
+                self.set_state("ARRIVED_NO_LOCK")
+                self.publish_calibration_enable(False)
+        else:
+            self.get_logger().info("Robot arrived signal cleared.")
+            self.publish_calibration_enable(False)
+
+            if self.locked_track_id:
+                self.set_state("APPROACHING")
+            elif self.target_code:
+                self.set_state("SEARCHING")
+            else:
+                self.set_state("IDLE")
+
+        self.publish_outputs()
+
+    def on_reset_lock(self, msg: Bool):
+        if bool(msg.data):
+            self.reset_lock("reset topic received")
+
+    def reset_lock(self, reason: str = ""):
+        old_track_id = self.locked_track_id
+
+        self.locked_track_id = ""
+        self.locked_index = -1
+        self.locked_token = ""
+        self.locked_text = ""
+        self.lock_start_time = 0.0
+        self.last_lock_seen_time = 0.0
+
+        self.stable_candidate_index = -1
+        self.stable_candidate_token = ""
+        self.stable_candidate_count = 0
+        self.stable_candidate_last_ocr_time = 0.0
+
+        self.ret_data[2] = []
+
+        self.robot_arrived = False
+        self.publish_calibration_enable(False)
+
+        if self.target_code.strip():
+            self.set_state("SEARCHING")
+        else:
+            self.set_state("IDLE")
+
+        self.get_logger().info(
+            f"Target lock reset. old_track_id={old_track_id}, reason={reason}"
+        )
+
+        self.publish_outputs()
+
+    def lock_target(self, index: int, token: str, text: str):
+        if index < 0 or index >= len(self.ret_data[0]):
+            return
+
+        track_info = self.ret_data[0][index]
+
+        if not track_info:
+            return
+
+        self.locked_track_id = str(track_info["track_id"])
+        self.locked_index = int(index)
+        self.locked_token = str(token)
+        self.locked_text = str(text)
+        self.lock_start_time = time.time()
+        self.last_lock_seen_time = self.lock_start_time
+
+        self.ret_data[2] = [index]
+
+        self.set_state("APPROACHING")
+
+        self.get_logger().info(
+            f"TARGET LOCKED: track_id={self.locked_track_id}, "
+            f"index={index}, token={token}, text={text}"
+        )
+
+        self.publish_outputs()
+
     # =====================
     # Callbacks
     # =====================
@@ -272,19 +540,28 @@ class TargetMatcherNode(Node):
         self.tracking_enabled = bool(msg.data)
 
         if not self.tracking_enabled:
-            self.ret_data[2] = []
+            self.reset_lock("tracking disabled")
             self.publish_debug("Tracking task disabled. Matched target cleared.")
         else:
+            if self.target_code:
+                self.set_state("SEARCHING")
             self.publish_debug("Tracking task enabled.")
 
         self.get_logger().info(f"tracking_enabled updated: {self.tracking_enabled}")
         self.publish_outputs()
 
     def on_target_code(self, msg: String):
-        self.target_code = str(msg.data or "").strip()
+        new_code = str(msg.data or "").strip()
+
+        if new_code != self.target_code:
+            self.target_code = new_code
+            self.reset_lock("target_code changed")
+        else:
+            self.target_code = new_code
 
         if self.auto_enable_on_target_code and self.target_code:
             self.tracking_enabled = True
+            self.set_state("SEARCHING")
 
         self.get_logger().info(
             f"target_code updated: {self.target_code}, tracking_enabled={self.tracking_enabled}"
@@ -308,13 +585,27 @@ class TargetMatcherNode(Node):
         tracks = self.tracker.update(detections)
         self.remove_dead_tracks(self.tracker.removed_track_ids)
 
-        # 关键优化：
-        # 每帧最多只对高置信度 track 发 max_ocr_requests_per_frame 个 OCR 请求。
-        tracks_sorted = sorted(
-            tracks,
-            key=lambda t: float(t.confidence),
-            reverse=True,
-        )
+        # If locked, prefer locked track only.
+        if self.locked_track_id:
+            locked_tracks = [
+                t for t in tracks
+                if str(t.track_id) == str(self.locked_track_id)
+            ]
+
+            if locked_tracks:
+                tracks_sorted = locked_tracks
+            else:
+                tracks_sorted = sorted(
+                    tracks,
+                    key=lambda t: float(t.confidence),
+                    reverse=True,
+                )
+        else:
+            tracks_sorted = sorted(
+                tracks,
+                key=lambda t: float(t.confidence),
+                reverse=True,
+            )
 
         ocr_sent = 0
 
@@ -420,9 +711,7 @@ class TargetMatcherNode(Node):
             if bbox[2] <= bbox[0] or bbox[3] <= bbox[1]:
                 continue
 
-            # 关键修复：
-            # 不再依赖 YOLO detection 的 need_ocr 字段。
-            # 否则正式模式下可能因为 det.need_ocr=False 而不发 OCR。
+            # Do not depend on det.need_ocr.
             converted.append({
                 "bbox": bbox,
                 "class_name": str(det.class_name),
@@ -500,6 +789,10 @@ class TargetMatcherNode(Node):
 
             self.ret_data[2] = [idx for idx in self.ret_data[2] if idx != index]
 
+            if self.locked_track_id == track_id:
+                # Do not reset immediately. update_matches() will hold lock for timeout.
+                self.last_lock_seen_time = self.last_lock_seen_time or time.time()
+
             if self.reuse_track_indices and index not in self.free_indices:
                 self.free_indices.append(index)
                 self.free_indices.sort()
@@ -516,8 +809,13 @@ class TargetMatcherNode(Node):
         if not self.tracking_enabled:
             return False
 
-        # 关键优化：
-        # 刚出现的瞬时误检不要马上 OCR。
+        # Mode control.
+        if self.recognition_mode == "pose_only":
+            return False
+
+        if self.recognition_mode == "lock_then_pose" and self.locked_track_id:
+            return False
+
         if int(track.age) < self.min_track_age_for_ocr:
             return False
 
@@ -528,8 +826,6 @@ class TargetMatcherNode(Node):
         cache: OcrCache = self.ret_data[1][index]
         now = time.time()
 
-        # OCR 请求发出去但结果可能被 OCR 队列丢了。
-        # 如果 pending 太久，就释放 pending，允许后面重试。
         if cache.ocr_pending:
             if now - cache.last_request_time < self.ocr_pending_timeout_sec:
                 return False
@@ -608,16 +904,66 @@ class TargetMatcherNode(Node):
         self.publish_debug(text)
 
     # =====================
-    # Matching
+    # Matching with lock state machine
     # =====================
     def update_matches(self):
+        now = time.time()
+
         self.ret_data[2] = []
 
         if not self.tracking_enabled:
+            self.set_state("IDLE")
             return
 
         if not self.target_code.strip():
+            self.set_state("IDLE")
             return
+
+        # =====================
+        # 1. Locked target mode
+        # =====================
+        if self.locked_track_id:
+            if self.locked_track_id in self.track_id_to_index:
+                index = self.track_id_to_index[self.locked_track_id]
+
+                if index < len(self.ret_data[0]) and self.ret_data[0][index]:
+                    self.locked_index = int(index)
+                    self.last_lock_seen_time = now
+                    self.ret_data[2] = [index]
+
+                    if self.robot_arrived:
+                        self.set_state("CALIBRATION_ENABLED")
+                        self.publish_calibration_enable(True)
+                    else:
+                        self.set_state("APPROACHING")
+
+                    return
+
+            lost_dt = now - self.last_lock_seen_time
+
+            if lost_dt < self.lock_lost_timeout_sec:
+                self.set_state("LOCK_LOST_HOLD")
+                self.ret_data[2] = []
+                return
+
+            if self.robot_arrived and self.hold_calibration_after_arrived:
+                self.set_state("CALIBRATION_ENABLED")
+                self.publish_calibration_enable(True)
+                return
+
+            self.reset_lock(
+                f"locked target lost timeout: {lost_dt:.2f}s"
+            )
+            return
+
+        # =====================
+        # 2. Searching mode
+        # =====================
+        best_index = -1
+        best_token = ""
+        best_text = ""
+        best_score = -1.0
+        best_ocr_time = 0.0
 
         for index, cache in enumerate(self.ret_data[1]):
             if cache is None:
@@ -629,16 +975,54 @@ class TargetMatcherNode(Node):
             if not cache.ocr_done:
                 continue
 
+            if index >= len(self.ret_data[0]) or not self.ret_data[0][index]:
+                continue
+
             ok, token = match_target_code(self.target_code, cache.merged_text)
 
-            if ok:
-                cache.matched_token = token
-                self.ret_data[2].append(index)
-                self.publish_debug(
-                    f"MATCH index={index}, token={token}, text={cache.merged_text}"
-                )
-            else:
-                cache.matched_token = ""
+            if not ok:
+                continue
+
+            score = float(cache.score) + float(cache.avg_conf)
+
+            if score > best_score:
+                best_score = score
+                best_index = index
+                best_token = token
+                best_text = cache.merged_text
+                best_ocr_time = cache.last_ocr_time
+
+        if best_index < 0:
+            self.set_state("SEARCHING")
+            self.stable_candidate_index = -1
+            self.stable_candidate_token = ""
+            self.stable_candidate_count = 0
+            self.stable_candidate_last_ocr_time = 0.0
+            return
+
+        if (
+            best_index == self.stable_candidate_index
+            and best_token == self.stable_candidate_token
+        ):
+            if best_ocr_time > self.stable_candidate_last_ocr_time:
+                self.stable_candidate_count += 1
+                self.stable_candidate_last_ocr_time = best_ocr_time
+        else:
+            self.stable_candidate_index = best_index
+            self.stable_candidate_token = best_token
+            self.stable_candidate_count = 1
+            self.stable_candidate_last_ocr_time = best_ocr_time
+
+        self.set_state("CANDIDATE_FOUND")
+
+        self.get_logger().info(
+            f"candidate match: index={best_index}, token={best_token}, "
+            f"count={self.stable_candidate_count}/{self.stable_match_required_count}, "
+            f"text={best_text}"
+        )
+
+        if self.stable_candidate_count >= self.stable_match_required_count:
+            self.lock_target(best_index, best_token, best_text)
 
     # =====================
     # Publish outputs
@@ -721,7 +1105,14 @@ class TargetMatcherNode(Node):
                 msg.matched_index = index
                 msg.track_id = str(track_info["track_id"])
                 msg.target_code = str(self.target_code)
-                msg.matched_token = str(cache.matched_token if isinstance(cache, OcrCache) else "")
+
+                if isinstance(cache, OcrCache):
+                    msg.matched_token = str(cache.matched_token)
+                    msg.ocr_cache = self.make_ocr_cache_msg(cache)
+                else:
+                    msg.matched_token = ""
+                    msg.ocr_cache = self.make_ocr_cache_msg(OcrCache())
+
                 msg.class_name = str(track_info["class_name"])
                 msg.class_id = int(track_info["class_id"])
                 msg.yolo_confidence = float(track_info["confidence"])
@@ -729,7 +1120,6 @@ class TargetMatcherNode(Node):
                 msg.box = self.make_box2d_from_bbox(track_info["bbox"])
                 msg.age = int(track_info.get("age", 0))
                 msg.missing_frames = int(track_info.get("missing_frames", 0))
-                msg.ocr_cache = self.make_ocr_cache_msg(cache)
 
         self.matched_target_pub.publish(msg)
 
@@ -864,4 +1254,4 @@ def main(args=None):
 
 
 if __name__ == "__main__":
-    main()  
+    main()

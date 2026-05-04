@@ -1,47 +1,133 @@
-ocr_node:
+target_matcher_node:
   ros__parameters:
-    input_mode: topic
-    image_topic: /camera/rgb/image_unmirrored
-    request_topic: /vision/ocr_requests
-    result_topic: /vision/ocr_results
-    debug_image_topic: /vision/ocr_debug_image
+    # =====================
+    # Input topics
+    # =====================
+    yolo_topic: /yolov5/detections
+    ocr_request_topic: /vision/ocr_requests
+    ocr_result_topic: /vision/ocr_results
+    target_code_topic: /target_code
+    enable_topic: /target_matcher/enable
 
-    det_model: weights/det_static_qdq_int8.onnx
-    cls_model: weights/cls_static_qdq_int8.onnx
-    rec_model: weights/rec_fp32.onnx
-    rec_yml: weights/inference.yml
+    # =====================
+    # Backward-compatible outputs
+    # =====================
+    matched_index_topic: /target_matcher/matched_index
+    matched_detection_topic: /target_matcher/matched_detection
+    tracked_detections_topic: /target_matcher/tracked_detections
+    debug_text_topic: /target_matcher/debug_text
 
-    det_limit_side_len: 736
-    det_db_thresh: 0.30
-    det_db_box_thresh: 0.55
-    det_db_unclip_ratio: 1.5
-    det_min_size: 5
+    # =====================
+    # Main outputs
+    # =====================
+    tracked_targets_topic: /target_matcher/tracked_targets
+    matched_target_topic: /target_matcher/matched_target
 
-    drop_score: 0.35
+    # =====================
+    # Tracking parameters
+    # =====================
+    track_iou_threshold: 0.12
+    track_center_distance_threshold: 1.0
+    max_missing_frames: 25
 
-    rec_img_h: 48
-    rec_max_img_w: 320
-    rec_use_dynamic_width: false
-    rec_batch_size: 2
+    # YOLO 框过滤阈值
+    # 如果漏检严重，降到 0.35
+    # 如果误框很多，升到 0.45
+    min_yolo_confidence: 0.40
 
-    use_cls: false
-    cls_thresh: 0.9
-    crop_padding_ratio: 0.06
+    # 调试模式才打开
+    # true  = 有检测框就 OCR
+    # false = 正式模式，只在有 target_code 时按策略 OCR
+    only_need_ocr: false
 
-    ort_num_threads: 1
-    det_num_threads: 1
-    cls_num_threads: 1
-    rec_num_threads: 1
+    # =====================
+    # Recognition mode
+    # =====================
+    # continuous:
+    #   长时间持续识别模式，YOLO + OCR 低频运行
+    #
+    # lock_then_pose:
+    #   推荐正式模式
+    #   识别到目标码并锁定后，不再重复 OCR，只保留目标位置输出
+    #
+    # pose_only:
+    #   完全关闭 OCR，只使用已经锁定的目标做位置输出
+    recognition_mode: lock_then_pose
+    recognition_mode_topic: /target_matcher/recognition_mode
 
-    publish_debug_image: false
-    save_debug_image: false
-    log_recognized_text: false
+    # =====================
+    # OCR policy
+    # =====================
+    ocr_min_confidence: 0.35
 
-    min_roi_width: 35
-    min_roi_height: 15
+    # OCR 重试间隔
+    # 不要太小，否则 OCR 队列容易爆
+    ocr_retry_interval_sec: 4.0
 
-    # 关键：这里也写大，避免 launch 没传成功时退回 3
-    image_cache_size: 30
-    max_image_time_diff_ms: 300.0
-    use_nearest_image_if_exact_stamp_missing: true
-    ocr_queue_size: 8
+    # 成功 OCR 后的缓存时间
+    ocr_cache_timeout_sec: 60.0
+
+    # OCR 请求发出后，等待结果的最大时间
+    # OCR 慢时不要设太小
+    ocr_pending_timeout_sec: 8.0
+
+    # 同一个 track 成功 OCR 后不重复 OCR
+    avoid_repeat_ocr: true
+
+    # =====================
+    # OCR ROI
+    # =====================
+    # 1.10 比较稳
+    # 如果只识别到一部分编号，例如只出 2050，可以改 1.15
+    # 如果读到旁边文字，例如“更多”“5元”，改 1.05
+    ocr_roi_expand_scale: 1.10
+
+    image_width: 640
+    image_height: 480
+
+    # =====================
+    # OCR throttling
+    # =====================
+    # 每帧最多发几个 OCR 请求
+    max_ocr_requests_per_frame: 1
+
+    # track 至少稳定几帧才 OCR
+    # 可以过滤瞬时误检
+    min_track_age_for_ocr: 4
+
+    # =====================
+    # Lock state machine
+    # =====================
+    state_topic: /target_matcher/state
+    arrived_topic: /target_matcher/arrived
+    reset_lock_topic: /target_matcher/reset_lock
+    calibration_enable_topic: /target_matcher/calibration_enable
+
+    # 连续稳定匹配几次后锁定目标
+    stable_match_required_count: 2
+
+    # 锁定目标短暂消失时，等待多久才真正释放锁
+    # 这可以防止目标短暂离开视野时被旁边相似目标抢占
+    lock_lost_timeout_sec: 5.0
+
+    # 机器已经到位并开始校准后，即使视觉目标短暂丢失，也保持校准使能
+    hold_calibration_after_arrived: true
+
+    # =====================
+    # Runtime control
+    # =====================
+    reuse_track_indices: true
+
+    # 默认 false
+    # 当 target_code 传入时，如果 auto_enable_on_target_code=true，会自动开启
+    tracking_enabled: false
+
+    auto_enable_on_target_code: true
+
+    # 没有目标码时不发 OCR
+    require_target_code_for_ocr: true
+
+    publish_debug_text: true
+
+    # 可以为空，推荐通过 launch 参数或 /target_code topic 设置
+    target_code: ""

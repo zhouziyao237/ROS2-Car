@@ -254,6 +254,16 @@ class OcrNode(Node):
     def stamp_to_ns(stamp):
         return int(stamp.sec) * 1_000_000_000 + int(stamp.nanosec)
 
+    # def make_session(self, model_path, num_threads=1):
+    #     if not os.path.exists(model_path):
+    #         raise FileNotFoundError(f'Model not found: {model_path}')
+
+    #     so = ort.SessionOptions()
+    #     so.intra_op_num_threads = int(num_threads)
+    #     so.inter_op_num_threads = 1
+    #     so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+    #     return ort.InferenceSession(model_path, sess_options=so, providers=['CPUExecutionProvider'])
+
     def make_session(self, model_path, num_threads=1):
         if not os.path.exists(model_path):
             raise FileNotFoundError(f'Model not found: {model_path}')
@@ -261,8 +271,26 @@ class OcrNode(Node):
         so = ort.SessionOptions()
         so.intra_op_num_threads = int(num_threads)
         so.inter_op_num_threads = 1
-        so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        return ort.InferenceSession(model_path, sess_options=so, providers=['CPUExecutionProvider'])
+
+        # 关键修复：
+        # 当前 OCR det/cls 只有 INT8/QDQ ONNX 模型。
+        # ORT_ENABLE_ALL 可能把 Conv 优化成 NCHWc 路径，
+        # 然后触发:
+        #   p2o.pd_op.relu.*_nchwc
+        #   GetElementType is not implemented
+        # 所以这里禁用图优化，优先保证稳定运行。
+        so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
+
+        self.get_logger().info(
+            f'Creating ONNXRuntime session: model={model_path}, '
+            f'threads={num_threads}, graph_optimization=ORT_DISABLE_ALL'
+        )
+
+        return ort.InferenceSession(
+            model_path,
+            sess_options=so,
+            providers=['CPUExecutionProvider'],
+        )
 
     def load_index_from_rec_yml(self, yml_path):
         if not os.path.exists(yml_path):
