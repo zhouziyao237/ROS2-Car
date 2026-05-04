@@ -11,7 +11,7 @@ ocr_node:
     # =====================
     # Topics
     # =====================
-    image_topic: /camera/rgb/image_unmirrored
+    image_topic: /oak/rgb/image_raw
     request_topic: /vision/ocr_requests
     result_topic: /vision/ocr_results
     debug_image_topic: /vision/ocr_debug_image
@@ -21,8 +21,8 @@ ocr_node:
     # =====================
     det_model: weights/det_static_qdq_int8.onnx
     cls_model: weights/cls_static_qdq_int8.onnx
-    rec_model: weights/rec_fp32.onnx
-    rec_yml: weights/inference.yml
+    rec_model: weights/en_PP-OCRv3_fp32.onnx
+    rec_yml: config/inference_en.yaml
 
     # =====================
     # Text detection
@@ -101,6 +101,6 @@ ocr_node:
     # Image sync / OCR queue
     # =====================
     image_cache_size: 30
-    max_image_time_diff_ms: 300.0
+    max_image_time_diff_ms: 3000.0
     use_nearest_image_if_exact_stamp_missing: true
     ocr_queue_size: 8

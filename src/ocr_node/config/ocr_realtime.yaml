@@ -24,7 +24,7 @@ ocr_node:
     det_model: weights/det_static_qdq_int8.onnx
     cls_model: weights/cls_static_qdq_int8.onnx
     rec_model: weights/rec_fp32.onnx
-    rec_yml: weights/inference.yml
+    rec_yml: config/inference.yaml
 
     # =====================
     # 文本检测参数

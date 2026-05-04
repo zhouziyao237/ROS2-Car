@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Dict, List
 import time
+import re
 
 import rclpy
 from rclpy.node import Node
@@ -71,30 +72,47 @@ class TargetMatcherNode(Node):
         self.declare_parameter("track_iou_threshold", 0.12)
         self.declare_parameter("track_center_distance_threshold", 1.0)
         self.declare_parameter("max_missing_frames", 25)
-        self.declare_parameter("min_yolo_confidence", 0.35)
+        self.declare_parameter("min_yolo_confidence", 0.25)
 
-        # Debug mode:
-        # True = every detection can OCR.
-        # Formal mode:
-        # False = target-code controlled OCR.
         self.declare_parameter("only_need_ocr", False)
 
         # =====================
         # OCR policy
         # =====================
         self.declare_parameter("ocr_min_confidence", 0.35)
-        self.declare_parameter("ocr_retry_interval_sec", 4.0)
+        self.declare_parameter("ocr_retry_interval_sec", 8.0)
         self.declare_parameter("ocr_cache_timeout_sec", 60.0)
-        self.declare_parameter("ocr_pending_timeout_sec", 8.0)
+        self.declare_parameter("ocr_pending_timeout_sec", 15.0)
         self.declare_parameter("avoid_repeat_ocr", True)
 
-        self.declare_parameter("ocr_roi_expand_scale", 1.10)
-        self.declare_parameter("image_width", 640)
-        self.declare_parameter("image_height", 480)
+        # 这个参数保留，但高清映射后建议 1.15~1.25
+        self.declare_parameter("ocr_roi_expand_scale", 1.20)
+
+        # 兼容旧参数：现在 image_width/image_height 代表 OCR 图像尺寸
+        self.declare_parameter("image_width", 1920)
+        self.declare_parameter("image_height", 1080)
+
+        # =====================
+        # YOLO bbox -> OCR high-res image mapping
+        # =====================
+        # YOLO bbox 坐标系，例如 OAK NN preview 640x640
+        self.declare_parameter("yolo_image_width", 640)
+        self.declare_parameter("yolo_image_height", 640)
+
+        # OCR 实际切图的高清图尺寸，例如 OAK video 1920x1080
+        self.declare_parameter("ocr_image_width", 1920)
+        self.declare_parameter("ocr_image_height", 1080)
+
+        # True = 将 YOLO bbox 从 640x640 映射到 1920x1080 再发 OCR
+        self.declare_parameter("map_yolo_bbox_to_ocr_image", True)
+
+        # 非等比例扩框：横向多扩，上下少扩，适合 4 位横排数字
+        self.declare_parameter("ocr_roi_expand_x", 1.45)
+        self.declare_parameter("ocr_roi_expand_y", 1.15)
 
         # OCR throttling
         self.declare_parameter("max_ocr_requests_per_frame", 1)
-        self.declare_parameter("min_track_age_for_ocr", 4)
+        self.declare_parameter("min_track_age_for_ocr", 8)
 
         # =====================
         # Runtime control
@@ -110,12 +128,6 @@ class TargetMatcherNode(Node):
         # =====================
         # Recognition mode / state machine
         # =====================
-        # continuous:
-        #   keep doing OCR with throttling.
-        # lock_then_pose:
-        #   once target is locked, stop OCR and only output pose.
-        # pose_only:
-        #   OCR disabled. Only keep locked target / pose output.
         self.declare_parameter("recognition_mode", "lock_then_pose")
         self.declare_parameter("recognition_mode_topic", "/target_matcher/recognition_mode")
 
@@ -159,8 +171,25 @@ class TargetMatcherNode(Node):
         self.avoid_repeat_ocr = bool(self.get_parameter("avoid_repeat_ocr").value)
 
         self.ocr_roi_expand_scale = float(self.get_parameter("ocr_roi_expand_scale").value)
+
+        self.yolo_image_width = int(self.get_parameter("yolo_image_width").value)
+        self.yolo_image_height = int(self.get_parameter("yolo_image_height").value)
+        self.ocr_image_width = int(self.get_parameter("ocr_image_width").value)
+        self.ocr_image_height = int(self.get_parameter("ocr_image_height").value)
+        self.map_yolo_bbox_to_ocr_image = bool(
+            self.get_parameter("map_yolo_bbox_to_ocr_image").value
+        )
+
+        self.ocr_roi_expand_x = float(self.get_parameter("ocr_roi_expand_x").value)
+        self.ocr_roi_expand_y = float(self.get_parameter("ocr_roi_expand_y").value)
+
+        # OCR ROI 边界使用高清图尺寸
         self.image_width = int(self.get_parameter("image_width").value)
         self.image_height = int(self.get_parameter("image_height").value)
+
+        if self.map_yolo_bbox_to_ocr_image:
+            self.image_width = self.ocr_image_width
+            self.image_height = self.ocr_image_height
 
         self.max_ocr_requests_per_frame = int(
             self.get_parameter("max_ocr_requests_per_frame").value
@@ -222,12 +251,7 @@ class TargetMatcherNode(Node):
             center_distance_threshold=self.track_center_distance_threshold,
         )
 
-        # ret_data:
-        # ret_data[0] = track info
-        # ret_data[1] = OCR cache
-        # ret_data[2] = matched index list
         self.ret_data = [[], [], []]
-
         self.track_id_to_index: Dict[str, int] = {}
         self.free_indices: List[int] = []
         self.last_header = None
@@ -374,12 +398,19 @@ class TargetMatcherNode(Node):
         self.get_logger().info(f"only_need_ocr={self.only_need_ocr}")
         self.get_logger().info(f"min_yolo_confidence={self.min_yolo_confidence}")
         self.get_logger().info(f"ocr_roi_expand_scale={self.ocr_roi_expand_scale}")
+        self.get_logger().info(f"ocr_roi_expand_x={self.ocr_roi_expand_x}")
+        self.get_logger().info(f"ocr_roi_expand_y={self.ocr_roi_expand_y}")
         self.get_logger().info(f"require_target_code_for_ocr={self.require_target_code_for_ocr}")
         self.get_logger().info(f"avoid_repeat_ocr={self.avoid_repeat_ocr}")
         self.get_logger().info(f"ocr_retry_interval_sec={self.ocr_retry_interval_sec}")
         self.get_logger().info(f"ocr_pending_timeout_sec={self.ocr_pending_timeout_sec}")
         self.get_logger().info(f"max_ocr_requests_per_frame={self.max_ocr_requests_per_frame}")
         self.get_logger().info(f"min_track_age_for_ocr={self.min_track_age_for_ocr}")
+
+        self.get_logger().info(f"map_yolo_bbox_to_ocr_image={self.map_yolo_bbox_to_ocr_image}")
+        self.get_logger().info(f"yolo_image_size={self.yolo_image_width}x{self.yolo_image_height}")
+        self.get_logger().info(f"ocr_image_size={self.ocr_image_width}x{self.ocr_image_height}")
+        self.get_logger().info(f"roi_boundary_size={self.image_width}x{self.image_height}")
 
         self.get_logger().info(f"recognition_mode={self.recognition_mode}")
         self.get_logger().info(f"recognition_mode_topic={self.recognition_mode_topic}")
@@ -473,7 +504,7 @@ class TargetMatcherNode(Node):
 
     def on_reset_lock(self, msg: Bool):
         if bool(msg.data):
-            self.reset_lock("reset topic received")
+            self.reset_search_session("reset topic received")
 
     def reset_lock(self, reason: str = ""):
         old_track_id = self.locked_track_id
@@ -506,6 +537,47 @@ class TargetMatcherNode(Node):
 
         self.publish_outputs()
 
+    def reset_search_session(self, reason: str = ""):
+        old_track_id = self.locked_track_id
+
+        self.locked_track_id = ""
+        self.locked_index = -1
+        self.locked_token = ""
+        self.locked_text = ""
+        self.lock_start_time = 0.0
+        self.last_lock_seen_time = 0.0
+
+        self.stable_candidate_index = -1
+        self.stable_candidate_token = ""
+        self.stable_candidate_count = 0
+        self.stable_candidate_last_ocr_time = 0.0
+
+        self.robot_arrived = False
+        self.publish_calibration_enable(False)
+
+        self.tracker = KalmanTracker(
+            iou_threshold=self.track_iou_threshold,
+            max_missing_frames=self.max_missing_frames,
+            center_distance_threshold=self.track_center_distance_threshold,
+        )
+
+        self.ret_data = [[], [], []]
+        self.track_id_to_index.clear()
+        self.free_indices.clear()
+
+        if self.target_code.strip() and self.tracking_enabled:
+            self.set_state("SEARCHING")
+        elif self.target_code.strip():
+            self.set_state("SEARCHING")
+        else:
+            self.set_state("IDLE")
+
+        self.get_logger().info(
+            f"Full search session reset. old_track_id={old_track_id}, reason={reason}"
+        )
+
+        self.publish_outputs()
+
     def lock_target(self, index: int, token: str, text: str):
         if index < 0 or index >= len(self.ret_data[0]):
             return
@@ -524,6 +596,9 @@ class TargetMatcherNode(Node):
 
         self.ret_data[2] = [index]
 
+        if index < len(self.ret_data[1]) and isinstance(self.ret_data[1][index], OcrCache):
+            self.ret_data[1][index].matched_token = str(token)
+
         self.set_state("APPROACHING")
 
         self.get_logger().info(
@@ -537,14 +612,19 @@ class TargetMatcherNode(Node):
     # Callbacks
     # =====================
     def on_enable(self, msg: Bool):
+        old_enabled = self.tracking_enabled
         self.tracking_enabled = bool(msg.data)
 
         if not self.tracking_enabled:
-            self.reset_lock("tracking disabled")
-            self.publish_debug("Tracking task disabled. Matched target cleared.")
+            self.reset_search_session("tracking disabled")
+            self.publish_debug("Tracking task disabled. Search session cleared.")
         else:
+            if not old_enabled:
+                self.reset_search_session("tracking enabled")
+
             if self.target_code:
                 self.set_state("SEARCHING")
+
             self.publish_debug("Tracking task enabled.")
 
         self.get_logger().info(f"tracking_enabled updated: {self.tracking_enabled}")
@@ -552,16 +632,20 @@ class TargetMatcherNode(Node):
 
     def on_target_code(self, msg: String):
         new_code = str(msg.data or "").strip()
+        old_code = str(self.target_code or "").strip()
 
-        if new_code != self.target_code:
-            self.target_code = new_code
-            self.reset_lock("target_code changed")
-        else:
-            self.target_code = new_code
+        self.target_code = new_code
 
         if self.auto_enable_on_target_code and self.target_code:
             self.tracking_enabled = True
-            self.set_state("SEARCHING")
+
+        if new_code != old_code:
+            self.reset_search_session("target_code changed")
+        else:
+            if self.target_code and self.tracking_enabled:
+                self.set_state("SEARCHING")
+            elif not self.target_code:
+                self.reset_search_session("target_code cleared")
 
         self.get_logger().info(
             f"target_code updated: {self.target_code}, tracking_enabled={self.tracking_enabled}"
@@ -576,7 +660,7 @@ class TargetMatcherNode(Node):
         detections = self.convert_yolo_detections(msg)
 
         if len(detections) == 0:
-            tracks = self.tracker.update([])
+            self.tracker.update([])
             self.remove_dead_tracks(self.tracker.removed_track_ids)
             self.update_matches()
             self.publish_outputs()
@@ -585,7 +669,6 @@ class TargetMatcherNode(Node):
         tracks = self.tracker.update(detections)
         self.remove_dead_tracks(self.tracker.removed_track_ids)
 
-        # If locked, prefer locked track only.
         if self.locked_track_id:
             locked_tracks = [
                 t for t in tracks
@@ -632,6 +715,9 @@ class TargetMatcherNode(Node):
 
         for track_id, results in grouped.items():
             if track_id not in self.track_id_to_index:
+                self.get_logger().warn(
+                    f"Drop stale OCR result: track_id={track_id} no longer exists"
+                )
                 continue
 
             index = self.track_id_to_index[track_id]
@@ -711,7 +797,6 @@ class TargetMatcherNode(Node):
             if bbox[2] <= bbox[0] or bbox[3] <= bbox[1]:
                 continue
 
-            # Do not depend on det.need_ocr.
             converted.append({
                 "bbox": bbox,
                 "class_name": str(det.class_name),
@@ -722,6 +807,41 @@ class TargetMatcherNode(Node):
             })
 
         return converted
+
+    # =====================
+    # BBox mapping
+    # =====================
+    def map_bbox_to_ocr_image(self, bbox: List[float]) -> List[float]:
+        if not self.map_yolo_bbox_to_ocr_image:
+            return list(bbox)
+
+        sx = float(self.ocr_image_width) / max(1.0, float(self.yolo_image_width))
+        sy = float(self.ocr_image_height) / max(1.0, float(self.yolo_image_height))
+
+        x1, y1, x2, y2 = bbox
+
+        return [
+            x1 * sx,
+            y1 * sy,
+            x2 * sx,
+            y2 * sy,
+        ]
+
+    def map_bbox_to_yolo_image(self, bbox: List[float]) -> List[float]:
+        if not self.map_yolo_bbox_to_ocr_image:
+            return list(bbox)
+
+        sx = float(self.yolo_image_width) / max(1.0, float(self.ocr_image_width))
+        sy = float(self.yolo_image_height) / max(1.0, float(self.ocr_image_height))
+
+        x1, y1, x2, y2 = bbox
+
+        return [
+            x1 * sx,
+            y1 * sy,
+            x2 * sx,
+            y2 * sy,
+        ]
 
     # =====================
     # Track slot management
@@ -762,10 +882,14 @@ class TargetMatcherNode(Node):
     def update_tracking_slot(self, track: Track):
         index = self.track_id_to_index[track.track_id]
 
+        raw_bbox = list(track.bbox)
+        mapped_bbox = self.map_bbox_to_ocr_image(raw_bbox)
+
         self.ret_data[0][index] = {
             "track_id": track.track_id,
             "index": index,
-            "bbox": list(track.bbox),
+            "bbox": mapped_bbox,
+            "raw_yolo_bbox": raw_bbox,
             "class_name": track.class_name,
             "class_id": int(track.class_id),
             "confidence": float(track.confidence),
@@ -790,7 +914,6 @@ class TargetMatcherNode(Node):
             self.ret_data[2] = [idx for idx in self.ret_data[2] if idx != index]
 
             if self.locked_track_id == track_id:
-                # Do not reset immediately. update_matches() will hold lock for timeout.
                 self.last_lock_seen_time = self.last_lock_seen_time or time.time()
 
             if self.reuse_track_indices and index not in self.free_indices:
@@ -809,7 +932,6 @@ class TargetMatcherNode(Node):
         if not self.tracking_enabled:
             return False
 
-        # Mode control.
         if self.recognition_mode == "pose_only":
             return False
 
@@ -860,8 +982,13 @@ class TargetMatcherNode(Node):
         width = max(1.0, x2 - x1)
         height = max(1.0, y2 - y1)
 
-        new_width = width * float(scale)
-        new_height = height * float(scale)
+        # 优先使用非等比例扩框
+        # 横排数字：左右多扩，上下少扩
+        scale_x = max(float(scale), float(self.ocr_roi_expand_x))
+        scale_y = float(self.ocr_roi_expand_y)
+
+        new_width = width * scale_x
+        new_height = height * scale_y
 
         nx1 = max(0.0, cx - new_width * 0.5)
         ny1 = max(0.0, cy - new_height * 0.5)
@@ -874,8 +1001,9 @@ class TargetMatcherNode(Node):
         index = self.track_id_to_index[track.track_id]
         cache: OcrCache = self.ret_data[1][index]
 
-        raw_bbox = list(track.bbox)
-        ocr_bbox = self.expand_bbox(raw_bbox, self.ocr_roi_expand_scale)
+        raw_bbox_640 = list(track.bbox)
+        mapped_bbox = self.map_bbox_to_ocr_image(raw_bbox_640)
+        ocr_bbox = self.expand_bbox(mapped_bbox, self.ocr_roi_expand_scale)
 
         req_array = OcrRequestArray()
         req_array.header = header
@@ -897,11 +1025,31 @@ class TargetMatcherNode(Node):
 
         text = (
             f"OCR request sent: track_id={track.track_id}, index={index}, "
-            f"confidence={track.confidence:.3f}, raw_bbox={raw_bbox}, ocr_bbox={ocr_bbox}"
+            f"confidence={track.confidence:.3f}, "
+            f"raw_bbox_640={raw_bbox_640}, mapped_bbox={mapped_bbox}, ocr_bbox={ocr_bbox}"
         )
 
         self.get_logger().info(text)
         self.publish_debug(text)
+
+    # =====================
+    # Strict numeric matching helpers
+    # =====================
+    def is_numeric_target_code(self, value: str) -> bool:
+        value = str(value or "").strip()
+        return bool(value) and re.fullmatch(r"\d+", value) is not None
+
+    def strict_numeric_match(self, target_code: str, ocr_text: str):
+        target = re.sub(r"\D", "", str(target_code or ""))
+        if not target:
+            return False, ""
+
+        tokens = re.findall(r"\d+", str(ocr_text or ""))
+        for token in tokens:
+            if token == target:
+                return True, token
+
+        return False, ""
 
     # =====================
     # Matching with lock state machine
@@ -919,9 +1067,6 @@ class TargetMatcherNode(Node):
             self.set_state("IDLE")
             return
 
-        # =====================
-        # 1. Locked target mode
-        # =====================
         if self.locked_track_id:
             if self.locked_track_id in self.track_id_to_index:
                 index = self.track_id_to_index[self.locked_track_id]
@@ -951,14 +1096,11 @@ class TargetMatcherNode(Node):
                 self.publish_calibration_enable(True)
                 return
 
-            self.reset_lock(
+            self.reset_search_session(
                 f"locked target lost timeout: {lost_dt:.2f}s"
             )
             return
 
-        # =====================
-        # 2. Searching mode
-        # =====================
         best_index = -1
         best_token = ""
         best_text = ""
@@ -978,10 +1120,16 @@ class TargetMatcherNode(Node):
             if index >= len(self.ret_data[0]) or not self.ret_data[0][index]:
                 continue
 
-            ok, token = match_target_code(self.target_code, cache.merged_text)
+            if self.is_numeric_target_code(self.target_code):
+                ok, token = self.strict_numeric_match(self.target_code, cache.merged_text)
+            else:
+                ok, token = match_target_code(self.target_code, cache.merged_text)
 
             if not ok:
+                cache.matched_token = ""
                 continue
+
+            cache.matched_token = str(token)
 
             score = float(cache.score) + float(cache.avg_conf)
 
@@ -998,6 +1146,11 @@ class TargetMatcherNode(Node):
             self.stable_candidate_token = ""
             self.stable_candidate_count = 0
             self.stable_candidate_last_ocr_time = 0.0
+
+            for cache in self.ret_data[1]:
+                if isinstance(cache, OcrCache):
+                    cache.matched_token = ""
+
             return
 
         if (

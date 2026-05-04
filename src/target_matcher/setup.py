@@ -13,6 +13,7 @@ setup(
         ("share/" + package_name, ["package.xml"]),
         (os.path.join("share", package_name, "launch"), glob("launch/*.launch.py")),
         (os.path.join("share", package_name, "config"), glob("config/*.yaml")),
+        (os.path.join("share", package_name, "config"), glob("config/*.yml")),
     ],
     install_requires=["setuptools", "numpy"],
     zip_safe=True,
@@ -26,6 +27,7 @@ setup(
             "target_matcher_node = target_matcher.target_matcher_node:main",
             "matched_overlay_node = target_matcher.matched_overlay_node:main",
             "matched_depth_locator_node = target_matcher.matched_depth_locator_node:main",
+            'found_target_visualizer_node = target_matcher.found_target_visualizer_node:main',
         ],
     },
 )

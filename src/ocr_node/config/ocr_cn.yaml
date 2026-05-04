@@ -1,0 +1,106 @@
+ocr_node:
+  ros__parameters:
+    # =====================
+    # Basic mode
+    # =====================
+    input_mode: topic
+    image_path: ""
+    save_path: ""
+    exit_after_image: true
+
+    # =====================
+    # Topics
+    # =====================
+    image_topic: /oak/rgb/image_raw
+    request_topic: /vision/ocr_requests
+    result_topic: /vision/ocr_results
+    debug_image_topic: /vision/ocr_debug_image
+
+    # =====================
+    # Models
+    # =====================
+    det_model: weights/det_static_qdq_int8.onnx
+    cls_model: weights/cls_static_qdq_int8.onnx
+    rec_model: weights/rec_fp32.onnx
+    rec_yml: config/inference_cn.yaml
+
+    # =====================
+    # Text detection
+    # =====================
+    # 736 性能好
+    # 小字识别不稳时改成 960
+    det_limit_side_len: 736
+    det_db_thresh: 0.30
+    det_db_box_thresh: 0.55
+    det_db_unclip_ratio: 1.5
+    det_min_size: 5
+
+    # =====================
+    # Result filtering
+    # =====================
+    drop_score: 0.35
+
+    # =====================
+    # Text recognition
+    # =====================
+    rec_img_h: 48
+    rec_max_img_w: 320
+    rec_use_dynamic_width: false
+    rec_batch_size: 2
+
+    # =====================
+    # Direction classifier
+    # =====================
+    use_cls: false
+    cls_thresh: 0.9
+
+    # =====================
+    # Crop
+    # =====================
+    crop_padding_ratio: 0.06
+
+    # =====================
+    # ROI preprocess
+    # 如果你的 ocr_node.py 还没实现这些参数，保留也不会影响已声明参数以外的逻辑；
+    # 如果已经实现，可以增强小字识别。
+    # =====================
+    enable_roi_preprocess: true
+    roi_preprocess_min_short_side: 96
+    roi_preprocess_max_scale: 2.0
+    roi_preprocess_try_variants: true
+    roi_preprocess_use_clahe: true
+    roi_preprocess_use_sharpen: true
+    roi_preprocess_use_binary: false
+    roi_preprocess_clahe_clip_limit: 2.0
+    roi_preprocess_clahe_tile_grid_size: 8
+    roi_preprocess_adaptive_block_size: 31
+    roi_preprocess_adaptive_c: 7
+
+    # =====================
+    # Threads
+    # =====================
+    ort_num_threads: 1
+    det_num_threads: 1
+    cls_num_threads: 1
+    rec_num_threads: 1
+
+    # =====================
+    # Debug
+    # =====================
+    publish_debug_image: false
+    save_debug_image: false
+    log_recognized_text: false
+
+    # =====================
+    # ROI filter
+    # =====================
+    min_roi_width: 35
+    min_roi_height: 15
+
+    # =====================
+    # Image sync / OCR queue
+    # =====================
+    image_cache_size: 30
+    max_image_time_diff_ms: 300.0
+    use_nearest_image_if_exact_stamp_missing: true
+    ocr_queue_size: 8

@@ -847,11 +847,103 @@ class OakVisionDriverNode(Node):
             except Exception:
                 pass
 
-    def make_detection_msg(self, det: Dict):
+    # def make_detection_msg(self, det: Dict):
+    #     dmsg = YoloDetection()
+
+    #     class_id = int(det.get("class_id", 0))
+    #     class_name = str(det.get("class_name", class_id))
+    #     confidence = float(det.get("confidence", 0.0))
+
+    #     x1 = int(det.get("xmin", 0))
+    #     y1 = int(det.get("ymin", 0))
+    #     x2 = int(det.get("xmax", 0))
+    #     y2 = int(det.get("ymax", 0))
+
+    #     cx = float(det.get("center_x", (x1 + x2) / 2.0))
+    #     cy = float(det.get("center_y", (y1 + y2) / 2.0))
+    #     bw = float(det.get("bbox_width", x2 - x1))
+    #     bh = float(det.get("bbox_height", y2 - y1))
+
+    #     fields = [
+    #         ("class_id", class_id),
+    #         ("id", class_id),
+    #         ("label_id", class_id),
+    #         ("class_name", class_name),
+    #         ("label", class_name),
+    #         ("name", class_name),
+    #         ("confidence", confidence),
+    #         ("score", confidence),
+    #         ("probability", confidence),
+    #         ("xmin", x1),
+    #         ("ymin", y1),
+    #         ("xmax", x2),
+    #         ("ymax", y2),
+    #         ("x1", x1),
+    #         ("y1", y1),
+    #         ("x2", x2),
+    #         ("y2", y2),
+    #         ("center_x", cx),
+    #         ("center_y", cy),
+    #         ("cx", cx),
+    #         ("cy", cy),
+    #         ("width", bw),
+    #         ("height", bh),
+    #         ("bbox_width", bw),
+    #         ("bbox_height", bh),
+    #     ]
+
+    #     for name, value in fields:
+    #         self.set_if_exists(dmsg, name, value)
+
+    #     if hasattr(dmsg, "bbox") and Box2D is not None:
+    #         box = Box2D()
+    #         box_fields = [
+    #             ("xmin", x1),
+    #             ("ymin", y1),
+    #             ("xmax", x2),
+    #             ("ymax", y2),
+    #             ("x1", x1),
+    #             ("y1", y1),
+    #             ("x2", x2),
+    #             ("y2", y2),
+    #             ("center_x", cx),
+    #             ("center_y", cy),
+    #             ("cx", cx),
+    #             ("cy", cy),
+    #             ("width", bw),
+    #             ("height", bh),
+    #         ]
+    #         for name, value in box_fields:
+    #             self.set_if_exists(box, name, value)
+    #         dmsg.bbox = box
+
+    #     if hasattr(dmsg, "box") and Box2D is not None:
+    #         box = Box2D()
+    #         box_fields = [
+    #             ("xmin", x1),
+    #             ("ymin", y1),
+    #             ("xmax", x2),
+    #             ("ymax", y2),
+    #             ("center_x", cx),
+    #             ("center_y", cy),
+    #             ("width", bw),
+    #             ("height", bh),
+    #         ]
+    #         for name, value in box_fields:
+    #             self.set_if_exists(box, name, value)
+    #         dmsg.box = box
+
+    #     return dmsg
+
+    def make_detection_msg(self, det: Dict, stamp, index: int = 0):
         dmsg = YoloDetection()
 
+        if hasattr(dmsg, "header"):
+            dmsg.header.stamp = stamp
+            dmsg.header.frame_id = self.frame_id
+
         class_id = int(det.get("class_id", 0))
-        class_name = str(det.get("class_name", class_id))
+        class_name = str(det.get("class_name", "target"))
         confidence = float(det.get("confidence", 0.0))
 
         x1 = int(det.get("xmin", 0))
@@ -859,81 +951,62 @@ class OakVisionDriverNode(Node):
         x2 = int(det.get("xmax", 0))
         y2 = int(det.get("ymax", 0))
 
-        cx = float(det.get("center_x", (x1 + x2) / 2.0))
-        cy = float(det.get("center_y", (y1 + y2) / 2.0))
-        bw = float(det.get("bbox_width", x2 - x1))
-        bh = float(det.get("bbox_height", y2 - y1))
+        width = max(0, x2 - x1)
+        height = max(0, y2 - y1)
+        center_u = int((x1 + x2) / 2)
+        center_v = int((y1 + y2) / 2)
 
-        fields = [
-            ("class_id", class_id),
-            ("id", class_id),
-            ("label_id", class_id),
-            ("class_name", class_name),
-            ("label", class_name),
-            ("name", class_name),
-            ("confidence", confidence),
-            ("score", confidence),
-            ("probability", confidence),
-            ("xmin", x1),
-            ("ymin", y1),
-            ("xmax", x2),
-            ("ymax", y2),
-            ("x1", x1),
-            ("y1", y1),
-            ("x2", x2),
-            ("y2", y2),
-            ("center_x", cx),
-            ("center_y", cy),
-            ("cx", cx),
-            ("cy", cy),
-            ("width", bw),
-            ("height", bh),
-            ("bbox_width", bw),
-            ("bbox_height", bh),
-        ]
+        if hasattr(dmsg, "target_id"):
+            dmsg.target_id = f"oak_det_{index}"
 
-        for name, value in fields:
-            self.set_if_exists(dmsg, name, value)
+        if hasattr(dmsg, "class_name"):
+            dmsg.class_name = class_name
 
-        if hasattr(dmsg, "bbox") and Box2D is not None:
-            box = Box2D()
-            box_fields = [
-                ("xmin", x1),
-                ("ymin", y1),
-                ("xmax", x2),
-                ("ymax", y2),
-                ("x1", x1),
-                ("y1", y1),
-                ("x2", x2),
-                ("y2", y2),
-                ("center_x", cx),
-                ("center_y", cy),
-                ("cx", cx),
-                ("cy", cy),
-                ("width", bw),
-                ("height", bh),
-            ]
-            for name, value in box_fields:
-                self.set_if_exists(box, name, value)
-            dmsg.bbox = box
+        if hasattr(dmsg, "class_id"):
+            dmsg.class_id = class_id
+
+        if hasattr(dmsg, "confidence"):
+            dmsg.confidence = confidence
+
+        if hasattr(dmsg, "need_ocr"):
+            dmsg.need_ocr = True
 
         if hasattr(dmsg, "box") and Box2D is not None:
             box = Box2D()
-            box_fields = [
-                ("xmin", x1),
-                ("ymin", y1),
-                ("xmax", x2),
-                ("ymax", y2),
-                ("center_x", cx),
-                ("center_y", cy),
-                ("width", bw),
-                ("height", bh),
-            ]
-            for name, value in box_fields:
-                self.set_if_exists(box, name, value)
+            box.x1 = x1
+            box.y1 = y1
+            box.x2 = x2
+            box.y2 = y2
+            box.center_u = center_u
+            box.center_v = center_v
+            box.width = width
+            box.height = height
             dmsg.box = box
 
         return dmsg
+
+    # def publish_detections_msg(self, stamp):
+    #     if not HAS_YOLO_MSG or self.detections_pub is None:
+    #         return
+
+    #     arr = YoloDetectionArray()
+
+    #     if hasattr(arr, "header"):
+    #         arr.header.stamp = stamp
+    #         arr.header.frame_id = self.frame_id
+
+    #     detections_list = [self.make_detection_msg(det) for det in self.latest_frame_detections]
+
+    #     if hasattr(arr, "detections"):
+    #         arr.detections = detections_list
+    #     elif hasattr(arr, "results"):
+    #         arr.results = detections_list
+    #     elif hasattr(arr, "objects"):
+    #         arr.objects = detections_list
+    #     elif hasattr(arr, "yolo_detections"):
+    #         arr.yolo_detections = detections_list
+
+    #     self.detections_pub.publish(arr)
 
     def publish_detections_msg(self, stamp):
         if not HAS_YOLO_MSG or self.detections_pub is None:
@@ -945,18 +1018,13 @@ class OakVisionDriverNode(Node):
             arr.header.stamp = stamp
             arr.header.frame_id = self.frame_id
 
-        detections_list = [self.make_detection_msg(det) for det in self.latest_frame_detections]
+        detections_list = []
+        for i, det in enumerate(self.latest_frame_detections):
+            detections_list.append(self.make_detection_msg(det, stamp, i))
 
-        if hasattr(arr, "detections"):
-            arr.detections = detections_list
-        elif hasattr(arr, "results"):
-            arr.results = detections_list
-        elif hasattr(arr, "objects"):
-            arr.objects = detections_list
-        elif hasattr(arr, "yolo_detections"):
-            arr.yolo_detections = detections_list
-
+        arr.detections = detections_list
         self.detections_pub.publish(arr)
+
 
     def draw_detections(self, frame, detections):
         out = frame.copy()

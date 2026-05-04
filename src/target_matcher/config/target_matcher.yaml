@@ -62,7 +62,7 @@ target_matcher_node:
     # =====================
     ocr_roi_expand_scale: 1.2
     image_width: 640
-    image_height: 480
+    image_height: 640
 
     # =====================
     # Resource / task control
