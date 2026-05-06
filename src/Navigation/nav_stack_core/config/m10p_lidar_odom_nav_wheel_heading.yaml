@@ -1,20 +1,25 @@
 scan_match_odom:
   ros__parameters:
-    use_sim_time: false
+    use_sim_time: true
 
-    # Nav-stack runtime tuning aligned with m10p_lidar_odom_bringup.
-    scan_topic: /scan_front
+    # 360-degree lidar after sector blocking.
+    # /scan_filtered should be generated from /scan by blocking 0~90 deg.
+    scan_topic: /scan_filtered
     odom_topic: /lidar/odom
     diagnostics_topic: /lidar/odom_debug
     odom_frame: odom
     base_frame: base_link
     publish_tf: false
 
+    # 360-degree lidar. The 0~90 degree blind sector is handled by scan_angle_filter.
     min_range: 0.18
     max_range: 12.0
     downsample_step: 2
-    use_angle_filter: true
-    angle_windows_deg: [-60.0, 60.0]
+
+    # Do not crop to front 120 degrees here.
+    # The scan has already been filtered externally.
+    use_angle_filter: false
+    angle_windows_deg: [-180.0, 180.0]
 
     # Match nav_stack_core/description/minimal_lidar_robot.xacro.
     scan_yaw_offset_deg: 0.0
@@ -23,70 +28,102 @@ scan_match_odom:
     invert_scan_x: false
     invert_scan_y: false
 
-    icp_max_iterations: 22
-    icp_max_corr_dist: 0.18
+    # ICP scan matching.
+    # 360-degree scan gives stronger geometry than 120-degree scan,
+    # so correspondence and minimum correspondence can be slightly relaxed/stabilized.
+    icp_max_iterations: 24
+    icp_max_corr_dist: 0.16
     icp_trim_ratio: 0.75
     icp_converge_trans: 0.0002
     icp_converge_rot: 0.0003
-    min_correspondences: 55
-    reject_mean_err_above: 0.08
+    min_correspondences: 80
+    reject_mean_err_above: 0.07
 
-    min_motion_trans: 0.0025
-    min_motion_rot: 0.0035
-    static_lock_trans: 0.0035
-    static_lock_rot: 0.0045
-    reject_trans_above: 0.18
-    reject_rot_above: 0.22
-    max_dt: 0.40
+    # Motion gate for slow validation route.
+    min_motion_trans: 0.0015
+    min_motion_rot: 0.002
+    static_lock_trans: 0.002
+    static_lock_rot: 0.002
+    reject_trans_above: 0.12
+    reject_rot_above: 0.16
+    max_dt: 0.35
 
+    # Constant-velocity Kalman prediction + measurement update.
     use_kalman_predict: true
     use_kalman_update: true
     kalman_q_pos: 0.004
     kalman_q_yaw: 0.003
     kalman_q_vel: 0.10
     kalman_q_wz: 0.08
-    kalman_r_x: 0.035
-    kalman_r_y: 0.080
-    kalman_r_yaw: 0.120
+
+    # 360-degree scan has better y/yaw observability than 120-degree forward scan.
+    kalman_r_x: 0.030
+    kalman_r_y: 0.045
+    kalman_r_yaw: 0.070
     velocity_feedback_alpha: 0.35
 
-    # Wheel odom alone provides the short-term odom prior and yaw rate.
-    use_external_twist_prior: true
-    prior_source: wheel
-    external_odom_topic: /wheel/odom
-    external_imu_topic: ''
-    external_cmd_vel_topic: /cmd_vel_selected
-    external_twist_timeout: 1.50
-    external_prior_weight: 0.80
-    use_scan_deskew: true
-    deskew_center_scan: true
-    deskew_max_time: 0.12
-
+    # With 360-degree scan, constraints can be less aggressive.
     use_adaptive_constraint: true
     sigma_ref_x: 0.020
-    sigma_ref_y: 0.012
-    sigma_ref_yaw: 0.020
-    alpha_x_min: 0.70
+    sigma_ref_y: 0.020
+    sigma_ref_yaw: 0.025
+    alpha_x_min: 0.75
     alpha_x_max: 1.00
-    alpha_y_min: 0.05
-    alpha_y_max: 0.75
-    alpha_yaw_min: 0.05
-    alpha_yaw_max: 0.70
+    alpha_y_min: 0.35
+    alpha_y_max: 0.90
+    alpha_yaw_min: 0.35
+    alpha_yaw_max: 0.85
     dy_prior: 0.0
     dyaw_prior: 0.0
+
+    # Geometry gate can still be kept because 0~90 deg is blocked.
     use_scan_geometry_gate: true
     geometry_sector_deadzone_deg: 8.0
-    geometry_weight_y: 0.65
-    geometry_weight_yaw: 0.70
+    geometry_weight_y: 0.80
+    geometry_weight_yaw: 0.85
 
     publish_dynamic_covariance: true
     min_cov_x: 0.001
-    min_cov_y: 0.002
-    min_cov_yaw: 0.003
+    min_cov_y: 0.0015
+    min_cov_yaw: 0.002
     max_cov_x: 0.20
-    max_cov_y: 0.25
-    max_cov_yaw: 0.25
+    max_cov_y: 0.22
+    max_cov_yaw: 0.22
 
     vel_alpha: 0.20
     debug_log_period: 20
     publish_debug: true
+
+lidar_path:
+  ros__parameters:
+    use_sim_time: true
+    odom_topic: /lidar/odom
+    path_topic: /lidar/path
+    max_points: 3000
+
+truth_path:
+  ros__parameters:
+    use_sim_time: true
+    odom_topic: /odom_truth
+    path_topic: /truth/path
+    max_points: 3000
+
+odom_error_monitor:
+  ros__parameters:
+    use_sim_time: true
+    lidar_odom_topic: /lidar/odom
+    truth_odom_topic: /odom_truth
+    error_topic: /lidar/odom_error
+    log_period: 2.0
+    align_initial_pose: true
+
+cmd_vel_demo:
+  ros__parameters:
+    use_sim_time: true
+    cmd_vel_topic: /cmd_vel
+    mode: gentle_arc
+    linear_speed: 0.08
+    angular_speed: 0.05
+    straight_time: 5.0
+    turn_time: 3.6
+    pause_time: 0.4

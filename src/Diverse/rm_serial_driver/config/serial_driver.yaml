@@ -17,3 +17,5 @@
     cmd_vx_scale: 1.0
     cmd_vy_scale: 1.0
     cmd_wz_scale: 1.0
+    platform_target_topic: /platform/target
+    platform_current_status_topic: /platform/current_status

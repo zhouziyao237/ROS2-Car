@@ -121,6 +121,25 @@ struct NavigationPacket
 //   uint16_t crc16;
 // } __attribute__((packed, aligned(1)));
 
+struct PlatformTargetPacket
+{
+  Header header;
+  float target_lift_z_mm;
+  float target_slide_x_mm;
+  float target_screw_x_mm;
+  uint16_t crc16;
+} __attribute__((packed, aligned(1)));
+
+struct PlatformCurrentStatusPacket
+{
+  Header header;
+  float target_lift_z_mm;
+  float target_slide_x_mm;
+  float target_screw_x_mm;
+  uint8_t control_mode;
+  uint16_t crc16;
+} __attribute__((packed, aligned(1)));
+
 template <typename T>
 inline T fromVector(const std::vector<uint8_t> & data)
 {

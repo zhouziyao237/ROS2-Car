@@ -1,7 +1,7 @@
 oak_vision_driver_node:
   ros__parameters:
     enable_rgb: true
-    enable_depth: false
+    enable_depth: true
 
     yolo_backend: oak
     enable_yolo: true

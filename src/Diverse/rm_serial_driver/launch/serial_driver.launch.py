@@ -25,6 +25,16 @@ def generate_launch_description():
     cmd_vx_scale_arg = DeclareLaunchArgument('cmd_vx_scale', default_value='1.0')
     cmd_vy_scale_arg = DeclareLaunchArgument('cmd_vy_scale', default_value='1.0')
     cmd_wz_scale_arg = DeclareLaunchArgument('cmd_wz_scale', default_value='1.0')
+    platform_target_topic_arg = DeclareLaunchArgument(
+        'platform_target_topic',
+        default_value='/platform/target',
+        description='Platform target topic subscribed by serial driver'
+    )
+    platform_current_status_topic_arg = DeclareLaunchArgument(
+        'platform_current_status_topic',
+        default_value='/platform/current_status',
+        description='Platform current status topic published by serial driver'
+    )
 
     rm_serial_driver_node = Node(
         package='rm_serial_driver',
@@ -39,6 +49,8 @@ def generate_launch_description():
             'cmd_vx_scale': LaunchConfiguration('cmd_vx_scale'),
             'cmd_vy_scale': LaunchConfiguration('cmd_vy_scale'),
             'cmd_wz_scale': LaunchConfiguration('cmd_wz_scale'),
+            'platform_target_topic': LaunchConfiguration('platform_target_topic'),
+            'platform_current_status_topic': LaunchConfiguration('platform_current_status_topic'),
         }],
         remappings=[
             ('cmd_vel', LaunchConfiguration('cmd_vel_topic')),
@@ -54,5 +66,7 @@ def generate_launch_description():
         cmd_vx_scale_arg,
         cmd_vy_scale_arg,
         cmd_wz_scale_arg,
+        platform_target_topic_arg,
+        platform_current_status_topic_arg,
         rm_serial_driver_node,
     ])

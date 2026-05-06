@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>target_pose_bridge</name>
+  <version>0.0.2</version>
+  <description>Fuse matched 2D target bbox with OAK depth, transform to robot frame, and display overlay.</description>
+  <maintainer email="zzy@example.com">zzy</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>vision_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>cv_bridge</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_geometry_msgs</depend>
+  <depend>target_pose_msgs</depend>
+  <depend>yolo_msg</depend>
+
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

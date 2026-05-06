@@ -32,7 +32,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "enable_depth",
-            default_value="false",
+            default_value="true",
         ),
         DeclareLaunchArgument(
             "blob_path",

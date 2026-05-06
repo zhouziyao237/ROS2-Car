@@ -1,0 +1,29 @@
+target_3d_fusion_node:
+  ros__parameters:
+    detections_topic: /target_matcher/matched_target
+    depth_topic: /oak/depth/image_raw
+    camera_info_topic: /oak/rgb/camera_info
+    target_pose_camera_topic: /target_pose_camera
+    target_size_camera_topic: /target_size_camera
+    min_depth_mm: 150.0
+    max_depth_mm: 5000.0
+    roi_half_size: 8
+    min_score: 0.0
+    debug_log: true
+
+target_position_overlay_node:
+  ros__parameters:
+    image_topic: /oak/rgb/image_raw
+    detections_topic: /target_matcher/matched_target
+    depth_topic: /oak/depth/image_raw
+    camera_info_topic: /oak/rgb/camera_info
+    annotated_topic: /target_position_overlay/image
+    target_pose_topic: /target_pose_base
+    target_info_topic: /target_pose_info_base
+    target_frame: base_link
+    min_depth_mm: 150.0
+    max_depth_mm: 5000.0
+    roi_half_size: 8
+    min_score: 0.0
+    draw_all_boxes: false
+    debug_log: true

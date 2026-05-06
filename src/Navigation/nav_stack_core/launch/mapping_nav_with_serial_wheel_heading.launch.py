@@ -20,10 +20,18 @@ def generate_launch_description():
     default_ekf_params = os.path.join(
         nav_pkg, 'config', 'ekf_wheel_lidar_wheel_heading.yaml'
     )
-    default_xacro = os.path.join(nav_pkg, 'description', 'minimal_lidar_robot.xacro')
-    default_slam = os.path.join(nav_pkg, 'config', 'slam_toolbox_online_highres.yaml')
-    default_nav2 = os.path.join(nav_pkg, 'config', 'nav2_params_min.yaml')
-    default_rviz = os.path.join(nav_pkg, 'rviz', 'nav_stack.rviz')
+    default_xacro = os.path.join(
+        nav_pkg, 'description', 'minimal_lidar_robot.xacro'
+    )
+    default_slam = os.path.join(
+        nav_pkg, 'config', 'slam_toolbox_online_highres.yaml'
+    )
+    default_nav2 = os.path.join(
+        nav_pkg, 'config', 'nav2_params_min.yaml'
+    )
+    default_rviz = os.path.join(
+        nav_pkg, 'rviz', 'nav_stack.rviz'
+    )
 
     serial_cmd_vel_topic = LaunchConfiguration('serial_cmd_vel_topic')
     lidar_odom_params_file = LaunchConfiguration('lidar_odom_params_file')
@@ -33,26 +41,39 @@ def generate_launch_description():
     nav2_params_file = LaunchConfiguration('nav2_params_file')
     rviz_config = LaunchConfiguration('rviz_config')
     lidar_serial_port = LaunchConfiguration('lidar_serial_port')
+
     wheel_odom_use_cmd_vel = LaunchConfiguration('wheel_odom_use_cmd_vel')
+
     wheel_vx_scale = LaunchConfiguration('wheel_vx_scale')
     wheel_vy_scale = LaunchConfiguration('wheel_vy_scale')
     wheel_wz_scale = LaunchConfiguration('wheel_wz_scale')
+
     cmd_vx_scale = LaunchConfiguration('cmd_vx_scale')
     cmd_vy_scale = LaunchConfiguration('cmd_vy_scale')
     cmd_wz_scale = LaunchConfiguration('cmd_wz_scale')
-    robot_description = ParameterValue(Command(['xacro ', xacro_path]), value_type=str)
+
+    robot_description = ParameterValue(
+        Command(['xacro ', xacro_path]),
+        value_type=str
+    )
 
     robot_state_publisher_node = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
         name='robot_state_publisher',
         output='screen',
-        parameters=[{'robot_description': robot_description}],
+        parameters=[{
+            'robot_description': robot_description
+        }],
     )
 
     serial_driver_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(serial_pkg, 'launch', 'serial_driver.launch.py')
+            os.path.join(
+                serial_pkg,
+                'launch',
+                'serial_driver.launch.py'
+            )
         ),
         launch_arguments={
             'cmd_vel_topic': serial_cmd_vel_topic,
@@ -67,26 +88,47 @@ def generate_launch_description():
 
     lidar_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(lslidar_pkg, 'launch', 'lsm10p_uart_launch.py')
+            os.path.join(
+                lslidar_pkg,
+                'launch',
+                'lsm10p_uart_launch.py'
+            )
         ),
         launch_arguments={
             'serial_port': lidar_serial_port
         }.items()
     )
 
-    front_scan_filter_node = Node(
-        package='nav_stack_core',
-        executable='front_scan_filter.py',
-        name='front_scan_filter',
+    # ============================================================
+    # 360-degree LaserScan sector filter
+    #
+    # Input : /scan
+    # Output: /scan_filtered
+    #
+    # Function:
+    #   Keep 360-degree lidar data, but block 0~90 deg sector.
+    #
+    # Important:
+    #   scan_match_odom YAML should use:
+    #     scan_topic: /scan_filtered
+    #     use_angle_filter: false
+    # ============================================================
+    scan_angle_filter_node = Node(
+        package='lidar_scan_filter',
+        executable='scan_angle_filter_node',
+        name='scan_angle_filter_node',
         output='screen',
         parameters=[{
             'input_topic': '/scan',
-            'output_topic': '/scan_front',
-            'fov_deg': 120.0,
-            'center_angle_deg': 0.0,
-            'min_range': 0.18,
-            'max_range': 12.0,
-            'lock_geometry': True,
+            'output_topic': '/scan_filtered',
+
+            # Block 0~90 degree sector.
+            # If the blocked direction is wrong in RViz,
+            # change this to -90.0~0.0.
+            'block_start_deg': 0.0,
+            'block_end_deg': 90.0,
+
+            'use_inf': True,
         }]
     )
 
@@ -104,12 +146,18 @@ def generate_launch_description():
         name='ekf_filter_node',
         output='screen',
         parameters=[ekf_params_file],
-        remappings=[('odometry/filtered', '/odometry/filtered')],
+        remappings=[
+            ('odometry/filtered', '/odometry/filtered')
+        ],
     )
 
     nav_with_slam_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(nav_pkg, 'launch', 'navigation_system_with_lidar_odom.launch.py')
+            os.path.join(
+                nav_pkg,
+                'launch',
+                'navigation_system_with_lidar_odom.launch.py'
+            )
         ),
         launch_arguments={
             'xacro_path': xacro_path,
@@ -161,56 +209,92 @@ def generate_launch_description():
             default_value='/cmd_vel_selected',
             description='Selected cmd_vel topic forwarded to rm_serial_driver'
         ),
+
         DeclareLaunchArgument(
             'lidar_odom_params_file',
             default_value=default_lidar_odom_params,
             description='Path to lidar_odom_pkg parameter file'
         ),
+
         DeclareLaunchArgument(
             'ekf_params_file',
             default_value=default_ekf_params,
             description='Path to EKF parameter file'
         ),
+
         DeclareLaunchArgument(
             'xacro_path',
             default_value=default_xacro,
             description='Path to robot xacro used by robot_state_publisher'
         ),
+
         DeclareLaunchArgument(
             'slam_params_file',
             default_value=default_slam,
             description='Path to slam_toolbox parameter file'
         ),
+
         DeclareLaunchArgument(
             'nav2_params_file',
             default_value=default_nav2,
             description='Path to Nav2 parameter file'
         ),
+
         DeclareLaunchArgument(
             'rviz_config',
             default_value=default_rviz,
             description='Path to RViz config file'
         ),
+
         DeclareLaunchArgument(
             'lidar_serial_port',
             default_value='/dev/ttyUSB0',
             description='Serial device used by the M10P lidar driver'
         ),
+
         DeclareLaunchArgument(
             'wheel_odom_use_cmd_vel',
             default_value='false',
             description='Use real /wheel/twist feedback for wheel odom'
         ),
-        DeclareLaunchArgument('wheel_vx_scale', default_value='0.0775'),
-        DeclareLaunchArgument('wheel_vy_scale', default_value='0.0775'),
-        DeclareLaunchArgument('wheel_wz_scale', default_value='-0.0775'),
-        DeclareLaunchArgument('cmd_vx_scale', default_value='1.0'),
-        DeclareLaunchArgument('cmd_vy_scale', default_value='1.0'),
-        DeclareLaunchArgument('cmd_wz_scale', default_value='-1.0'),
+
+        DeclareLaunchArgument(
+            'wheel_vx_scale',
+            default_value='0.0775'
+        ),
+
+        DeclareLaunchArgument(
+            'wheel_vy_scale',
+            default_value='0.0775'
+        ),
+
+        DeclareLaunchArgument(
+            'wheel_wz_scale',
+            default_value='-0.0775'
+        ),
+
+        DeclareLaunchArgument(
+            'cmd_vx_scale',
+            default_value='1.0'
+        ),
+
+        DeclareLaunchArgument(
+            'cmd_vy_scale',
+            default_value='1.0'
+        ),
+
+        DeclareLaunchArgument(
+            'cmd_wz_scale',
+            default_value='-1.0'
+        ),
+
         robot_state_publisher_node,
         serial_driver_launch,
         lidar_launch,
-        front_scan_filter_node,
+
+        # /scan -> /scan_filtered
+        scan_angle_filter_node,
+
         wheel_twist_odom_node,
         cmd_vel_mux_node,
         lidar_odom_node,

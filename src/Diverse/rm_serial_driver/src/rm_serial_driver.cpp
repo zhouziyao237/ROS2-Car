@@ -1,26 +1,18 @@
 // Copyright (c) 2022 ChenJun
 // Licensed under the Apache-2.0 License.
 
-/* 
-警钟长鸣：
-
-2026年1月13日 00:18 在经过3天的检查后发现自瞄抖动问题是相机线插usb2.0口导致
-此前该车已经能正常自瞄，此前电控视觉都声称没有改过代码
-在没有改过代码的情况下视觉立场一定要坚定
-*/
-
 #include <tf2/LinearMath/Quaternion.h>
 
+#include <geometry_msgs/msg/twist_with_covariance_stamped.hpp>
 #include <rclcpp/logging.hpp>
 #include <rclcpp/qos.hpp>
 #include <rclcpp/utilities.hpp>
 #include <serial_driver/serial_driver.hpp>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
-#include <geometry_msgs/msg/twist_with_covariance_stamped.hpp>
 #include <std_msgs/msg/string.hpp>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
-// C++ system
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <functional>
@@ -49,6 +41,16 @@ bool decodePacketPrefix(const std::vector<uint8_t> & frame, T & packet)
   std::memcpy(&packet, frame.data(), sizeof(T));
   return true;
 }
+
+template<typename T>
+std::vector<uint8_t> packetToVector(const T & packet)
+{
+  std::vector<uint8_t> data(sizeof(T));
+  std::copy(
+    reinterpret_cast<const uint8_t *>(&packet),
+    reinterpret_cast<const uint8_t *>(&packet) + sizeof(T), data.begin());
+  return data;
+}
 }  // namespace
 
 RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions & options)
@@ -60,7 +62,6 @@ RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions & options)
 
   getParams();
 
-  // TF broadcaster / wheel twist publisher
   timestamp_offset_ = this->declare_parameter("timestamp_offset", 0.0);
   publish_tf_ = this->declare_parameter("publish_tf", false);
   wheel_twist_topic_ = this->declare_parameter("wheel_twist_topic", std::string("/wheel/twist"));
@@ -74,11 +75,15 @@ RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions & options)
   cmd_vy_scale_ = this->declare_parameter("cmd_vy_scale", 1.0);
   cmd_wz_scale_ = this->declare_parameter("cmd_wz_scale", 1.0);
   chassis_manual_mode_value_ = this->declare_parameter("chassis_manual_mode_value", 1);
+  platform_target_topic_ =
+    this->declare_parameter("platform_target_topic", std::string("/platform/target"));
+  platform_current_status_topic_ = this->declare_parameter(
+    "platform_current_status_topic", std::string("/platform/current_status"));
+
   if (publish_tf_) {
     tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
   }
 
-  // Create Publisher
   latency_pub_ = this->create_publisher<std_msgs::msg::Float64>("/latency", 10);
   marker_pub_ = this->create_publisher<visualization_msgs::msg::Marker>("/aiming_point", 10);
   nav_state_pub_ =
@@ -88,17 +93,22 @@ RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions & options)
   chassis_control_mode_pub_ =
     this->create_publisher<std_msgs::msg::String>(
     "/chassis_control_mode", rclcpp::QoS(1).reliable().transient_local());
+  platform_current_status_pub_ =
+    this->create_publisher<auto_aim_interfaces::msg::PlatformCurrentStatus>(
+    platform_current_status_topic_, 10);
 
-  // Detect parameter client
   detector_param_client_ = std::make_shared<rclcpp::AsyncParametersClient>(this, "armor_detector");
-
-  // Tracker reset service client
   reset_tracker_client_ = this->create_client<std_srvs::srv::Trigger>("/tracker/reset");
 
-  // 创建导航指令订阅器
   nav_cmd_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
     "cmd_vel", 10,
     std::bind(&RMSerialDriver::sendNavigationCmd, this, std::placeholders::_1));
+  platform_target_sub_ = this->create_subscription<auto_aim_interfaces::msg::PlatformTarget>(
+    platform_target_topic_, 10,
+    std::bind(&RMSerialDriver::sendPlatformTarget, this, std::placeholders::_1));
+  target_sub_ = this->create_subscription<auto_aim_interfaces::msg::Target>(
+    "/tracker/target", rclcpp::SensorDataQoS(),
+    std::bind(&RMSerialDriver::sendData, this, std::placeholders::_1));
 
   try {
     serial_driver_->init_port(device_name_, *device_config_);
@@ -109,7 +119,7 @@ RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions & options)
   } catch (const std::exception & ex) {
     RCLCPP_ERROR(
       get_logger(), "Error creating serial port: %s - %s", device_name_.c_str(), ex.what());
-    throw ex;
+    throw;
   }
 
   aiming_point_.header.frame_id = "odom";
@@ -122,11 +132,6 @@ RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions & options)
   aiming_point_.color.b = 1.0;
   aiming_point_.color.a = 1.0;
   aiming_point_.lifetime = rclcpp::Duration::from_seconds(0.1);
-
-  // Create Subscription
-  target_sub_ = this->create_subscription<auto_aim_interfaces::msg::Target>(
-    "/tracker/target", rclcpp::SensorDataQoS(),
-    std::bind(&RMSerialDriver::sendData, this, std::placeholders::_1));
 }
 
 RMSerialDriver::~RMSerialDriver()
@@ -146,20 +151,17 @@ RMSerialDriver::~RMSerialDriver()
 
 void RMSerialDriver::receiveData()
 {
-  constexpr size_t BUFFER_SIZE = 1024;
-  std::vector<uint8_t> read_buffer(BUFFER_SIZE);
+  constexpr size_t kBufferSize = 1024;
+  std::vector<uint8_t> read_buffer(kBufferSize);
   rx_buffer_.clear();
 
   while (rclcpp::ok()) {
     try {
-      // 读取数据到缓冲区
       const size_t bytes_read = serial_driver_->port()->receive(read_buffer);
-
       if (bytes_read == 0) {
         continue;
       }
 
-      // 持续缓存，解决半包/粘包问题
       rx_buffer_.insert(rx_buffer_.end(), read_buffer.begin(), read_buffer.begin() + bytes_read);
 
       while (rx_buffer_.size() >= sizeof(Header)) {
@@ -179,8 +181,8 @@ void RMSerialDriver::receiveData()
         Header header{};
         std::memcpy(&header, rx_buffer_.data(), sizeof(Header));
         if (!crc8::Verify_CRC8_Check_Sum(
-              reinterpret_cast<const uint8_t *>(&header), sizeof(Header) - 2)) {
-          // 帧头CRC错误，滑窗一字节继续找
+              reinterpret_cast<const uint8_t *>(&header), sizeof(Header) - 2))
+        {
           rx_buffer_.erase(rx_buffer_.begin());
           continue;
         }
@@ -195,7 +197,7 @@ void RMSerialDriver::receiveData()
         }
 
         if (rx_buffer_.size() < total_length) {
-          break;  // 数据不完整，等待下一次接收
+          break;
         }
 
         std::vector<uint8_t> frame(rx_buffer_.begin(), rx_buffer_.begin() + total_length);
@@ -221,7 +223,7 @@ void RMSerialDriver::receiveData()
 void RMSerialDriver::processPacket(const std::vector<uint8_t> & data, uint16_t cmd_id)
 {
   switch (cmd_id) {
-    case 0x502: {
+    case 0x0502: {
       IMUPacket imu_packet{};
       if (!decodePacketPrefix(data, imu_packet)) {
         RCLCPP_WARN(
@@ -237,35 +239,27 @@ void RMSerialDriver::processPacket(const std::vector<uint8_t> & data, uint16_t c
       st.current_pitch = imu_packet.pitch;
       st.current_yaw = imu_packet.yaw;
 
-      // st.time = imu_packet.timeseries; //时间戳
-      // RCLCPP_INFO(get_logger(), "时间戳%d", st.time);
-
-      // 发布TF变换（默认关闭，避免干扰底盘定位主链）
       if (publish_tf_ && tf_broadcaster_) {
-        auto t = std::make_unique<geometry_msgs::msg::TransformStamped>();
-        t->header.stamp = this->now() + rclcpp::Duration::from_seconds(timestamp_offset_);
-        t->header.frame_id = "odom";
-        t->child_frame_id = "gimbal_link";
+        geometry_msgs::msg::TransformStamped transform;
+        transform.header.stamp = this->now() + rclcpp::Duration::from_seconds(timestamp_offset_);
+        transform.header.frame_id = "odom";
+        transform.child_frame_id = "gimbal_link";
 
         tf2::Quaternion q;
         q.setRPY(imu_packet.roll, imu_packet.pitch, imu_packet.yaw);
-        t->transform.rotation = tf2::toMsg(q);
-        tf_broadcaster_->sendTransform(*t);
+        transform.transform.rotation = tf2::toMsg(q);
+        tf_broadcaster_->sendTransform(transform);
       }
 
-      //导航部分////////////////////////////////////////
-      // 发布导航状态////////////////////////////////////////////
-      auto twist_msg = std::make_unique<geometry_msgs::msg::Twist>();
-      twist_msg->angular.x = imu_packet.pitch;  // pitch
-      twist_msg->angular.y = imu_packet.roll;   // roll
-      twist_msg->angular.z = imu_packet.yaw;    // yaw
-      nav_state_pub_->publish(*twist_msg);
-
-      // RCLCPP_INFO(get_logger(), "[接收导航状态] pitch:%.2f, yaw:%.2f",
-      //             imu_packet.pitch, imu_packet.yaw);
+      geometry_msgs::msg::Twist twist_msg;
+      twist_msg.angular.x = imu_packet.pitch;
+      twist_msg.angular.y = imu_packet.roll;
+      twist_msg.angular.z = imu_packet.yaw;
+      nav_state_pub_->publish(twist_msg);
       break;
     }
-    case 0x503: {
+
+    case 0x0503: {
       chassisCurrentStatusPacket chassis_status{};
       if (!decodePacketPrefix(data, chassis_status)) {
         RCLCPP_WARN(
@@ -274,8 +268,6 @@ void RMSerialDriver::processPacket(const std::vector<uint8_t> & data, uint16_t c
         break;
       }
 
-      // 0x0503 current chassis status from MCU:
-      // speed_x / speed_y are body-frame linear speeds, speed_turn is yaw rate.
       publishChassisControlMode(chassis_status.control_mode);
       publishWheelTwist(
         chassis_status.speed_x, chassis_status.speed_y, chassis_status.speed_turn);
@@ -284,14 +276,16 @@ void RMSerialDriver::processPacket(const std::vector<uint8_t> & data, uint16_t c
         "Chassis status enabled=%u mode=%s raw(vx=%.3f vy=%.3f wz=%.3f) "
         "scaled(vx=%.3f vy=%.3f wz=%.3f)",
         static_cast<unsigned int>(chassis_status.chassis_enabled),
-        (static_cast<int>(chassis_status.control_mode) == chassis_manual_mode_value_) ? "manual" : "auto",
+        (static_cast<int>(chassis_status.control_mode) == chassis_manual_mode_value_) ?
+        "manual" : "auto",
         chassis_status.speed_x, chassis_status.speed_y, chassis_status.speed_turn,
         chassis_status.speed_x * wheel_vx_scale_,
         chassis_status.speed_y * wheel_vy_scale_,
         chassis_status.speed_turn * wheel_wz_scale_);
       break;
     }
-    case 0x504: {
+
+    case 0x0504: {
       bottonPacket botton_packet{};
       if (!decodePacketPrefix(data, botton_packet)) {
         RCLCPP_WARN(
@@ -299,7 +293,8 @@ void RMSerialDriver::processPacket(const std::vector<uint8_t> & data, uint16_t c
       }
       break;
     }
-    case 0x505: {
+
+    case 0x0505: {
       bassPacket bass_packet{};
       if (!decodePacketPrefix(data, bass_packet)) {
         RCLCPP_WARN(
@@ -310,9 +305,35 @@ void RMSerialDriver::processPacket(const std::vector<uint8_t> & data, uint16_t c
       if (bass_packet.reset) {
         resetTracker();
       }
-
       break;
     }
+
+    case 0x0506: {
+      PlatformCurrentStatusPacket platform_status{};
+      if (!decodePacketPrefix(data, platform_status)) {
+        RCLCPP_WARN(
+          get_logger(), "Platform status frame too short: %zu < %zu",
+          data.size(), sizeof(PlatformCurrentStatusPacket));
+        return;
+      }
+
+      publishPlatformCurrentStatus(
+        platform_status.target_lift_z_mm,
+        platform_status.target_slide_x_mm,
+        platform_status.target_screw_x_mm,
+        platform_status.control_mode);
+      RCLCPP_DEBUG_THROTTLE(
+        get_logger(), *get_clock(), 1000,
+        "Platform status z=%.2f slide=%.2f screw=%.2f mode=%u",
+        platform_status.target_lift_z_mm,
+        platform_status.target_slide_x_mm,
+        platform_status.target_screw_x_mm,
+        static_cast<unsigned int>(platform_status.control_mode));
+      break;
+    }
+
+    default:
+      break;
   }
 }
 
@@ -358,25 +379,43 @@ void RMSerialDriver::publishChassisControlMode(uint8_t control_mode)
   }
 }
 
+void RMSerialDriver::publishPlatformCurrentStatus(
+  float target_lift_z_mm, float target_slide_x_mm, float target_screw_x_mm,
+  uint8_t control_mode)
+{
+  auto_aim_interfaces::msg::PlatformCurrentStatus msg;
+  msg.header.stamp = this->now();
+  msg.header.frame_id = "base_link";
+  msg.target_lift_z_mm = target_lift_z_mm;
+  msg.target_slide_x_mm = target_slide_x_mm;
+  msg.target_screw_x_mm = target_screw_x_mm;
+  msg.control_mode = control_mode;
+  platform_current_status_pub_->publish(msg);
+}
+
 void RMSerialDriver::sendData(const auto_aim_interfaces::msg::Target::SharedPtr msg)
 {
   const static std::map<std::string, uint8_t> id_unit8_map{
-    {"", 0},  {"outpost", 0}, {"1", 1}, {"1", 1},     {"2", 2},
-    {"3", 3}, {"4", 4},       {"5", 5}, {"guard", 6}, {"base", 7}};
+    {"", 0}, {"outpost", 0}, {"1", 1}, {"1", 1}, {"2", 2},
+    {"3", 3}, {"4", 4}, {"5", 5}, {"guard", 6}, {"base", 7}};
 
   const static std::map<std::string, uint8_t> robo_id_unit8_map{
-    {"", 0x000},  {"outpost", 0x010}, {"1", 0x001},     {"2", 0x002},   {"3", 0x003},
-    {"4", 0x004}, {"5", 0x005},       {"guard", 0x007}, {"base", 0x011}};
+    {"", 0x000}, {"outpost", 0x010}, {"1", 0x001}, {"2", 0x002}, {"3", 0x003},
+    {"4", 0x004}, {"5", 0x005}, {"guard", 0x007}, {"base", 0x011}};
 
   try {
-    Header header;
-    SendPacket packet;
+    Header header{};
+    SendPacket packet{};
     header.data_length = sizeof(packet) - sizeof(header) - 2;
     crc8::Append_CRC8_Check_Sum(reinterpret_cast<uint8_t *>(&header), sizeof(header) - 2);
-    header.cmd_id = 0x402;
+    header.cmd_id = 0x0402;
     packet.header = header;
-    float aim_x = 0, aim_y = 0, aim_z = 0;
-    float pitch = 0, yaw = 0;
+
+    float aim_x = 0.0F;
+    float aim_y = 0.0F;
+    float aim_z = 0.0F;
+    float pitch = 0.0F;
+    float yaw = 0.0F;
 
     st.xw = msg->position.x;
     st.yw = msg->position.y;
@@ -392,37 +431,25 @@ void RMSerialDriver::sendData(const auto_aim_interfaces::msg::Target::SharedPtr 
     st.armor_id = ARMOR_ID(id_unit8_map.at(msg->id));
     st.armor_num = ARMOR_NUM(msg->armors_num);
 
-    // 设置固定值
-    // packet.pitch = 0.0;
-    // packet.yaw = -1.57;
-
     packet.shoot =
       autoSolveTrajectory(&pitch, &yaw, &aim_x, &aim_y, &aim_z) && (msg->tracking ? 1 : 0);
-
-    // packet.shoot = 1;
-
     packet.timeseries = st.time;
-
-
-
-
     packet.robo_id = robo_id_unit8_map.at(msg->id);
+
     if (packet.shoot) {
       packet.pitch = pitch;
-      //2025年11月11日23点00分 fpc要求，由于电控未知原因，yaw加180度
       packet.yaw = yaw;
     }
+
     crc16::Append_CRC16_Check_Sum(reinterpret_cast<uint8_t *>(&packet), sizeof(packet));
 
     RCLCPP_INFO(get_logger(), "[Send] pitch %f!", packet.pitch);
     RCLCPP_INFO(get_logger(), "[Send] yaw %f!", packet.yaw);
     RCLCPP_INFO(get_logger(), "[Send] shoot %d!", packet.shoot);
 
-    std::vector<uint8_t> data = toVector(packet);
+    serial_driver_->port()->send(toVector(packet));
 
-    serial_driver_->port()->send(data);
-
-    if (abs(aim_x) > 0.01) {
+    if (std::abs(aim_x) > 0.01F) {
       aiming_point_.header.stamp = this->now();
       aiming_point_.pose.position.x = aim_x;
       aiming_point_.pose.position.y = aim_y;
@@ -443,35 +470,51 @@ void RMSerialDriver::sendData(const auto_aim_interfaces::msg::Target::SharedPtr 
 void RMSerialDriver::sendNavigationCmd(const geometry_msgs::msg::Twist::SharedPtr msg)
 {
   try {
-    NavigationPacket packet;
+    NavigationPacket packet{};
     packet.header.data_length = sizeof(packet) - sizeof(Header) - 2;
-    packet.header.cmd_id = 0x405;
+    packet.header.cmd_id = 0x0405;
     crc8::Append_CRC8_Check_Sum(reinterpret_cast<uint8_t *>(&packet.header), sizeof(Header) - 2);
 
-    const float vx = static_cast<float>(msg->linear.x * cmd_vx_scale_);
-    const float vy = static_cast<float>(msg->linear.y * cmd_vy_scale_);
-    const float wz = static_cast<float>(msg->angular.z * cmd_wz_scale_);
-
-    packet.vx = vx;
-    packet.vy = vy;
-    packet.wz = wz;
+    packet.vx = static_cast<float>(msg->linear.x * cmd_vx_scale_);
+    packet.vy = static_cast<float>(msg->linear.y * cmd_vy_scale_);
+    packet.wz = static_cast<float>(msg->angular.z * cmd_wz_scale_);
 
     crc16::Append_CRC16_Check_Sum(reinterpret_cast<uint8_t *>(&packet), sizeof(packet));
-
-    std::vector<uint8_t> data(sizeof(packet));
-    std::copy(
-      reinterpret_cast<const uint8_t *>(&packet),
-      reinterpret_cast<const uint8_t *>(&packet) + sizeof(packet), data.begin());
-
-    serial_driver_->port()->send(data);
+    serial_driver_->port()->send(packetToVector(packet));
 
     RCLCPP_DEBUG_THROTTLE(
       get_logger(), *get_clock(), 1000,
-      "[发送导航指令] raw(vx:%.2f, vy:%.2f, wz:%.2f) scaled(vx:%.2f, vy:%.2f, wz:%.2f)",
+      "[Send cmd_vel] raw(vx:%.2f, vy:%.2f, wz:%.2f) scaled(vx:%.2f, vy:%.2f, wz:%.2f)",
       msg->linear.x, msg->linear.y, msg->angular.z,
       packet.vx, packet.vy, packet.wz);
   } catch (const std::exception & ex) {
-    RCLCPP_ERROR(get_logger(), "发送导航指令失败: %s", ex.what());
+    RCLCPP_ERROR(get_logger(), "Failed to send navigation command: %s", ex.what());
+    reopenPort();
+  }
+}
+
+void RMSerialDriver::sendPlatformTarget(
+  const auto_aim_interfaces::msg::PlatformTarget::SharedPtr msg)
+{
+  try {
+    PlatformTargetPacket packet{};
+    packet.header.data_length = sizeof(packet) - sizeof(Header) - 2;
+    packet.header.cmd_id = 0x0406;
+    crc8::Append_CRC8_Check_Sum(reinterpret_cast<uint8_t *>(&packet.header), sizeof(Header) - 2);
+
+    packet.target_lift_z_mm = msg->target_lift_z_mm;
+    packet.target_slide_x_mm = msg->target_slide_x_mm;
+    packet.target_screw_x_mm = msg->target_screw_x_mm;
+
+    crc16::Append_CRC16_Check_Sum(reinterpret_cast<uint8_t *>(&packet), sizeof(packet));
+    serial_driver_->port()->send(packetToVector(packet));
+
+    RCLCPP_DEBUG_THROTTLE(
+      get_logger(), *get_clock(), 1000,
+      "[Send platform] z=%.2f slide=%.2f screw=%.2f",
+      packet.target_lift_z_mm, packet.target_slide_x_mm, packet.target_screw_x_mm);
+  } catch (const std::exception & ex) {
+    RCLCPP_ERROR(get_logger(), "Failed to send platform target: %s", ex.what());
     reopenPort();
   }
 }
@@ -489,16 +532,16 @@ void RMSerialDriver::getParams()
 
   try {
     device_name_ = declare_parameter<std::string>("device_name", "");
-  } catch (rclcpp::ParameterTypeException & ex) {
-    RCLCPP_ERROR(get_logger(), "The device name provided was invalid");
-    throw ex;
+  } catch (const rclcpp::ParameterTypeException & ex) {
+    RCLCPP_ERROR(get_logger(), "The device name provided was invalid: %s", ex.what());
+    throw;
   }
 
   try {
     baud_rate = declare_parameter<int>("baud_rate", 0);
-  } catch (rclcpp::ParameterTypeException & ex) {
-    RCLCPP_ERROR(get_logger(), "The baud_rate provided was invalid");
-    throw ex;
+  } catch (const rclcpp::ParameterTypeException & ex) {
+    RCLCPP_ERROR(get_logger(), "The baud_rate provided was invalid: %s", ex.what());
+    throw;
   }
 
   try {
@@ -512,11 +555,11 @@ void RMSerialDriver::getParams()
       fc = FlowControl::SOFTWARE;
     } else {
       throw std::invalid_argument{
-        "The flow_control parameter must be one of: none, software, or hardware."};
+              "The flow_control parameter must be one of: none, software, or hardware."};
     }
-  } catch (rclcpp::ParameterTypeException & ex) {
-    RCLCPP_ERROR(get_logger(), "The flow_control provided was invalid");
-    throw ex;
+  } catch (const rclcpp::ParameterTypeException & ex) {
+    RCLCPP_ERROR(get_logger(), "The flow_control provided was invalid: %s", ex.what());
+    throw;
   }
 
   try {
@@ -531,9 +574,9 @@ void RMSerialDriver::getParams()
     } else {
       throw std::invalid_argument{"The parity parameter must be one of: none, odd, or even."};
     }
-  } catch (rclcpp::ParameterTypeException & ex) {
-    RCLCPP_ERROR(get_logger(), "The parity provided was invalid");
-    throw ex;
+  } catch (const rclcpp::ParameterTypeException & ex) {
+    RCLCPP_ERROR(get_logger(), "The parity provided was invalid: %s", ex.what());
+    throw;
   }
 
   try {
@@ -548,9 +591,9 @@ void RMSerialDriver::getParams()
     } else {
       throw std::invalid_argument{"The stop_bits parameter must be one of: 1, 1.5, or 2."};
     }
-  } catch (rclcpp::ParameterTypeException & ex) {
-    RCLCPP_ERROR(get_logger(), "The stop_bits provided was invalid");
-    throw ex;
+  } catch (const rclcpp::ParameterTypeException & ex) {
+    RCLCPP_ERROR(get_logger(), "The stop_bits provided was invalid: %s", ex.what());
+    throw;
   }
 
   device_config_ =
@@ -578,13 +621,13 @@ void RMSerialDriver::reopenPort()
 void RMSerialDriver::setParam(const rclcpp::Parameter & param)
 {
   if (!detector_param_client_->service_is_ready()) {
-    // RCLCPP_WARN(get_logger(), "Service not ready, skipping parameter set");
     return;
   }
 
   if (
     !set_param_future_.valid() ||
-    set_param_future_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+    set_param_future_.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+  {
     RCLCPP_INFO(get_logger(), "Setting detect_color to %ld...", param.as_int());
     set_param_future_ = detector_param_client_->set_parameters(
       {param}, [this, param](const ResultFuturePtr & results) {
@@ -616,7 +659,4 @@ void RMSerialDriver::resetTracker()
 
 #include "rclcpp_components/register_node_macro.hpp"
 
-// Register the component with class_loader.
-// This acts as a sort of entry point, allowing the component to be discoverable when its library
-// is being loaded into a running process.
 RCLCPP_COMPONENTS_REGISTER_NODE(rm_serial_driver::RMSerialDriver)

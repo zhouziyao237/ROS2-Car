@@ -69,7 +69,7 @@ ros:
   yolo_table_topic: /oak/yolo_table
 runtime:
   enable_rgb: true
-  enable_depth: false
+  enable_depth: true
   enable_yolo: true
   draw_oak_detections_on_rgb: true
   publish_annotated_image: true
