@@ -31,7 +31,7 @@
             rpy="$(arg imu_roll) $(arg imu_pitch) $(arg imu_yaw)"/>
   </joint>
 
-  <!-- 激光雷达直接刚性固定在底盘上，不挂在 imu_link 下面 -->
+  <!-- 激光雷达刚性固定在底盘上，不挂在 imu_link 下 -->
   <joint name="base_to_laser" type="fixed">
     <parent link="base_link"/>
     <child link="laser"/>

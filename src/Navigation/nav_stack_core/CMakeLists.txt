@@ -38,7 +38,9 @@ ament_target_dependencies(nav_stack_mode_manager
 )
 
 add_executable(nav_stack_mode_manager_node src/nav_stack_mode_manager_node.cpp)
+
 target_link_libraries(nav_stack_mode_manager_node nav_stack_mode_manager)
+
 ament_target_dependencies(nav_stack_mode_manager_node
   rclcpp
   rclcpp_lifecycle
@@ -50,14 +52,14 @@ ament_target_dependencies(nav_stack_mode_manager_node
   tf2_ros
 )
 
-install(PROGRAMS
-  scripts/cmd_vel_mode_mux.py 
-  scripts/fake_odom_publisher.py
-  scripts/odom_tf_broadcaster.py
-  scripts/goal_pose_bridge.py
-  scripts/serial_imu_bridge.py
-  scripts/wheel_twist_odom.py
-  scripts/front_scan_filter.py
+install(
+  PROGRAMS
+    scripts/front_scan_filter.py
+    scripts/wheel_twist_odom.py
+    scripts/cmd_vel_mode_mux.py
+    scripts/goal_pose_bridge.py
+    scripts/serial_imu_bridge.py
+    scripts/odom_tf_broadcaster.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -79,4 +81,5 @@ install(DIRECTORY launch config rviz description
 
 ament_export_include_directories(include)
 ament_export_libraries(nav_stack_mode_manager)
+
 ament_package()

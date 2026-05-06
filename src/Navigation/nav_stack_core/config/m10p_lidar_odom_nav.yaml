@@ -2,8 +2,11 @@ scan_match_odom:
   ros__parameters:
     use_sim_time: false
 
-    # Nav-stack runtime tuning aligned with m10p_lidar_odom_bringup.
+    # front_scan_filter.py:
+    # /scan -> /scan_front
+    # /scan_front blocks 180~270 deg.
     scan_topic: /scan_front
+
     odom_topic: /lidar/odom
     diagnostics_topic: /lidar/odom_debug
     odom_frame: odom
@@ -13,8 +16,10 @@ scan_match_odom:
     min_range: 0.18
     max_range: 12.0
     downsample_step: 2
-    use_angle_filter: true
-    angle_windows_deg: [-60.0, 60.0]
+
+    # Do not crop again inside scan_match_odom.
+    use_angle_filter: false
+    angle_windows_deg: [-180.0, 180.0]
 
     # Match nav_stack_core/description/minimal_lidar_robot.xacro.
     scan_yaw_offset_deg: 0.0
@@ -23,12 +28,12 @@ scan_match_odom:
     invert_scan_x: false
     invert_scan_y: false
 
-    icp_max_iterations: 22
+    icp_max_iterations: 24
     icp_max_corr_dist: 0.18
     icp_trim_ratio: 0.75
     icp_converge_trans: 0.0002
     icp_converge_rot: 0.0003
-    min_correspondences: 55
+    min_correspondences: 80
     reject_mean_err_above: 0.08
 
     min_motion_trans: 0.0025
@@ -45,48 +50,53 @@ scan_match_odom:
     kalman_q_yaw: 0.003
     kalman_q_vel: 0.10
     kalman_q_wz: 0.08
+
     kalman_r_x: 0.035
-    kalman_r_y: 0.080
-    kalman_r_yaw: 0.120
+    kalman_r_y: 0.055
+    kalman_r_yaw: 0.085
     velocity_feedback_alpha: 0.35
 
-    # Wheel + IMU provide the short-term odom prior, while LiDAR corrects
-    # accumulated planar drift.
-    use_external_twist_prior: true
-    prior_source: wheel
+    # This wheel_heading version currently uses internal prior.
+    # Keep external prior off unless /wheel/odom timestamp is stable.
+    use_external_twist_prior: false
+    prior_source: internal
     external_odom_topic: /wheel/odom
     external_imu_topic: /imu/data
     external_cmd_vel_topic: /cmd_vel_selected
     external_twist_timeout: 1.50
-    external_prior_weight: 0.80
-    use_scan_deskew: true
+    external_prior_weight: 0.60
+
+    use_scan_deskew: false
     deskew_center_scan: true
     deskew_max_time: 0.12
 
     use_adaptive_constraint: true
     sigma_ref_x: 0.020
-    sigma_ref_y: 0.012
-    sigma_ref_yaw: 0.020
-    alpha_x_min: 0.70
+    sigma_ref_y: 0.020
+    sigma_ref_yaw: 0.025
+
+    alpha_x_min: 0.75
     alpha_x_max: 1.00
-    alpha_y_min: 0.05
-    alpha_y_max: 0.75
-    alpha_yaw_min: 0.05
-    alpha_yaw_max: 0.70
+    alpha_y_min: 0.25
+    alpha_y_max: 0.85
+    alpha_yaw_min: 0.25
+    alpha_yaw_max: 0.85
+
     dy_prior: 0.0
     dyaw_prior: 0.0
+
     use_scan_geometry_gate: true
     geometry_sector_deadzone_deg: 8.0
-    geometry_weight_y: 0.65
-    geometry_weight_yaw: 0.70
+    geometry_weight_y: 0.80
+    geometry_weight_yaw: 0.85
 
     publish_dynamic_covariance: true
     min_cov_x: 0.001
-    min_cov_y: 0.002
-    min_cov_yaw: 0.003
+    min_cov_y: 0.0015
+    min_cov_yaw: 0.0025
     max_cov_x: 0.20
-    max_cov_y: 0.25
-    max_cov_yaw: 0.25
+    max_cov_y: 0.22
+    max_cov_yaw: 0.22
 
     vel_alpha: 0.20
     debug_log_period: 20

@@ -14,35 +14,33 @@ def generate_launch_description():
     nav_pkg = get_package_share_directory('nav_stack_core')
     lslidar_pkg = get_package_share_directory('lslidar_driver')
 
-    default_lidar_odom_params = os.path.join(
-        nav_pkg, 'config', 'm10p_lidar_odom_nav_wheel_heading.yaml'
+    default_rf2o_params = os.path.join(
+        nav_pkg, 'config', 'rf2o_lidar_odom.yaml'
     )
-    default_ekf_params = os.path.join(
-        nav_pkg, 'config', 'ekf_wheel_lidar_wheel_heading.yaml'
-    )
+
     default_xacro = os.path.join(
         nav_pkg, 'description', 'minimal_lidar_robot.xacro'
     )
+
     default_slam = os.path.join(
         nav_pkg, 'config', 'slam_toolbox_online_highres.yaml'
     )
+
     default_nav2 = os.path.join(
         nav_pkg, 'config', 'nav2_params_min.yaml'
     )
+
     default_rviz = os.path.join(
         nav_pkg, 'rviz', 'nav_stack.rviz'
     )
 
     serial_cmd_vel_topic = LaunchConfiguration('serial_cmd_vel_topic')
-    lidar_odom_params_file = LaunchConfiguration('lidar_odom_params_file')
-    ekf_params_file = LaunchConfiguration('ekf_params_file')
+    rf2o_params_file = LaunchConfiguration('rf2o_params_file')
     xacro_path = LaunchConfiguration('xacro_path')
     slam_params_file = LaunchConfiguration('slam_params_file')
     nav2_params_file = LaunchConfiguration('nav2_params_file')
     rviz_config = LaunchConfiguration('rviz_config')
     lidar_serial_port = LaunchConfiguration('lidar_serial_port')
-
-    wheel_odom_use_cmd_vel = LaunchConfiguration('wheel_odom_use_cmd_vel')
 
     wheel_vx_scale = LaunchConfiguration('wheel_vx_scale')
     wheel_vy_scale = LaunchConfiguration('wheel_vy_scale')
@@ -77,9 +75,12 @@ def generate_launch_description():
         ),
         launch_arguments={
             'cmd_vel_topic': serial_cmd_vel_topic,
+
+            # 当前定位不用 wheel odom，但串口驱动可能仍然需要这些参数。
             'wheel_vx_scale': wheel_vx_scale,
             'wheel_vy_scale': wheel_vy_scale,
             'wheel_wz_scale': wheel_wz_scale,
+
             'cmd_vx_scale': cmd_vx_scale,
             'cmd_vy_scale': cmd_vy_scale,
             'cmd_wz_scale': cmd_wz_scale,
@@ -99,55 +100,84 @@ def generate_launch_description():
         }.items()
     )
 
-    # ============================================================
-    # 360-degree LaserScan sector filter
-    #
-    # Input : /scan
-    # Output: /scan_filtered
-    #
-    # Function:
-    #   Keep 360-degree lidar data, but block 0~90 deg sector.
-    #
-    # Important:
-    #   scan_match_odom YAML should use:
-    #     scan_topic: /scan_filtered
-    #     use_angle_filter: false
-    # ============================================================
-    scan_angle_filter_node = Node(
-        package='lidar_scan_filter',
-        executable='scan_angle_filter_node',
-        name='scan_angle_filter_node',
+    front_scan_filter_node = Node(
+        package='nav_stack_core',
+        executable='front_scan_filter.py',
+        name='front_scan_filter',
         output='screen',
         parameters=[{
             'input_topic': '/scan',
-            'output_topic': '/scan_filtered',
+            'output_topic': '/scan_front',
+            'filter_mode': 'block_sector',
+            'block_start_deg': 180.0,
+            'block_end_deg': 280.0,
+            'min_range': 0.18,
+            'max_range': 12.0,
+            'frame_id': '',
 
-            # Block 0~90 degree sector.
-            # If the blocked direction is wrong in RViz,
-            # change this to -90.0~0.0.
-            'block_start_deg': 0.0,
-            'block_end_deg': 90.0,
+            # 你的雷达方向已经是：
+            # 0° 前，90° 左，180° 后，270° 右。
+            # 所以不要反转。
+            'reverse_scan': False,
 
-            'use_inf': True,
+            # 关键：固定输出点数，避免 slam_toolbox 和 RF2O 输入结构跳变。
+            'force_fixed_count': True,
+            'fixed_count': 1324,
+            'fixed_angle_min': -3.141592653589793,
+            'fixed_angle_max': 3.141592653589793,
         }]
     )
 
-    lidar_odom_node = Node(
-        package='lidar_odom_pkg',
-        executable='scan_match_odom',
-        name='scan_match_odom',
+    cmd_vel_mux_node = Node(
+        package='nav_stack_core',
+        executable='cmd_vel_mode_mux.py',
+        name='cmd_vel_mode_mux',
         output='screen',
-        parameters=[lidar_odom_params_file],
+        parameters=[{
+            'manual_topic': '/cmd_vel_manual',
+            'manual_topic_alt': '/red_standard_robot1/cmd_vel',
+
+            'auto_topic': '/cmd_vel_smoothed',
+            'auto_topic_alt': '/cmd_vel',
+
+            'output_topic': serial_cmd_vel_topic,
+            'mode_topic': '/control_mode',
+
+            # 关键：
+            # 先关闭 /chassis_control_mode 订阅。
+            # 你现在这个 topic 很可能不是 std_msgs/String，
+            # 导致 cmd_vel_mode_mux.py 在 rclpy take_message 处崩溃。
+            'chassis_mode_topic': '',
+
+            'chassis_mode_timeout': 1.0,
+            'publish_rate': 20.0,
+            'cmd_timeout': 0.8,
+            'default_mode': 'manual',
+
+            # ROS: linear.x=前进, linear.y=左横移
+            # 你的底盘: vx=横移, vy=前进
+            # 所以这里只交换控制通道。
+            'swap_xy': True,
+            'invert_x': True,
+            'invert_y': False,
+            'invert_z': False,
+
+            'debug_cmd': True,
+            'debug_period': 1.0,
+        }]
     )
 
-    ekf_node = Node(
-        package='robot_localization',
-        executable='ekf_node',
-        name='ekf_filter_node',
+    rf2o_node = Node(
+        package='rf2o_laser_odometry',
+        executable='rf2o_laser_odometry_node',
+        name='rf2o_laser_odometry',
         output='screen',
-        parameters=[ekf_params_file],
+        parameters=[rf2o_params_file],
         remappings=[
-            ('odometry/filtered', '/odometry/filtered')
+            ('/scan', '/scan_front'),
+            ('scan', '/scan_front'),
+            ('/odom', '/odom'),
+            ('odom', '/odom'),
         ],
     )
 
@@ -168,41 +198,6 @@ def generate_launch_description():
         }.items()
     )
 
-    cmd_vel_mux_node = Node(
-        package='nav_stack_core',
-        executable='cmd_vel_mode_mux.py',
-        name='cmd_vel_mode_mux',
-        output='screen',
-        parameters=[{
-            'manual_topic': '/cmd_vel_manual',
-            'manual_topic_alt': '/red_standard_robot1/cmd_vel',
-            'auto_topic': '/cmd_vel',
-            'auto_topic_alt': '/cmd_vel_nav',
-            'output_topic': serial_cmd_vel_topic,
-            'mode_topic': '/control_mode',
-            'publish_rate': 20.0,
-            'cmd_timeout': 0.5,
-            'default_mode': 'manual'
-        }]
-    )
-
-    wheel_twist_odom_node = Node(
-        package='nav_stack_core',
-        executable='wheel_twist_odom.py',
-        name='wheel_twist_odom',
-        output='screen',
-        parameters=[{
-            'input_topic': '/wheel/twist',
-            'odom_topic': '/wheel/odom',
-            'odom_frame': 'odom',
-            'base_frame': 'base_link',
-            'publish_tf': False,
-            'use_cmd_vel_input': wheel_odom_use_cmd_vel,
-            'cmd_vel_topic': serial_cmd_vel_topic,
-            'use_imu_yaw': False,
-        }]
-    )
-
     return LaunchDescription([
         DeclareLaunchArgument(
             'serial_cmd_vel_topic',
@@ -211,15 +206,9 @@ def generate_launch_description():
         ),
 
         DeclareLaunchArgument(
-            'lidar_odom_params_file',
-            default_value=default_lidar_odom_params,
-            description='Path to lidar_odom_pkg parameter file'
-        ),
-
-        DeclareLaunchArgument(
-            'ekf_params_file',
-            default_value=default_ekf_params,
-            description='Path to EKF parameter file'
+            'rf2o_params_file',
+            default_value=default_rf2o_params,
+            description='Path to RF2O parameter file'
         ),
 
         DeclareLaunchArgument(
@@ -250,12 +239,6 @@ def generate_launch_description():
             'lidar_serial_port',
             default_value='/dev/ttyUSB0',
             description='Serial device used by the M10P lidar driver'
-        ),
-
-        DeclareLaunchArgument(
-            'wheel_odom_use_cmd_vel',
-            default_value='false',
-            description='Use real /wheel/twist feedback for wheel odom'
         ),
 
         DeclareLaunchArgument(
@@ -291,13 +274,8 @@ def generate_launch_description():
         robot_state_publisher_node,
         serial_driver_launch,
         lidar_launch,
-
-        # /scan -> /scan_filtered
-        scan_angle_filter_node,
-
-        wheel_twist_odom_node,
+        front_scan_filter_node,
         cmd_vel_mux_node,
-        lidar_odom_node,
-        ekf_node,
+        rf2o_node,
         nav_with_slam_launch,
     ])

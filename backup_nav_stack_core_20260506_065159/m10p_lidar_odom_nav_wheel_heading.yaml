@@ -1,0 +1,104 @@
+scan_match_odom:
+  ros__parameters:
+    use_sim_time: false
+
+    # front_scan_filter:
+    # /scan -> /scan_front
+    # /scan_front keeps original scan geometry but blocks 180~280 deg.
+    scan_topic: /scan_front
+
+    odom_topic: /lidar/odom
+    diagnostics_topic: /lidar/odom_debug
+    odom_frame: odom
+    base_frame: base_link
+    publish_tf: false
+
+    min_range: 0.18
+    max_range: 12.0
+    downsample_step: 2
+
+    # Do not crop again inside scan_match_odom.
+    use_angle_filter: false
+    angle_windows_deg: [-180.0, 180.0]
+
+    # Match nav_stack_core/description/minimal_lidar_robot.xacro.
+    scan_yaw_offset_deg: 0.0
+    scan_x_offset: 0.10
+    scan_y_offset: 0.0
+    invert_scan_x: false
+    invert_scan_y: false
+
+    icp_max_iterations: 24
+    icp_max_corr_dist: 0.18
+    icp_trim_ratio: 0.75
+    icp_converge_trans: 0.0002
+    icp_converge_rot: 0.0003
+    min_correspondences: 80
+    reject_mean_err_above: 0.08
+
+    min_motion_trans: 0.0025
+    min_motion_rot: 0.0035
+    static_lock_trans: 0.0035
+    static_lock_rot: 0.0045
+    reject_trans_above: 0.18
+    reject_rot_above: 0.22
+    max_dt: 0.40
+
+    use_kalman_predict: true
+    use_kalman_update: true
+    kalman_q_pos: 0.004
+    kalman_q_yaw: 0.003
+    kalman_q_vel: 0.10
+    kalman_q_wz: 0.08
+
+    kalman_r_x: 0.035
+    kalman_r_y: 0.055
+    kalman_r_yaw: 0.085
+    velocity_feedback_alpha: 0.35
+
+    # wheel_heading version:
+    # Keep external twist prior disabled first because /wheel/odom timestamp
+    # still has non-monotonic / large-dt warnings in your logs.
+    use_external_twist_prior: false
+    prior_source: internal
+    external_odom_topic: /wheel/odom
+    external_imu_topic: /imu/data
+    external_cmd_vel_topic: /cmd_vel_selected
+    external_twist_timeout: 1.50
+    external_prior_weight: 0.60
+
+    use_scan_deskew: false
+    deskew_center_scan: true
+    deskew_max_time: 0.12
+
+    use_adaptive_constraint: true
+    sigma_ref_x: 0.020
+    sigma_ref_y: 0.020
+    sigma_ref_yaw: 0.025
+
+    alpha_x_min: 0.75
+    alpha_x_max: 1.00
+    alpha_y_min: 0.25
+    alpha_y_max: 0.85
+    alpha_yaw_min: 0.25
+    alpha_yaw_max: 0.85
+
+    dy_prior: 0.0
+    dyaw_prior: 0.0
+
+    use_scan_geometry_gate: true
+    geometry_sector_deadzone_deg: 8.0
+    geometry_weight_y: 0.80
+    geometry_weight_yaw: 0.85
+
+    publish_dynamic_covariance: true
+    min_cov_x: 0.001
+    min_cov_y: 0.0015
+    min_cov_yaw: 0.0025
+    max_cov_x: 0.20
+    max_cov_y: 0.22
+    max_cov_yaw: 0.22
+
+    vel_alpha: 0.20
+    debug_log_period: 20
+    publish_debug: true

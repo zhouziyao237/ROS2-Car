@@ -1,0 +1,29 @@
+slam_toolbox:
+  ros__parameters:
+    solver_plugin: solver_plugins::CeresSolver
+    mode: mapping
+
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_link
+    scan_topic: /scan_front
+
+    use_map_saver: true
+    debug_logging: false
+    use_scan_matching: true
+    # Front-only scans can bias scan barycenter alignment during pure rotation.
+    use_scan_barycenter: false
+
+    throttle_scans: 1
+    minimum_time_interval: 0.0
+    # Build a denser map by accepting smaller pose changes between updates.
+    minimum_travel_distance: 0.01
+    minimum_travel_heading: 0.015
+
+    transform_publish_period: 0.02
+    map_update_interval: 0.15
+    resolution: 0.03
+    min_laser_range: 0.2
+    max_laser_range: 12.0
+    scan_queue_size: 20
+    restamp_tf: true
