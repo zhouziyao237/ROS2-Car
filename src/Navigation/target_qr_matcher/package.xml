@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>target_qr_matcher</name>
+  <version>0.0.1</version>
+  <description>QR code matcher compatible with old target matcher detection topic.</description>
+  <maintainer email="zzy@example.com">zzy</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>cv_bridge</depend>
+  <depend>yolo_msg</depend>
+
+  <exec_depend>python3-opencv</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

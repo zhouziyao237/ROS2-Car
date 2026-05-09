@@ -77,6 +77,8 @@ def generate_launch_description():
                         'goal_topic': '/goal_pose',
                         'action_name': '/navigate_to_pose',
                         'marker_topic': '/goal_markers',
+                        'clear_topic': '/clear_goal',
+                        'stop_topic': '/cmd_vel_selected',
                         'cancel_previous_goal': True,
                     }],
                 ),

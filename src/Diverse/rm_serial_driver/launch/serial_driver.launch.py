@@ -19,17 +19,57 @@ def generate_launch_description():
         default_value='/cmd_vel_selected',
         description='Final selected cmd_vel topic subscribed by serial driver'
     )
-    wheel_vx_scale_arg = DeclareLaunchArgument('wheel_vx_scale', default_value='1.0')
-    wheel_vy_scale_arg = DeclareLaunchArgument('wheel_vy_scale', default_value='1.0')
-    wheel_wz_scale_arg = DeclareLaunchArgument('wheel_wz_scale', default_value='1.0')
-    cmd_vx_scale_arg = DeclareLaunchArgument('cmd_vx_scale', default_value='1.0')
-    cmd_vy_scale_arg = DeclareLaunchArgument('cmd_vy_scale', default_value='1.0')
-    cmd_wz_scale_arg = DeclareLaunchArgument('cmd_wz_scale', default_value='1.0')
+
+    wheel_vx_scale_arg = DeclareLaunchArgument(
+        'wheel_vx_scale',
+        default_value='1.0'
+    )
+
+    wheel_vy_scale_arg = DeclareLaunchArgument(
+        'wheel_vy_scale',
+        default_value='1.0'
+    )
+
+    wheel_wz_scale_arg = DeclareLaunchArgument(
+        'wheel_wz_scale',
+        default_value='1.0'
+    )
+
+    cmd_vx_scale_arg = DeclareLaunchArgument(
+        'cmd_vx_scale',
+        default_value='1.0'
+    )
+
+    cmd_vy_scale_arg = DeclareLaunchArgument(
+        'cmd_vy_scale',
+        default_value='1.0'
+    )
+
+    cmd_wz_scale_arg = DeclareLaunchArgument(
+        'cmd_wz_scale',
+        default_value='1.0'
+    )
+
+    # 关键：多久没收到新的 cmd_vel 后强制清零，单位秒
+    nav_cmd_timeout_arg = DeclareLaunchArgument(
+        'nav_cmd_timeout',
+        default_value='0.10',
+        description='Timeout in seconds before serial driver forces nav cmd to zero'
+    )
+
+    # 关键：串口持续发送底盘控制包的频率
+    nav_cmd_send_rate_arg = DeclareLaunchArgument(
+        'nav_cmd_send_rate',
+        default_value='50.0',
+        description='Rate in Hz for periodically sending cached nav cmd to lower controller'
+    )
+
     platform_target_topic_arg = DeclareLaunchArgument(
         'platform_target_topic',
         default_value='/platform/target',
         description='Platform target topic subscribed by serial driver'
     )
+
     platform_current_status_topic_arg = DeclareLaunchArgument(
         'platform_current_status_topic',
         default_value='/platform/current_status',
@@ -42,16 +82,25 @@ def generate_launch_description():
         namespace='',
         output='screen',
         emulate_tty=True,
-        parameters=[config, {
-            'wheel_vx_scale': LaunchConfiguration('wheel_vx_scale'),
-            'wheel_vy_scale': LaunchConfiguration('wheel_vy_scale'),
-            'wheel_wz_scale': LaunchConfiguration('wheel_wz_scale'),
-            'cmd_vx_scale': LaunchConfiguration('cmd_vx_scale'),
-            'cmd_vy_scale': LaunchConfiguration('cmd_vy_scale'),
-            'cmd_wz_scale': LaunchConfiguration('cmd_wz_scale'),
-            'platform_target_topic': LaunchConfiguration('platform_target_topic'),
-            'platform_current_status_topic': LaunchConfiguration('platform_current_status_topic'),
-        }],
+        parameters=[
+            config,
+            {
+                'wheel_vx_scale': LaunchConfiguration('wheel_vx_scale'),
+                'wheel_vy_scale': LaunchConfiguration('wheel_vy_scale'),
+                'wheel_wz_scale': LaunchConfiguration('wheel_wz_scale'),
+
+                'cmd_vx_scale': LaunchConfiguration('cmd_vx_scale'),
+                'cmd_vy_scale': LaunchConfiguration('cmd_vy_scale'),
+                'cmd_wz_scale': LaunchConfiguration('cmd_wz_scale'),
+
+                # 新增：给 rm_serial_driver.cpp 使用
+                'nav_cmd_timeout': LaunchConfiguration('nav_cmd_timeout'),
+                'nav_cmd_send_rate': LaunchConfiguration('nav_cmd_send_rate'),
+
+                'platform_target_topic': LaunchConfiguration('platform_target_topic'),
+                'platform_current_status_topic': LaunchConfiguration('platform_current_status_topic'),
+            }
+        ],
         remappings=[
             ('cmd_vel', LaunchConfiguration('cmd_vel_topic')),
             ('/red_standard_robot1/cmd_vel', LaunchConfiguration('cmd_vel_topic')),
@@ -60,13 +109,20 @@ def generate_launch_description():
 
     return LaunchDescription([
         cmd_vel_topic_arg,
+
         wheel_vx_scale_arg,
         wheel_vy_scale_arg,
         wheel_wz_scale_arg,
+
         cmd_vx_scale_arg,
         cmd_vy_scale_arg,
         cmd_wz_scale_arg,
+
+        nav_cmd_timeout_arg,
+        nav_cmd_send_rate_arg,
+
         platform_target_topic_arg,
         platform_current_status_topic_arg,
+
         rm_serial_driver_node,
     ])

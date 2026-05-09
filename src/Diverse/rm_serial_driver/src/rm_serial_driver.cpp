@@ -18,6 +18,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -74,6 +75,8 @@ RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions & options)
   cmd_vx_scale_ = this->declare_parameter("cmd_vx_scale", 1.0);
   cmd_vy_scale_ = this->declare_parameter("cmd_vy_scale", 1.0);
   cmd_wz_scale_ = this->declare_parameter("cmd_wz_scale", 1.0);
+  nav_cmd_timeout_ = this->declare_parameter("nav_cmd_timeout", 0.10);
+  nav_cmd_send_rate_ = this->declare_parameter("nav_cmd_send_rate", 50.0);
   chassis_manual_mode_value_ = this->declare_parameter("chassis_manual_mode_value", 1);
   platform_target_topic_ =
     this->declare_parameter("platform_target_topic", std::string("/platform/target"));
@@ -102,7 +105,12 @@ RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions & options)
 
   nav_cmd_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
     "cmd_vel", 10,
-    std::bind(&RMSerialDriver::sendNavigationCmd, this, std::placeholders::_1));
+    std::bind(&RMSerialDriver::cacheNavigationCmd, this, std::placeholders::_1));
+
+  const double nav_period = 1.0 / std::max(1.0, nav_cmd_send_rate_);
+  nav_cmd_timer_ = this->create_wall_timer(
+    std::chrono::duration<double>(nav_period),
+    std::bind(&RMSerialDriver::sendNavigationCmdTimer, this));
   platform_target_sub_ = this->create_subscription<auto_aim_interfaces::msg::PlatformTarget>(
     platform_target_topic_, 10,
     std::bind(&RMSerialDriver::sendPlatformTarget, this, std::placeholders::_1));
@@ -467,7 +475,55 @@ void RMSerialDriver::sendData(const auto_aim_interfaces::msg::Target::SharedPtr 
   }
 }
 
-void RMSerialDriver::sendNavigationCmd(const geometry_msgs::msg::Twist::SharedPtr msg)
+void RMSerialDriver::cacheNavigationCmd(const geometry_msgs::msg::Twist::SharedPtr msg)
+{
+  std::lock_guard<std::mutex> lock(nav_cmd_mutex_);
+
+  // Important: zero command is also a valid command.
+  // Do not drop it, otherwise the lower controller may keep the last non-zero command.
+  latest_nav_vx_ = static_cast<float>(msg->linear.x * cmd_vx_scale_);
+  latest_nav_vy_ = static_cast<float>(msg->linear.y * cmd_vy_scale_);
+  latest_nav_wz_ = static_cast<float>(msg->angular.z * cmd_wz_scale_);
+  last_nav_cmd_time_ = this->now();
+  has_nav_cmd_ = true;
+
+  RCLCPP_DEBUG_THROTTLE(
+    get_logger(), *get_clock(), 500,
+    "[Cache cmd_vel] raw(vx:%.3f, vy:%.3f, wz:%.3f) cached(vx:%.3f, vy:%.3f, wz:%.3f)",
+    msg->linear.x, msg->linear.y, msg->angular.z,
+    latest_nav_vx_, latest_nav_vy_, latest_nav_wz_);
+}
+
+void RMSerialDriver::sendNavigationCmdTimer()
+{
+  float vx = 0.0F;
+  float vy = 0.0F;
+  float wz = 0.0F;
+
+  {
+    std::lock_guard<std::mutex> lock(nav_cmd_mutex_);
+
+    const double dt = has_nav_cmd_ ? (this->now() - last_nav_cmd_time_).seconds() : 1e9;
+
+    if (has_nav_cmd_ && dt <= nav_cmd_timeout_) {
+      vx = latest_nav_vx_;
+      vy = latest_nav_vy_;
+      wz = latest_nav_wz_;
+    } else {
+      // Timeout safety: keep sending zero so the lower board cannot hold the last command.
+      latest_nav_vx_ = 0.0F;
+      latest_nav_vy_ = 0.0F;
+      latest_nav_wz_ = 0.0F;
+      vx = 0.0F;
+      vy = 0.0F;
+      wz = 0.0F;
+    }
+  }
+
+  sendNavigationPacket(vx, vy, wz);
+}
+
+void RMSerialDriver::sendNavigationPacket(float vx, float vy, float wz)
 {
   try {
     NavigationPacket packet{};
@@ -475,18 +531,17 @@ void RMSerialDriver::sendNavigationCmd(const geometry_msgs::msg::Twist::SharedPt
     packet.header.cmd_id = 0x0405;
     crc8::Append_CRC8_Check_Sum(reinterpret_cast<uint8_t *>(&packet.header), sizeof(Header) - 2);
 
-    packet.vx = static_cast<float>(msg->linear.x * cmd_vx_scale_);
-    packet.vy = static_cast<float>(msg->linear.y * cmd_vy_scale_);
-    packet.wz = static_cast<float>(msg->angular.z * cmd_wz_scale_);
+    packet.vx = vx;
+    packet.vy = vy;
+    packet.wz = wz;
 
     crc16::Append_CRC16_Check_Sum(reinterpret_cast<uint8_t *>(&packet), sizeof(packet));
     serial_driver_->port()->send(packetToVector(packet));
 
-    RCLCPP_DEBUG_THROTTLE(
-      get_logger(), *get_clock(), 1000,
-      "[Send cmd_vel] raw(vx:%.2f, vy:%.2f, wz:%.2f) scaled(vx:%.2f, vy:%.2f, wz:%.2f)",
-      msg->linear.x, msg->linear.y, msg->angular.z,
-      packet.vx, packet.vy, packet.wz);
+    RCLCPP_INFO_THROTTLE(
+      get_logger(), *get_clock(), 500,
+      "[Send nav packet] vx=%.3f vy=%.3f wz=%.3f",
+      vx, vy, wz);
   } catch (const std::exception & ex) {
     RCLCPP_ERROR(get_logger(), "Failed to send navigation command: %s", ex.what());
     reopenPort();

@@ -1,311 +1,223 @@
 #!/usr/bin/env python3
-import os
-import select
 import sys
+import time
 import termios
 import tty
+import select
 
 import rclpy
-from geometry_msgs.msg import Twist
 from rclpy.node import Node
-
+from geometry_msgs.msg import Twist
 from auto_aim_interfaces.msg import PlatformTarget
 
-# Chassis motion mapping, normalized values.
-KEY_ACTION = {
-    'w': (1.0, 0.0, 0.0),
-    's': (-1.0, 0.0, 0.0),
-    'a': (0.0, 1.0, 0.0),
-    'd': (0.0, -1.0, 0.0),
-    'q': (0.0, 0.0, 1.0),
-    'e': (0.0, 0.0, -1.0),
-    'o': (0.0, 0.0, 0.0),
-    ' ': (0.0, 0.0, 0.0),
-}
 
-SPEED_UP_KEY = '+'
-SPEED_DOWN_KEY = '-'
-TURN_UP_KEY = '\x1b[A'
-TURN_DOWN_KEY = '\x1b[B'
+HELP = """
+================ Keyboard Teleop ================
 
-LIFT_UP_KEY = 'r'
-LIFT_DOWN_KEY = 'f'
-SLIDE_OUT_KEY = 't'
-SLIDE_IN_KEY = 'g'
-SCREW_OUT_KEY = 'y'
-SCREW_IN_KEY = 'h'
-PLATFORM_RESET_KEY = 'p'
+Chassis:
+  W/S : forward / backward
+  A/D : left / right
+  Q/E : rotate left / right
+  O or SPACE : stop chassis
 
-HELP_MSG = """
-========================================
-   Keyboard Teleop with Platform Control
-========================================
-Chassis Movement:
-   W : forward      Q : rotate left
-   S : backward     E : rotate right
-   A : left move    O / SPACE : emergency stop
-   D : right move
+Platform:
+  R/F : lift up / down
+  T/G : slide forward / backward
+  Y/H : screw extend / retract
+  P   : reset platform target to zero
 
-Chassis Speed:
-   + / - : increase / decrease linear speed
-   Up / Down Arrow : increase / decrease angular speed
+Other:
+  I   : print current platform target
+  ?   : print this help
+  CTRL-C : quit
 
-Platform Position:
-   R / F : lift up / down
-   T / G : slide out / in
-   Y / H : screw out / in
-   P     : reset platform target to zero
-
-Press CTRL-C to quit
-========================================
+=================================================
 """
 
 
 class KeyboardTeleop(Node):
     def __init__(self):
-        super().__init__('keyboard_teleop_node')
+        super().__init__('keyboard_teleop')
+
+        self.declare_parameter('cmd_vel_topic', '/cmd_vel_selected')
+        self.declare_parameter('platform_target_topic', '/platform/target')
 
         self.declare_parameter('speed', 0.5)
         self.declare_parameter('turn', 1.0)
-        self.declare_parameter('cmd_vel_topic', '/red_standard_robot1/cmd_vel')
-        self.declare_parameter('platform_target_topic', '/platform/target')
-        self.declare_parameter('speed_step', 0.1)
-        self.declare_parameter('turn_step', 0.2)
-        self.declare_parameter('lift_step_mm', 10.0)
+
+        self.declare_parameter('lift_step_mm', 20.0)
         self.declare_parameter('slide_step_mm', 10.0)
-        self.declare_parameter('screw_step_mm', 10.0)
-        self.declare_parameter('lift_min_mm', -100000.0)
-        self.declare_parameter('lift_max_mm', 100000.0)
-        self.declare_parameter('slide_min_mm', -100000.0)
-        self.declare_parameter('slide_max_mm', 100000.0)
-        self.declare_parameter('screw_min_mm', -100000.0)
-        self.declare_parameter('screw_max_mm', 100000.0)
-        self.declare_parameter('platform_frame_id', 'base_link')
-        self.declare_parameter('publish_period_sec', 0.1)
+        self.declare_parameter('screw_step_mm', 5.0)
+
+        self.declare_parameter('help_print_interval_sec', 8.0)
+
+        self.cmd_vel_topic = self.get_parameter('cmd_vel_topic').value
+        self.platform_target_topic = self.get_parameter('platform_target_topic').value
 
         self.speed = float(self.get_parameter('speed').value)
         self.turn = float(self.get_parameter('turn').value)
-        self.cmd_vel_topic = str(self.get_parameter('cmd_vel_topic').value)
-        self.platform_target_topic = str(self.get_parameter('platform_target_topic').value)
-        self.speed_step = float(self.get_parameter('speed_step').value)
-        self.turn_step = float(self.get_parameter('turn_step').value)
+
         self.lift_step_mm = float(self.get_parameter('lift_step_mm').value)
         self.slide_step_mm = float(self.get_parameter('slide_step_mm').value)
         self.screw_step_mm = float(self.get_parameter('screw_step_mm').value)
-        self.lift_min_mm = float(self.get_parameter('lift_min_mm').value)
-        self.lift_max_mm = float(self.get_parameter('lift_max_mm').value)
-        self.slide_min_mm = float(self.get_parameter('slide_min_mm').value)
-        self.slide_max_mm = float(self.get_parameter('slide_max_mm').value)
-        self.screw_min_mm = float(self.get_parameter('screw_min_mm').value)
-        self.screw_max_mm = float(self.get_parameter('screw_max_mm').value)
-        self.platform_frame_id = str(self.get_parameter('platform_frame_id').value)
-        self.publish_period_sec = float(self.get_parameter('publish_period_sec').value)
 
-        self.publisher = self.create_publisher(Twist, self.cmd_vel_topic, 10)
-        self.platform_publisher = self.create_publisher(
-            PlatformTarget, self.platform_target_topic, 10)
+        self.help_print_interval_sec = float(
+            self.get_parameter('help_print_interval_sec').value
+        )
 
-        self.key_file = None
-        self.key_fd = None
-        try:
-            self.key_file = open('/dev/tty', 'rb', buffering=0)
-            self.key_fd = self.key_file.fileno()
-            self.settings = termios.tcgetattr(self.key_fd)
-            self.get_logger().info("Keyboard input source: /dev/tty")
-        except Exception:
-            if sys.stdin.isatty():
-                self.key_fd = sys.stdin.fileno()
-                self.settings = termios.tcgetattr(self.key_fd)
-                self.get_logger().info("Keyboard input source: stdin")
-            else:
-                raise RuntimeError(
-                    "No interactive TTY found. Please run from an interactive terminal."
-                )
-
-        self.linear_x = 0.0
-        self.linear_y = 0.0
-        self.angular_z = 0.0
+        self.cmd_pub = self.create_publisher(Twist, self.cmd_vel_topic, 10)
+        self.platform_pub = self.create_publisher(
+            PlatformTarget,
+            self.platform_target_topic,
+            10
+        )
 
         self.target_lift_z_mm = 0.0
         self.target_slide_x_mm = 0.0
         self.target_screw_x_mm = 0.0
 
-        self.get_logger().info(f"Publishing cmd_vel to '{self.cmd_vel_topic}'")
+        self.last_help_print_time = 0.0
+
+        print(HELP)
+        self.get_logger().info(f'cmd_vel_topic={self.cmd_vel_topic}')
+        self.get_logger().info(f'platform_target_topic={self.platform_target_topic}')
         self.get_logger().info(
-            f"Publishing platform target to '{self.platform_target_topic}'")
-        self.update_status_display()
-        print(HELP_MSG)
-
-        self.timer = self.create_timer(self.publish_period_sec, self.publish_outputs)
-
-    def clamp(self, value, min_value, max_value):
-        return max(min_value, min(max_value, value))
-
-    def update_status_display(self):
-        self.get_logger().info(
-            "Current speeds - linear: %.2f m/s, angular: %.2f rad/s | "
-            "Platform target - lift: %.1f mm, slide: %.1f mm, screw: %.1f mm" % (
-                self.speed, self.turn,
-                self.target_lift_z_mm, self.target_slide_x_mm, self.target_screw_x_mm
-            )
+            f'steps: lift={self.lift_step_mm} mm, '
+            f'slide={self.slide_step_mm} mm, '
+            f'screw={self.screw_step_mm} mm'
         )
 
     def get_key(self):
-        tty.setraw(self.key_fd)
-        rlist, _, _ = select.select([self.key_fd], [], [], 0.1)
-        if rlist:
-            key = os.read(self.key_fd, 1).decode(errors='ignore')
-            if key == '\x1b':
-                seq = key
-                for _ in range(2):
-                    rlist, _, _ = select.select([self.key_fd], [], [], 0.01)
-                    if rlist:
-                        seq += os.read(self.key_fd, 1).decode(errors='ignore')
-                key = seq
-        else:
-            key = ''
-        termios.tcsetattr(self.key_fd, termios.TCSADRAIN, self.settings)
-        return key
+        dr, _, _ = select.select([sys.stdin], [], [], 0.1)
+        if dr:
+            return sys.stdin.read(1)
+        return ''
 
-    def publish_outputs(self):
-        twist = Twist()
-        twist.linear.x = self.linear_x * self.speed
-        twist.linear.y = self.linear_y * self.speed
-        twist.angular.z = self.angular_z * self.turn
-        self.publisher.publish(twist)
+    def print_target(self):
+        self.get_logger().info(
+            f'current platform target: '
+            f'lift={self.target_lift_z_mm:.1f} mm, '
+            f'slide={self.target_slide_x_mm:.1f} mm, '
+            f'screw={self.target_screw_x_mm:.1f} mm'
+        )
 
-        platform_msg = PlatformTarget()
-        platform_msg.header.stamp = self.get_clock().now().to_msg()
-        platform_msg.header.frame_id = self.platform_frame_id
-        platform_msg.target_lift_z_mm = float(self.target_lift_z_mm)
-        platform_msg.target_slide_x_mm = float(self.target_slide_x_mm)
-        platform_msg.target_screw_x_mm = float(self.target_screw_x_mm)
-        self.platform_publisher.publish(platform_msg)
+    def publish_platform(self):
+        msg = PlatformTarget()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.target_lift_z_mm = float(self.target_lift_z_mm)
+        msg.target_slide_x_mm = float(self.target_slide_x_mm)
+        msg.target_screw_x_mm = float(self.target_screw_x_mm)
 
-    def handle_action_key(self, key):
-        if key in KEY_ACTION:
-            lx, ly, az = KEY_ACTION[key]
-            self.linear_x = lx
-            self.linear_y = ly
-            self.angular_z = az
+        self.platform_pub.publish(msg)
+        self.print_target()
 
-            if key in ('o', ' '):
-                self.get_logger().warn("EMERGENCY STOP (O/SPACE pressed)")
-            else:
-                self.get_logger().info(
-                    f"Move: linear.x={self.linear_x * self.speed:.2f}, "
-                    f"linear.y={self.linear_y * self.speed:.2f}, "
-                    f"angular.z={self.angular_z * self.turn:.2f}"
-                )
-            return True
-        return False
+    def publish_twist(self, vx=0.0, vy=0.0, wz=0.0):
+        msg = Twist()
+        msg.linear.x = float(vx)
+        msg.linear.y = float(vy)
+        msg.angular.z = float(wz)
+        self.cmd_pub.publish(msg)
 
-    def handle_speed_key(self, key):
-        updated = False
-        if key == SPEED_UP_KEY:
-            self.speed += self.speed_step
-            updated = True
-        elif key == SPEED_DOWN_KEY:
-            self.speed = max(0.0, self.speed - self.speed_step)
-            updated = True
-        elif key == TURN_UP_KEY:
-            self.turn += self.turn_step
-            updated = True
-        elif key == TURN_DOWN_KEY:
-            self.turn = max(0.0, self.turn - self.turn_step)
-            updated = True
+        self.get_logger().info(
+            f'cmd_vel: vx={vx:.2f}, vy={vy:.2f}, wz={wz:.2f}'
+        )
 
-        if updated:
-            self.update_status_display()
-        return updated
+    def maybe_print_help(self):
+        now = time.time()
+        if now - self.last_help_print_time >= self.help_print_interval_sec:
+            print(HELP)
+            self.last_help_print_time = now
 
-    def handle_platform_key(self, key):
-        updated = False
+    def run(self):
+        old_attr = termios.tcgetattr(sys.stdin)
+        tty.setcbreak(sys.stdin.fileno())
 
-        if key == LIFT_UP_KEY:
-            self.target_lift_z_mm = self.clamp(
-                self.target_lift_z_mm + self.lift_step_mm, self.lift_min_mm, self.lift_max_mm)
-            updated = True
-        elif key == LIFT_DOWN_KEY:
-            self.target_lift_z_mm = self.clamp(
-                self.target_lift_z_mm - self.lift_step_mm, self.lift_min_mm, self.lift_max_mm)
-            updated = True
-        elif key == SLIDE_OUT_KEY:
-            self.target_slide_x_mm = self.clamp(
-                self.target_slide_x_mm + self.slide_step_mm, self.slide_min_mm, self.slide_max_mm)
-            updated = True
-        elif key == SLIDE_IN_KEY:
-            self.target_slide_x_mm = self.clamp(
-                self.target_slide_x_mm - self.slide_step_mm, self.slide_min_mm, self.slide_max_mm)
-            updated = True
-        elif key == SCREW_OUT_KEY:
-            self.target_screw_x_mm = self.clamp(
-                self.target_screw_x_mm + self.screw_step_mm, self.screw_min_mm, self.screw_max_mm)
-            updated = True
-        elif key == SCREW_IN_KEY:
-            self.target_screw_x_mm = self.clamp(
-                self.target_screw_x_mm - self.screw_step_mm, self.screw_min_mm, self.screw_max_mm)
-            updated = True
-        elif key == PLATFORM_RESET_KEY:
-            self.target_lift_z_mm = 0.0
-            self.target_slide_x_mm = 0.0
-            self.target_screw_x_mm = 0.0
-            updated = True
-
-        if updated:
-            self.get_logger().info(
-                "Platform target updated: lift=%.1f mm, slide=%.1f mm, screw=%.1f mm" % (
-                    self.target_lift_z_mm,
-                    self.target_slide_x_mm,
-                    self.target_screw_x_mm,
-                )
-            )
-            return True
-        return False
-
-    def spin(self):
         try:
             while rclpy.ok():
+                rclpy.spin_once(self, timeout_sec=0.0)
+
+                self.maybe_print_help()
+
                 key = self.get_key()
                 if not key:
-                    rclpy.spin_once(self, timeout_sec=0.01)
                     continue
 
-                if self.handle_action_key(key):
-                    pass
-                elif self.handle_speed_key(key):
-                    pass
-                elif self.handle_platform_key(key):
-                    pass
-                elif key == '\x03':
+                key = key.lower()
+
+                if key == '\x03':
                     break
 
-                rclpy.spin_once(self, timeout_sec=0.01)
+                # Chassis
+                if key == 'w':
+                    self.publish_twist(vx=self.speed)
+                elif key == 's':
+                    self.publish_twist(vx=-self.speed)
+                elif key == 'a':
+                    self.publish_twist(vy=self.speed)
+                elif key == 'd':
+                    self.publish_twist(vy=-self.speed)
+                elif key == 'q':
+                    self.publish_twist(wz=self.turn)
+                elif key == 'e':
+                    self.publish_twist(wz=-self.turn)
+                elif key == 'o' or key == ' ':
+                    self.publish_twist(0.0, 0.0, 0.0)
 
-        except Exception as e:
-            self.get_logger().error(f"Unexpected error: {e}")
+                # Platform incremental target control
+                elif key == 'r':
+                    self.target_lift_z_mm += self.lift_step_mm
+                    self.publish_platform()
+                elif key == 'f':
+                    self.target_lift_z_mm -= self.lift_step_mm
+                    self.publish_platform()
+
+                elif key == 't':
+                    self.target_slide_x_mm += self.slide_step_mm
+                    self.publish_platform()
+                elif key == 'g':
+                    self.target_slide_x_mm -= self.slide_step_mm
+                    self.publish_platform()
+
+                elif key == 'y':
+                    self.target_screw_x_mm += self.screw_step_mm
+                    self.publish_platform()
+                elif key == 'h':
+                    self.target_screw_x_mm -= self.screw_step_mm
+                    self.publish_platform()
+
+                elif key == 'p':
+                    self.target_lift_z_mm = 0.0
+                    self.target_slide_x_mm = 0.0
+                    self.target_screw_x_mm = 0.0
+                    self.publish_platform()
+
+                elif key == 'i':
+                    self.print_target()
+
+                elif key == '?':
+                    print(HELP)
+                    self.last_help_print_time = time.time()
+
+                else:
+                    print(HELP)
+                    self.last_help_print_time = time.time()
+
         finally:
-            twist = Twist()
-            self.publisher.publish(twist)
-
-            platform_msg = PlatformTarget()
-            platform_msg.header.stamp = self.get_clock().now().to_msg()
-            platform_msg.header.frame_id = self.platform_frame_id
-            self.platform_publisher.publish(platform_msg)
-
-            if self.key_fd is not None:
-                termios.tcsetattr(self.key_fd, termios.TCSADRAIN, self.settings)
-            if self.key_file is not None:
-                self.key_file.close()
-            self.get_logger().info("Keyboard Teleop Node stopped.")
+            self.publish_twist(0.0, 0.0, 0.0)
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_attr)
 
 
 def main(args=None):
     rclpy.init(args=args)
     node = KeyboardTeleop()
-    node.spin()
-    node.destroy_node()
-    rclpy.shutdown()
+
+    try:
+        node.run()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
 
 
 if __name__ == '__main__':

@@ -1,0 +1,37 @@
+auto_decision_node:
+  ros__parameters:
+    auto_start: true
+    target_pose_topic: /target_pose_base
+    state_topic: /target_auto_decision/state
+    ready_topic: /target_auto_decision/ready_to_grab
+
+    cmd_vel_topic: /cmd_vel
+    lift_delta_topic: /lift/target_delta_mm
+    lift_target_topic: /lift/target_height_mm
+    lift_current_topic: /lift/current_height_mm
+    pusher_topic: /pusher/target_extend_mm
+
+    use_omni_lateral: false
+    desired_x_mm: 350.0
+    target_y_tolerance_mm: 25.0
+    target_z_tolerance_mm: 35.0
+    target_x_tolerance_mm: 40.0
+    stable_required_count: 8
+    target_timeout_sec: 0.60
+
+    search_angular_z: 0.18
+    max_linear_x: 0.10
+    max_linear_y: 0.08
+    max_angular_z: 0.35
+    k_x: 0.00035
+    k_y_linear: 0.00045
+    k_y_yaw: 0.00120
+
+    enable_lift_control: true
+    lift_deadband_mm: 20.0
+    lift_delta_limit_mm: 80.0
+
+    pusher_extend_mm: 120.0
+    push_hold_sec: 1.0
+    stop_after_done: true
+    debug_log: true

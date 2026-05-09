@@ -1,0 +1,43 @@
+qr_chassis_align_node:
+  ros__parameters:
+    target_pose_topic: /target_pose_base
+
+    # 正式接 nav_stack_core 时，必须输出到 /cmd_vel_manual
+    # 不要直接输出 /cmd_vel_selected
+    output_cmd_topic: /cmd_vel_manual
+
+    enable_topic: /qr_chassis_align/enable
+    debug_topic: /qr_chassis_align/debug
+
+    enable_align_on_start: false
+    control_rate_hz: 30.0
+    target_timeout_sec: 0.20
+
+    # 当前 target_pose_base 中：
+    # point.y 是画面 X 偏移，左+右-
+    distance_axis: "y"
+    desired_distance_mm: 0.0
+    deadband_distance_mm: 70.0
+
+    # 输出 ROS 坐标 linear.x
+    # 后面交给 cmd_vel_mode_mux.py 做 swap_xy + invert_x
+    forward_cmd_field: "linear.x"
+    forward_direction: 1.0
+    kp_distance: 0.00030
+    max_forward_speed: 0.10
+
+    # 先不启用第二轴，避免两个方向一起动
+    enable_side_control: false
+    side_axis: "x"
+    side_cmd_field: "none"
+    side_direction: 1.0
+    desired_side_mm: 0.0
+    deadband_side_mm: 60.0
+    kp_side: 0.00015
+    max_side_speed: 0.05
+
+    filter_window: 3
+    max_jump_distance_mm: 800.0
+    max_jump_side_mm: 800.0
+
+    verbose: true

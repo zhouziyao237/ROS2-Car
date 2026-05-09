@@ -1,0 +1,23 @@
+target_auto_decision_node:
+  ros__parameters:
+    target_pose_topic: /target_pose_base
+    state_topic: /target_auto_decision/state
+    cmd_vel_topic: /cmd_vel
+    lift_delta_topic: /lift/target_delta_mm
+    lift_height_topic: /lift/target_height_mm
+    pusher_extend_topic: /pusher/target_extend_mm
+    ready_topic: /target_auto_decision/ready_to_grab
+
+    desired_x_mm: 450.0
+    x_tolerance_mm: 80.0
+    y_tolerance_mm: 35.0
+    z_tolerance_mm: 35.0
+
+    max_linear_x: 0.15
+    max_linear_y: 0.10
+    max_angular_z: 0.25
+
+    lift_kp: 0.8
+    max_lift_delta_mm: 40.0
+    pusher_extend_mm: 160.0
+    lost_timeout_sec: 1.5

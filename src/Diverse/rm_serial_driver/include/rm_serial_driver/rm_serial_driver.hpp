@@ -20,6 +20,7 @@
 
 #include <future>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -40,7 +41,9 @@ private:
   void getParams();
   void receiveData();
   void sendData(auto_aim_interfaces::msg::Target::SharedPtr msg);
-  void sendNavigationCmd(const geometry_msgs::msg::Twist::SharedPtr msg);
+  void cacheNavigationCmd(const geometry_msgs::msg::Twist::SharedPtr msg);
+  void sendNavigationCmdTimer();
+  void sendNavigationPacket(float vx, float vy, float wz);
   void sendPlatformTarget(const auto_aim_interfaces::msg::PlatformTarget::SharedPtr msg);
   void reopenPort();
   void setParam(const rclcpp::Parameter & param);
@@ -102,6 +105,20 @@ private:
   double cmd_wz_scale_ = 1.0;
   int chassis_manual_mode_value_ = 1;
   std::string last_chassis_control_mode_ = "unknown";
+
+
+  // Nav command cache. Always send latest command periodically.
+  // This prevents chassis firmware from keeping the previous non-zero velocity
+  // when a single zero command is missed or filtered downstream.
+  std::mutex nav_cmd_mutex_;
+  rclcpp::TimerBase::SharedPtr nav_cmd_timer_;
+  rclcpp::Time last_nav_cmd_time_;
+  bool has_nav_cmd_ = false;
+  float latest_nav_vx_ = 0.0F;
+  float latest_nav_vy_ = 0.0F;
+  float latest_nav_wz_ = 0.0F;
+  double nav_cmd_timeout_ = 0.10;
+  double nav_cmd_send_rate_ = 50.0;
 
   std::vector<uint8_t> rx_buffer_;
 

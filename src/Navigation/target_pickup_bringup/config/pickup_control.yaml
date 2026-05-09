@@ -1,0 +1,82 @@
+qr_lift_control_node:
+  ros__parameters:
+    target_pose_topic: /target_pose_base
+    platform_target_topic: /platform/target
+    enable_topic: /qr_lift_control/enable
+    debug_topic: /qr_lift_control/debug
+
+    platform_target_type: auto_aim_interfaces/msg/PlatformTarget
+    lift_field: target_lift_z_mm
+    slide_field: target_slide_x_mm
+    screw_field: target_screw_x_mm
+
+    # 升降平台行程
+    platform_min_height_mm: 0.0
+    platform_max_height_mm: 280.0
+    initial_lift_target_mm: 0.0
+
+    # 当前你的升降控制用 oak_camera_link 的 z 作为误差
+    z_target_mm: 0.0
+
+    # 升降控制参数：稳定优先
+    kp_z: 0.08
+    max_step_mm: 1.0
+    deadband_mm: 30.0
+    release_deadband_mm: 45.0
+    hold_required_frames: 5
+    lift_direction: 1.0
+
+    # 数据保护
+    valid_abs_z_max_mm: 900.0
+    valid_abs_y_max_mm: 900.0
+    max_jump_z_mm: 900.0
+
+    # 滤波
+    filter_window: 7
+    stable_required: 3
+
+    # 丢目标自动回零
+    lost_timeout_sec: 0.25
+    return_home_step_mm: 6.0
+
+    # 暂时保持其他机构不动
+    slide_hold_mm: 0.0
+    screw_hold_mm: 0.0
+
+
+qr_chassis_align_node:
+  ros__parameters:
+    # 这一段给以后 target_pickup_bringup 内部直接启动底盘对准用
+    # 当前你单独启动 qr_chassis_align_control 时，主要读上面的 qr_chassis_align.yaml
+    target_pose_topic: /target_pose_base
+    output_cmd_topic: /cmd_vel_selected
+    nav_cmd_topic: /cmd_vel
+    control_mode_topic: /control_mode
+
+    enable_topic: /qr_chassis_align/enable
+    debug_topic: /qr_chassis_align/debug
+
+    enable_align_on_start: true
+    use_control_mode: false
+    lost_behavior: zero
+
+    control_rate_hz: 30.0
+    target_timeout_sec: 0.4
+    nav_timeout_sec: 0.5
+
+    control_axis: x
+    vy_direction: 1.0
+
+    kp_vy: 0.00015
+    max_vy: 0.06
+    deadband_mm: 50.0
+
+    filter_window: 5
+    max_jump_mm: 500.0
+
+    keep_nav_vx: false
+    keep_nav_wz: false
+    fixed_vx_when_align: 0.0
+    fixed_wz_when_align: 0.0
+
+    verbose: true

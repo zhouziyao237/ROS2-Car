@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
+
+
+def generate_launch_description():
+    image_topic = LaunchConfiguration('image_topic')
+    request_topic = LaunchConfiguration('request_topic')
+    result_topic = LaunchConfiguration('result_topic')
+    debug_image_topic = LaunchConfiguration('debug_image_topic')
+    lang = LaunchConfiguration('lang')
+
+    return LaunchDescription([
+        DeclareLaunchArgument('image_topic', default_value='/oak/rgb/image_raw'),
+        DeclareLaunchArgument('request_topic', default_value='/vision/ocr_requests'),
+        DeclareLaunchArgument('result_topic', default_value='/vision/ocr_results'),
+        DeclareLaunchArgument('debug_image_topic', default_value='/vision/ocr_debug_image'),
+        DeclareLaunchArgument('lang', default_value='en'),
+
+        Node(
+            package='ocr_node',
+            executable='paddle_ocr_node',
+            name='ocr_node',
+            output='screen',
+            parameters=[{
+                'image_topic': image_topic,
+                'request_topic': request_topic,
+                'result_topic': result_topic,
+                'debug_image_topic': debug_image_topic,
+                'lang': lang,
+
+                'use_angle_cls': False,
+                'use_gpu': False,
+                'show_log': False,
+
+                'image_cache_size': 80,
+                'max_image_time_diff_ms': 5000.0,
+                'ocr_queue_size': 4,
+
+                'min_roi_width': 8,
+                'min_roi_height': 8,
+                'roi_padding_ratio': 0.05,
+
+                'publish_debug_image': True,
+                'log_recognized_text': True,
+            }],
+        ),
+    ])

@@ -1,0 +1,3 @@
+oak_vision_driver_node:
+  ros__parameters:
+    config_path: /host-home/src/target_detection/oak_vision_driver/config/yolov5_oak.yaml

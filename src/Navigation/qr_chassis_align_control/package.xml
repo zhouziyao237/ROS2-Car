@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>qr_chassis_align_control</name>
+  <version>0.0.1</version>
+  <description>QR target chassis visual alignment controller with Nav2 passthrough and control_mode arbitration.</description>
+  <maintainer email="zzy@example.com">zzy</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
