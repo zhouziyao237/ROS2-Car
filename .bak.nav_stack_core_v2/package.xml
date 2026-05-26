@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>nav_stack_core_v2</name>
+  <version>0.0.1</version>
+  <description>robot2 LiDAR + D435 fused online SLAM and Nav2 stack.</description>
+  <maintainer email="robot2@example.com">robot2</maintainer>
+  <license>MIT</license>
+  <buildtool_depend>ament_python</buildtool_depend>
+  <depend>rclpy</depend>
+  <depend>launch</depend>
+  <depend>launch_ros</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>nav2_msgs</depend>
+  <depend>robot_state_publisher</depend>
+  <depend>slam_toolbox</depend>
+  <depend>nav2_bringup</depend>
+  <depend>rf2o_laser_odometry</depend>
+  <exec_depend>realsense2_camera</exec_depend>
+  <export><build_type>ament_python</build_type></export>
+</package>

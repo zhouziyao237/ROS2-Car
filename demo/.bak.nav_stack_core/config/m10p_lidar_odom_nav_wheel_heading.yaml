@@ -1,0 +1,118 @@
+scan_match_odom:
+  ros__parameters:
+    use_sim_time: false
+
+    # LiDAR input
+    scan_topic: /scan_front
+
+    # LiDAR odometry output
+    odom_topic: /lidar/odom
+    diagnostics_topic: /lidar/odom_debug
+
+    # LiDAR odom is the final odom source now
+    odom_frame: odom
+    base_frame: base_link
+    publish_tf: true
+
+    # Range and sampling
+    min_range: 0.18
+    max_range: 12.0
+    downsample_step: 2
+
+    # /scan_front already handles blind-sector filtering.
+    # Do not crop again here.
+    use_angle_filter: false
+    angle_windows_deg: [-180.0, 180.0]
+
+    # LiDAR mounting:
+    # Your LiDAR:
+    #   0 deg   = front
+    #   90 deg  = left
+    #   180 deg = rear
+    #   270 deg = right
+    #
+    # This matches ROS base_link:
+    #   x = front
+    #   y = left
+    scan_yaw_offset_deg: 0.0
+    scan_x_offset: 0.10
+    scan_y_offset: 0.0
+    invert_scan_x: false
+    invert_scan_y: false
+
+    # ICP scan matching
+    icp_max_iterations: 30
+    icp_max_corr_dist: 0.22
+    icp_trim_ratio: 0.80
+    icp_converge_trans: 0.00015
+    icp_converge_rot: 0.00015
+    min_correspondences: 80
+    reject_mean_err_above: 0.10
+
+    # Motion gate
+    min_motion_trans: 0.0005
+    min_motion_rot: 0.0005
+    static_lock_trans: 0.0008
+    static_lock_rot: 0.0008
+    reject_trans_above: 0.20
+    reject_rot_above: 0.35
+    max_dt: 0.40
+
+    # Internal constant-velocity Kalman prediction/update
+    use_kalman_predict: true
+    use_kalman_update: true
+    kalman_q_pos: 0.004
+    kalman_q_yaw: 0.008
+    kalman_q_vel: 0.10
+    kalman_q_wz: 0.12
+    kalman_r_x: 0.035
+    kalman_r_y: 0.055
+    kalman_r_yaw: 0.040
+    velocity_feedback_alpha: 0.35
+
+    # Disable wheel / IMU / cmd_vel prior completely for now
+    use_external_twist_prior: false
+    prior_source: internal
+    external_odom_topic: /wheel/odom
+    external_imu_topic: /imu/data
+    external_cmd_vel_topic: /cmd_vel_selected
+    external_twist_timeout: 1.50
+    external_prior_weight: 0.0
+
+    # Disable deskew because wheel feedback is currently unreliable
+    use_scan_deskew: false
+    deskew_center_scan: true
+    deskew_max_time: 0.12
+
+    # Adaptive constraints
+    use_adaptive_constraint: true
+    sigma_ref_x: 0.020
+    sigma_ref_y: 0.020
+    sigma_ref_yaw: 0.025
+
+    alpha_x_min: 0.75
+    alpha_x_max: 1.00
+    alpha_y_min: 0.25
+    alpha_y_max: 0.85
+    alpha_yaw_min: 0.60
+    alpha_yaw_max: 1.00
+
+    dy_prior: 0.0
+    dyaw_prior: 0.0
+
+    use_scan_geometry_gate: true
+    geometry_sector_deadzone_deg: 8.0
+    geometry_weight_y: 0.80
+    geometry_weight_yaw: 1.00
+
+    publish_dynamic_covariance: true
+    min_cov_x: 0.001
+    min_cov_y: 0.0015
+    min_cov_yaw: 0.0015
+    max_cov_x: 0.20
+    max_cov_y: 0.22
+    max_cov_yaw: 0.22
+
+    vel_alpha: 0.20
+    debug_log_period: 10
+    publish_debug: true

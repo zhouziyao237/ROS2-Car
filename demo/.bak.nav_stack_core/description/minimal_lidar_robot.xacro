@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="fusion_robot">
+
+  <!-- base_link 为底盘刚体参考系 -->
+
+  <!-- IMU 相对 base_link 的安装位置 -->
+  <xacro:arg name="imu_x" default="0.00"/>
+  <xacro:arg name="imu_y" default="0.00"/>
+  <xacro:arg name="imu_z" default="0.05"/>
+  <xacro:arg name="imu_roll" default="0.0"/>
+  <xacro:arg name="imu_pitch" default="0.0"/>
+  <xacro:arg name="imu_yaw" default="0.0"/>
+
+  <!-- 激光雷达相对 base_link 的安装位置 -->
+  <xacro:arg name="laser_x" default="0.10"/>
+  <xacro:arg name="laser_y" default="0.00"/>
+  <xacro:arg name="laser_z" default="0.15"/>
+  <xacro:arg name="laser_roll" default="0.0"/>
+  <xacro:arg name="laser_pitch" default="0.0"/>
+  <xacro:arg name="laser_yaw" default="0.0"/>
+
+  <link name="base_link"/>
+  <link name="imu_link"/>
+  <link name="laser"/>
+
+  <!-- IMU 刚性固定在底盘上 -->
+  <joint name="base_to_imu" type="fixed">
+    <parent link="base_link"/>
+    <child link="imu_link"/>
+    <origin xyz="$(arg imu_x) $(arg imu_y) $(arg imu_z)"
+            rpy="$(arg imu_roll) $(arg imu_pitch) $(arg imu_yaw)"/>
+  </joint>
+
+  <!-- 激光雷达刚性固定在底盘上，不挂在 imu_link 下 -->
+  <joint name="base_to_laser" type="fixed">
+    <parent link="base_link"/>
+    <child link="laser"/>
+    <origin xyz="$(arg laser_x) $(arg laser_y) $(arg laser_z)"
+            rpy="$(arg laser_roll) $(arg laser_pitch) $(arg laser_yaw)"/>
+  </joint>
+
+</robot>

@@ -2,490 +2,961 @@
 import math
 import numpy as np
 import cv2
-
 import rclpy
+
+from cv_bridge import CvBridge
 from rclpy.node import Node
 from sensor_msgs.msg import Image, CameraInfo
-from geometry_msgs.msg import PointStamped
-from cv_bridge import CvBridge
-import tf2_ros
-from tf2_geometry_msgs import do_transform_point
-from target_pose_msgs.msg import TargetPoseInfo
+from geometry_msgs.msg import PointStamped, PoseStamped, Quaternion
+from std_msgs.msg import String
 
-# Your OAK driver currently publishes /yolov5/detections as yolo_msg/msg/YoloDetectionArray.
-# This node subscribes to that type directly.
 from yolo_msg.msg import YoloDetectionArray
 
 
-class ParsedDetection:
-    def __init__(self, cx, cy, w, h, score=1.0, label=''):
-        self.cx = float(cx)
-        self.cy = float(cy)
-        self.w = float(w)
-        self.h = float(h)
-        self.score = float(score)
-        self.label = str(label) if label is not None else ''
+def clamp(v, lo, hi):
+    return max(lo, min(hi, v))
+
+
+def normalize_vec(v):
+    n = np.linalg.norm(v)
+    if n < 1e-6:
+        return None
+    return v / n
+
+
+def quat_from_euler(roll, pitch, yaw):
+    cy = math.cos(yaw * 0.5)
+    sy = math.sin(yaw * 0.5)
+    cp = math.cos(pitch * 0.5)
+    sp = math.sin(pitch * 0.5)
+    cr = math.cos(roll * 0.5)
+    sr = math.sin(roll * 0.5)
+
+    q = Quaternion()
+    q.w = cr * cp * cy + sr * sp * sy
+    q.x = sr * cp * cy - cr * sp * sy
+    q.y = cr * sp * cy + sr * cp * sy
+    q.z = cr * cp * sy - sr * sp * cy
+    return q
 
 
 class TargetPositionOverlayNode(Node):
-    """Single-camera demo node for OAK + yolo_msg detections.
-
-    Inputs:
-      - RGB image
-      - yolo_msg/msg/YoloDetectionArray
-      - OAK depth image
-      - CameraInfo
-      - TF from camera optical frame to target_frame
-
-    Outputs:
-      - /target_position_overlay/image
-      - /target_pose_base (frame_id is the configured target_frame)
-      - /target_pose_info_base
-    """
-
     def __init__(self):
         super().__init__('target_position_overlay_node')
 
+        # =========================
+        # Topics
+        # =========================
         self.declare_parameter('image_topic', '/oak/rgb/image_raw')
-        self.declare_parameter('detections_topic', '/yolov5/detections')
         self.declare_parameter('depth_topic', '/oak/depth/image_raw')
         self.declare_parameter('camera_info_topic', '/oak/rgb/camera_info')
-        self.declare_parameter('annotated_topic', '/target_position_overlay/image')
-        self.declare_parameter('target_pose_topic', '/target_pose_base')
-        self.declare_parameter('target_info_topic', '/target_pose_info_base')
-        self.declare_parameter('target_frame', 'oak_camera_link')
-        self.declare_parameter('min_depth_mm', 150.0)
-        self.declare_parameter('max_depth_mm', 5000.0)
-        self.declare_parameter('roi_half_size', 8)
-        self.declare_parameter('min_score', 0.0)
-        self.declare_parameter('draw_all_boxes', True)
-        self.declare_parameter('debug_log', True)
-        self.declare_parameter('assume_normalized_bbox', False)
+        self.declare_parameter('detections_topic', '/target_matcher/matched_detection')
 
-        self.image_topic = self.get_parameter('image_topic').value
-        self.detections_topic = self.get_parameter('detections_topic').value
-        self.depth_topic = self.get_parameter('depth_topic').value
-        self.camera_info_topic = self.get_parameter('camera_info_topic').value
-        self.annotated_topic = self.get_parameter('annotated_topic').value
-        self.target_pose_topic = self.get_parameter('target_pose_topic').value
-        self.target_info_topic = self.get_parameter('target_info_topic').value
-        self.target_frame = self.get_parameter('target_frame').value
-        self.min_depth_mm = float(self.get_parameter('min_depth_mm').value)
-        self.max_depth_mm = float(self.get_parameter('max_depth_mm').value)
-        self.roi_half_size = int(self.get_parameter('roi_half_size').value)
-        self.min_score = float(self.get_parameter('min_score').value)
-        self.draw_all_boxes = bool(self.get_parameter('draw_all_boxes').value)
-        self.debug_log = bool(self.get_parameter('debug_log').value)
-        self.assume_normalized_bbox = bool(self.get_parameter('assume_normalized_bbox').value)
+        self.declare_parameter('target_pose_topic', '/target_pose_base')
+        self.declare_parameter('target_pose_3d_topic', '/target_pose_3d')
+        self.declare_parameter('overlay_image_topic', '/target_position_overlay/image')
+        self.declare_parameter('debug_topic', '/target_position_overlay/debug')
+
+        self.declare_parameter('target_frame', 'oak_camera_link')
+
+        # =========================
+        # Depth sampling
+        # =========================
+        self.declare_parameter('depth_window_px', 5)
+        self.declare_parameter('min_depth_mm', 50.0)
+        self.declare_parameter('max_depth_mm', 5000.0)
+
+        self.declare_parameter('use_grid_points', True)
+        self.declare_parameter('grid_rows', 3)
+        self.declare_parameter('grid_cols', 3)
+
+        # bbox 四角向内部缩进，避开边缘深度空洞
+        self.declare_parameter('corner_inset_ratio', 0.18)
+
+        # 中心深度和多点深度差距太大只标记，不直接丢弃
+        self.declare_parameter('depth_consistency_max_diff_mm', 150.0)
+
+        # 有效深度点数量少于这个值，不发布 /target_pose_base
+        self.declare_parameter('min_valid_depth_points', 3)
+
+        # 关键：RGB 1920×1080，Depth 低分辨率时，自动缩放坐标
+        self.declare_parameter('scale_rgb_to_depth', True)
+
+        # 是否在 overlay 上显示 depth 尺寸信息
+        self.declare_parameter('draw_size_info', True)
+
+        # =========================
+        # Plane angle estimation
+        # =========================
+        self.declare_parameter('enable_plane_angle_estimation', True)
+        self.declare_parameter('min_valid_corner_points', 3)
+
+        # =========================
+        # Overlay drawing
+        # =========================
+        self.declare_parameter('draw_overlay', True)
+        self.declare_parameter('draw_sample_points', True)
+        self.declare_parameter('draw_camera_center', True)
+        self.declare_parameter('draw_image_center_line', True)
+        self.declare_parameter('draw_alignment_target', True)
+        self.declare_parameter('draw_alignment_lines', True)
+
+        # 坐标定义：
+        # x = 左右偏移
+        # y = 升降偏移
+        # z = 深度距离
+        #
+        # 红色 pickup target 对齐点
+        self.declare_parameter('align_target_x_mm', 0.0)
+        self.declare_parameter('align_target_y_mm', 0.0)
+
+        self.declare_parameter('publish_rate_hz', 30.0)
+        self.declare_parameter('verbose', True)
 
         self.bridge = CvBridge()
-        self.latest_image = None
-        self.latest_image_header = None
-        self.latest_depth = None
-        self.camera_info = None
-        self.latest_detections = []
-        self.last_warn_time = self.get_clock().now()
 
-        self.tf_buffer = tf2_ros.Buffer()
-        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+        self.last_image_msg = None
+        self.last_depth_msg = None
+        self.last_camera_info = None
+        self.last_detections = None
 
-        self.create_subscription(Image, self.image_topic, self.image_callback, 10)
-        self.create_subscription(Image, self.depth_topic, self.depth_callback, 10)
-        self.create_subscription(CameraInfo, self.camera_info_topic, self.camera_info_callback, 10)
-        self.create_subscription(YoloDetectionArray, self.detections_topic, self.detections_callback, 10)
+        self.fx = None
+        self.fy = None
+        self.cx = None
+        self.cy = None
 
-        self.image_pub = self.create_publisher(Image, self.annotated_topic, 10)
-        self.pose_pub = self.create_publisher(PointStamped, self.target_pose_topic, 10)
-        self.info_pub = self.create_publisher(TargetPoseInfo, self.target_info_topic, 10)
+        self.last_pub_time = self.get_clock().now()
 
-        self.timer = self.create_timer(0.05, self.publish_overlay)
+        self.pose_pub = self.create_publisher(
+            PointStamped,
+            self.get_parameter('target_pose_topic').value,
+            10
+        )
 
-        self.get_logger().info('target_position_overlay_node started with yolo_msg/msg/YoloDetectionArray input')
-        self.get_logger().info(f'image_topic={self.image_topic}')
-        self.get_logger().info(f'detections_topic={self.detections_topic}')
-        self.get_logger().info(f'depth_topic={self.depth_topic}')
-        self.get_logger().info(f'camera_info_topic={self.camera_info_topic}')
-        self.get_logger().info(f'target_frame={self.target_frame}')
+        self.pose3d_pub = self.create_publisher(
+            PoseStamped,
+            self.get_parameter('target_pose_3d_topic').value,
+            10
+        )
 
-    def image_callback(self, msg: Image):
+        self.overlay_pub = self.create_publisher(
+            Image,
+            self.get_parameter('overlay_image_topic').value,
+            10
+        )
+
+        self.debug_pub = self.create_publisher(
+            String,
+            self.get_parameter('debug_topic').value,
+            10
+        )
+
+        self.create_subscription(
+            Image,
+            self.get_parameter('image_topic').value,
+            self.image_cb,
+            10
+        )
+
+        self.create_subscription(
+            Image,
+            self.get_parameter('depth_topic').value,
+            self.depth_cb,
+            10
+        )
+
+        self.create_subscription(
+            CameraInfo,
+            self.get_parameter('camera_info_topic').value,
+            self.camera_info_cb,
+            10
+        )
+
+        self.create_subscription(
+            YoloDetectionArray,
+            self.get_parameter('detections_topic').value,
+            self.detections_cb,
+            10
+        )
+
+        self.create_timer(0.02, self.loop)
+
+        self.get_logger().info('target_position_overlay_node started')
+        self.get_logger().info('RGB is main image; depth sampling uses RGB->depth coordinate scaling')
+        self.get_logger().info(f'image_topic={self.get_parameter("image_topic").value}')
+        self.get_logger().info(f'depth_topic={self.get_parameter("depth_topic").value}')
+        self.get_logger().info(f'camera_info_topic={self.get_parameter("camera_info_topic").value}')
+        self.get_logger().info(f'detections_topic={self.get_parameter("detections_topic").value}')
+        self.get_logger().info(f'target_frame={self.get_parameter("target_frame").value}')
+
+    # =========================
+    # Logging
+    # =========================
+    def log_debug(self, text):
+        if bool(self.get_parameter('verbose').value):
+            msg = String()
+            msg.data = str(text)
+            self.debug_pub.publish(msg)
+            self.get_logger().info(str(text))
+
+    # =========================
+    # Callbacks
+    # =========================
+    def image_cb(self, msg):
+        self.last_image_msg = msg
+
+    def depth_cb(self, msg):
+        self.last_depth_msg = msg
+
+    def camera_info_cb(self, msg):
+        self.last_camera_info = msg
+
+        if len(msg.k) >= 9:
+            self.fx = float(msg.k[0])
+            self.fy = float(msg.k[4])
+            self.cx = float(msg.k[2])
+            self.cy = float(msg.k[5])
+
+    def detections_cb(self, msg):
+        # 关键：收到空 detection 时清空旧目标
+        if len(msg.detections) == 0:
+            self.last_detections = None
+            return
+
+        self.last_detections = msg
+
+    # =========================
+    # Image conversion
+    # =========================
+    def convert_depth_image(self):
+        if self.last_depth_msg is None:
+            return None
+
         try:
-            self.latest_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-            self.latest_image_header = msg.header
-        except Exception as e:
-            self.get_logger().warn(f'Failed to convert RGB image: {e}')
-
-    def depth_callback(self, msg: Image):
-        try:
-            self.latest_depth = self.bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
+            depth_img = self.bridge.imgmsg_to_cv2(
+                self.last_depth_msg,
+                desired_encoding='passthrough'
+            )
+            return depth_img
         except Exception as e:
             self.get_logger().warn(f'Failed to convert depth image: {e}')
-
-    def camera_info_callback(self, msg: CameraInfo):
-        self.camera_info = msg
-
-    def detections_callback(self, msg: YoloDetectionArray):
-        self.latest_detections = self.parse_yolo_array(msg)
-        if self.debug_log and len(self.latest_detections) > 0:
-            best = max(self.latest_detections, key=lambda d: d.score)
-            self.get_logger().info(
-                f'parsed detections={len(self.latest_detections)}, '
-                f'best cx={best.cx:.1f} cy={best.cy:.1f} w={best.w:.1f} h={best.h:.1f} score={best.score:.3f}'
-            )
-
-    def publish_overlay(self):
-        if self.latest_image is None:
-            return
-
-        image = self.latest_image.copy()
-        if self.camera_info is None or self.latest_depth is None:
-            self.draw_status(image, 'Waiting for depth/camera_info')
-            self.publish_image(image)
-            return
-
-        if not self.latest_detections:
-            self.draw_status(image, 'Waiting for yolo_msg detections')
-            self.publish_image(image)
-            return
-
-        det = self.select_best_detection(self.latest_detections)
-        if det is None or det.score < self.min_score:
-            self.draw_status(image, 'No valid target')
-            self.publish_image(image)
-            return
-
-        result = self.compute_target(det)
-        if result is None:
-            self.draw_bbox(image, det, (0, 0, 255))
-            self.draw_status(image, 'Target found, invalid depth/TF')
-            self.publish_image(image)
-            return
-
-        camera_point, target_point, info = result
-        self.pose_pub.publish(target_point)
-        self.info_pub.publish(info)
-
-        if self.draw_all_boxes:
-            for d in self.latest_detections:
-                self.draw_bbox(image, d, (120, 120, 120))
-
-        self.draw_bbox(image, det, (0, 255, 0))
-        self.draw_target_text(image, det, camera_point, target_point, info)
-        self.publish_image(image)
-
-        if self.debug_log:
-            self.get_logger().info(
-                f'target {self.target_frame}: '
-                f'x={target_point.point.x*1000.0:.1f} '
-                f'y={target_point.point.y*1000.0:.1f} '
-                f'z={target_point.point.z*1000.0:.1f} mm'
-            )
-
-    def select_best_detection(self, detections):
-        if not detections:
             return None
-        return max(detections, key=lambda d: d.score)
 
-    # ---------- yolo_msg parser ----------
-    def parse_yolo_array(self, msg):
-        raw = self.extract_detection_list(msg)
-        parsed = []
-        img_h, img_w = self.get_image_shape()
-        for det in raw:
-            p = self.parse_one_detection(det, img_w, img_h)
-            if p is not None and p.w > 1.0 and p.h > 1.0:
-                parsed.append(p)
-        return parsed
+    def rgb_to_depth_uv(self, u_rgb, v_rgb, depth_img):
+        """
+        detection 的 u/v 是 RGB 主图坐标。
+        如果 RGB 是 1920×1080，而 depth 是 640×400，
+        这里会自动把 RGB 坐标映射到 depth 坐标。
+        """
+        if depth_img is None:
+            return None, None
 
-    def extract_detection_list(self, msg):
-        # Common array field names.
-        for name in ['detections', 'detection', 'results', 'objects', 'boxes', 'targets']:
-            if hasattr(msg, name):
-                value = getattr(msg, name)
-                if isinstance(value, (list, tuple)):
-                    return value
-        # Fallback: first list-like field in the ROS message.
-        for name in getattr(msg, '__slots__', []):
-            value = getattr(msg, name)
-            if isinstance(value, (list, tuple)):
-                return value
-        return []
+        depth_h, depth_w = depth_img.shape[:2]
 
-    def parse_one_detection(self, det, img_w, img_h):
-        score = self.extract_score(det)
-        label = self.extract_label(det)
+        if not bool(self.get_parameter('scale_rgb_to_depth').value):
+            return float(u_rgb), float(v_rgb)
 
-        # 1) Direct xmin/ymin/xmax/ymax variants.
-        xyxy = self.try_get_xyxy(det)
-        if xyxy is not None:
-            x1, y1, x2, y2 = xyxy
-            return self.make_parsed_from_xyxy(x1, y1, x2, y2, score, label, img_w, img_h)
+        if self.last_image_msg is None:
+            return float(u_rgb), float(v_rgb)
 
-        # 2) Direct center/size variants.
-        cxcywh = self.try_get_cxcywh(det)
-        if cxcywh is not None:
-            cx, cy, w, h = cxcywh
-            return self.make_parsed_from_cxcywh(cx, cy, w, h, score, label, img_w, img_h)
+        rgb_w = float(self.last_image_msg.width)
+        rgb_h = float(self.last_image_msg.height)
 
-        # 3) Nested bbox object.
-        if hasattr(det, 'bbox'):
-            bbox = getattr(det, 'bbox')
-            xyxy = self.try_get_xyxy(bbox)
-            if xyxy is not None:
-                x1, y1, x2, y2 = xyxy
-                return self.make_parsed_from_xyxy(x1, y1, x2, y2, score, label, img_w, img_h)
-            cxcywh = self.try_get_cxcywh(bbox)
-            if cxcywh is not None:
-                cx, cy, w, h = cxcywh
-                return self.make_parsed_from_cxcywh(cx, cy, w, h, score, label, img_w, img_h)
+        if rgb_w <= 0.0 or rgb_h <= 0.0:
+            return float(u_rgb), float(v_rgb)
 
-        # 3.5) Nested box object for yolo_msg/msg/YoloDetection.
-        # Current yolo_msg uses:
-        #   det.box.x1, det.box.y1, det.box.x2, det.box.y2
-        #   det.box.center_u, det.box.center_v, det.box.width, det.box.height
-        if hasattr(det, 'box'):
-            box_obj = getattr(det, 'box')
+        u_depth = float(u_rgb) * float(depth_w) / rgb_w
+        v_depth = float(v_rgb) * float(depth_h) / rgb_h
 
-            xyxy = self.try_get_xyxy(box_obj)
-            if xyxy is not None:
-                x1, y1, x2, y2 = xyxy
-                return self.make_parsed_from_xyxy(x1, y1, x2, y2, score, label, img_w, img_h)
+        return u_depth, v_depth
 
-            cxcywh = self.try_get_cxcywh(box_obj)
-            if cxcywh is not None:
-                cx, cy, w, h = cxcywh
-                return self.make_parsed_from_cxcywh(cx, cy, w, h, score, label, img_w, img_h)
+    def get_depth_mm_at(self, depth_img, u_rgb, v_rgb, window_px=None):
+        if depth_img is None:
+            return None
 
-        # 4) bbox as float array/list.
-        for name in ['bbox', 'box', 'xyxy', 'rect']:
-            if hasattr(det, name):
-                v = getattr(det, name)
-                if isinstance(v, (list, tuple)) and len(v) >= 4:
-                    x1, y1, x2, y2 = [float(v[i]) for i in range(4)]
-                    return self.make_parsed_from_xyxy(x1, y1, x2, y2, score, label, img_w, img_h)
+        depth_h, depth_w = depth_img.shape[:2]
 
-        self.throttled_warn('Cannot parse bbox from yolo_msg detection. Run: ros2 interface show yolo_msg/msg/YoloDetection')
-        return None
+        if window_px is None:
+            window_px = int(self.get_parameter('depth_window_px').value)
 
-    def try_get_xyxy(self, obj):
-        variants = [
-            ('xmin', 'ymin', 'xmax', 'ymax'),
-            ('x_min', 'y_min', 'x_max', 'y_max'),
-            ('left', 'top', 'right', 'bottom'),
-            ('x1', 'y1', 'x2', 'y2'),
-            ('x_min_px', 'y_min_px', 'x_max_px', 'y_max_px'),
-            ('xmin_px', 'ymin_px', 'xmax_px', 'ymax_px'),
+        window_px = max(1, int(window_px))
+
+        u_depth, v_depth = self.rgb_to_depth_uv(u_rgb, v_rgb, depth_img)
+
+        if u_depth is None or v_depth is None:
+            return None
+
+        u = int(round(u_depth))
+        v = int(round(v_depth))
+
+        if u < 0 or u >= depth_w or v < 0 or v >= depth_h:
+            return None
+
+        x1 = max(0, u - window_px)
+        x2 = min(depth_w, u + window_px + 1)
+        y1 = max(0, v - window_px)
+        y2 = min(depth_h, v + window_px + 1)
+
+        roi = depth_img[y1:y2, x1:x2]
+
+        if roi.size == 0:
+            return None
+
+        values = roi.astype(np.float32).reshape(-1)
+
+        # OAK depth 通常是 uint16 mm；如果是 float，一般是 meter
+        if depth_img.dtype == np.float32 or depth_img.dtype == np.float64:
+            values = values * 1000.0
+
+        values = values[np.isfinite(values)]
+
+        min_d = float(self.get_parameter('min_depth_mm').value)
+        max_d = float(self.get_parameter('max_depth_mm').value)
+
+        values = values[(values >= min_d) & (values <= max_d)]
+
+        if values.size == 0:
+            return None
+
+        return float(np.median(values))
+
+    # =========================
+    # Sampling points
+    # =========================
+    def get_bbox_points(self, det):
+        b = det.box
+
+        x1 = float(b.x1)
+        y1 = float(b.y1)
+        x2 = float(b.x2)
+        y2 = float(b.y2)
+
+        cu = float(b.center_u)
+        cv = float(b.center_v)
+
+        w = max(1.0, x2 - x1)
+        h = max(1.0, y2 - y1)
+
+        inset = float(self.get_parameter('corner_inset_ratio').value)
+        inset = clamp(inset, 0.0, 0.45)
+
+        ix = w * inset
+        iy = h * inset
+
+        pts = []
+
+        # 中心
+        pts.append(('center', cu, cv))
+
+        # 四角向内缩
+        pts.append(('lt', x1 + ix, y1 + iy))
+        pts.append(('rt', x2 - ix, y1 + iy))
+        pts.append(('rb', x2 - ix, y2 - iy))
+        pts.append(('lb', x1 + ix, y2 - iy))
+
+        # 四边中点
+        pts.append(('top', cu, y1 + iy))
+        pts.append(('bottom', cu, y2 - iy))
+        pts.append(('left', x1 + ix, cv))
+        pts.append(('right', x2 - ix, cv))
+
+        # bbox 内部网格
+        if bool(self.get_parameter('use_grid_points').value):
+            rows = max(1, int(self.get_parameter('grid_rows').value))
+            cols = max(1, int(self.get_parameter('grid_cols').value))
+
+            for r in range(rows):
+                for c in range(cols):
+                    if rows == 1:
+                        vv = cv
+                    else:
+                        vv = y1 + iy + (y2 - y1 - 2 * iy) * r / (rows - 1)
+
+                    if cols == 1:
+                        uu = cu
+                    else:
+                        uu = x1 + ix + (x2 - x1 - 2 * ix) * c / (cols - 1)
+
+                    pts.append((f'g{r}{c}', uu, vv))
+
+        return pts
+
+    def sample_depths(self, depth_img, det):
+        pts = self.get_bbox_points(det)
+
+        samples = []
+
+        for name, u, v in pts:
+            d = self.get_depth_mm_at(depth_img, u, v)
+
+            if d is not None:
+                samples.append({
+                    'name': name,
+                    'u_rgb': float(u),
+                    'v_rgb': float(v),
+                    'depth_mm': float(d),
+                })
+
+        return samples
+
+    def robust_depth_from_samples(self, samples):
+        if not samples:
+            return None, None
+
+        center_depth = None
+
+        for s in samples:
+            if s['name'] == 'center':
+                center_depth = s['depth_mm']
+                break
+
+        values = np.array([s['depth_mm'] for s in samples], dtype=np.float32)
+
+        if values.size == 0:
+            return None, None
+
+        median_depth = float(np.median(values))
+
+        # MAD 去掉离群点
+        abs_dev = np.abs(values - median_depth)
+        mad = float(np.median(abs_dev))
+
+        if mad < 1.0:
+            filtered = values
+        else:
+            filtered = values[abs_dev <= max(80.0, 3.0 * mad)]
+
+        if filtered.size == 0:
+            filtered = values
+
+        robust_depth = float(np.median(filtered))
+
+        consistency_ok = True
+
+        if center_depth is not None:
+            max_diff = float(self.get_parameter('depth_consistency_max_diff_mm').value)
+            if abs(center_depth - robust_depth) > max_diff:
+                consistency_ok = False
+
+        info = {
+            'center_depth_mm': center_depth,
+            'median_depth_mm': median_depth,
+            'robust_depth_mm': robust_depth,
+            'valid_count': len(samples),
+            'filtered_count': int(filtered.size),
+            'consistency_ok': consistency_ok,
+        }
+
+        return robust_depth, info
+
+    # =========================
+    # Projection
+    # =========================
+    def pixel_depth_to_xyz(self, u_rgb, v_rgb, depth_mm):
+        """
+        输出坐标定义：
+        x = 左右偏移
+        y = 升降偏移
+        z = 深度距离
+
+        注意：这里使用 RGB 相机内参，因为 u/v 来自 RGB 主画面。
+        """
+        if self.fx is None or self.fy is None or self.cx is None or self.cy is None:
+            return None
+
+        z_m = float(depth_mm) / 1000.0
+        x_m = (float(u_rgb) - self.cx) * z_m / self.fx
+        y_m = (float(v_rgb) - self.cy) * z_m / self.fy
+
+        return np.array([x_m, y_m, z_m], dtype=np.float32)
+
+    def make_pose_msg(self, u_rgb, v_rgb, depth_mm):
+        p = self.pixel_depth_to_xyz(u_rgb, v_rgb, depth_mm)
+
+        if p is None:
+            return None
+
+        msg = PointStamped()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = self.get_parameter('target_frame').value
+
+        msg.point.x = float(p[0])
+        msg.point.y = float(p[1])
+        msg.point.z = float(p[2])
+
+        return msg
+
+    def project_xyz_to_pixel(self, x_mm, y_mm, z_mm):
+        if self.fx is None or self.fy is None or self.cx is None or self.cy is None:
+            return None
+
+        z_m = float(z_mm) / 1000.0
+        if z_m <= 0.001:
+            return None
+
+        x_m = float(x_mm) / 1000.0
+        y_m = float(y_mm) / 1000.0
+
+        u = self.cx + self.fx * x_m / z_m
+        v = self.cy + self.fy * y_m / z_m
+
+        return int(round(u)), int(round(v))
+
+    def project_alignment_target(self, depth_mm):
+        x_mm = float(self.get_parameter('align_target_x_mm').value)
+        y_mm = float(self.get_parameter('align_target_y_mm').value)
+        z_mm = float(depth_mm)
+
+        return self.project_xyz_to_pixel(x_mm, y_mm, z_mm)
+
+    # =========================
+    # Plane angle estimation
+    # =========================
+    def estimate_plane_angles(self, depth_img, det):
+        """
+        用 bbox 内缩四角点近似目标平面姿态。
+        注意：这不是 QR 真四角点，但足够先看 yaw / pitch 趋势。
+        """
+        b = det.box
+
+        x1 = float(b.x1)
+        y1 = float(b.y1)
+        x2 = float(b.x2)
+        y2 = float(b.y2)
+
+        w = max(1.0, x2 - x1)
+        h = max(1.0, y2 - y1)
+
+        inset = float(self.get_parameter('corner_inset_ratio').value)
+        inset = clamp(inset, 0.0, 0.45)
+
+        ix = w * inset
+        iy = h * inset
+
+        corner_uv = [
+            ('lt', x1 + ix, y1 + iy),
+            ('rt', x2 - ix, y1 + iy),
+            ('rb', x2 - ix, y2 - iy),
+            ('lb', x1 + ix, y2 - iy),
         ]
-        for keys in variants:
-            if all(hasattr(obj, k) for k in keys):
-                return tuple(float(getattr(obj, k)) for k in keys)
-        return None
 
-    def try_get_cxcywh(self, obj):
-        variants = [
-            ('center_x', 'center_y', 'width', 'height'),
-            ('cx', 'cy', 'w', 'h'),
-            ('x_center', 'y_center', 'width', 'height'),
-            ('center_u', 'center_v', 'width', 'height'),
-            ('u', 'v', 'width', 'height'),
-        ]
-        for keys in variants:
-            if all(hasattr(obj, k) for k in keys):
-                return tuple(float(getattr(obj, k)) for k in keys)
+        pts_3d = {}
 
-        # vision-like bbox.center.position.x, bbox.size_x if nested object is passed.
-        if hasattr(obj, 'center') and hasattr(obj, 'size_x') and hasattr(obj, 'size_y'):
-            center = getattr(obj, 'center')
-            if hasattr(center, 'position'):
-                pos = getattr(center, 'position')
-                if hasattr(pos, 'x') and hasattr(pos, 'y'):
-                    return float(pos.x), float(pos.y), float(obj.size_x), float(obj.size_y)
-        return None
+        for name, u, v in corner_uv:
+            d = self.get_depth_mm_at(depth_img, u, v)
 
-    def extract_score(self, det):
-        for name in ['score', 'confidence', 'conf', 'probability', 'prob', 'objectness']:
-            if hasattr(det, name):
-                return float(getattr(det, name))
-        if hasattr(det, 'hypothesis') and hasattr(det.hypothesis, 'score'):
-            return float(det.hypothesis.score)
-        return 1.0
+            if d is None:
+                continue
 
-    def extract_label(self, det):
-        for name in ['class_name', 'label', 'name', 'class_id', 'id']:
-            if hasattr(det, name):
-                return str(getattr(det, name))
-        return ''
+            p = self.pixel_depth_to_xyz(u, v, d)
 
-    def make_parsed_from_xyxy(self, x1, y1, x2, y2, score, label, img_w, img_h):
-        x1, y1, x2, y2 = self.denormalize_xyxy(x1, y1, x2, y2, img_w, img_h)
-        if x2 < x1:
-            x1, x2 = x2, x1
-        if y2 < y1:
-            y1, y2 = y2, y1
-        return ParsedDetection((x1 + x2) * 0.5, (y1 + y2) * 0.5, x2 - x1, y2 - y1, score, label)
+            if p is not None:
+                pts_3d[name] = p
 
-    def make_parsed_from_cxcywh(self, cx, cy, w, h, score, label, img_w, img_h):
-        cx, cy, w, h = self.denormalize_cxcywh(cx, cy, w, h, img_w, img_h)
-        return ParsedDetection(cx, cy, w, h, score, label)
+        min_valid = int(self.get_parameter('min_valid_corner_points').value)
 
-    def denormalize_xyxy(self, x1, y1, x2, y2, img_w, img_h):
-        if self.assume_normalized_bbox or max(abs(x1), abs(y1), abs(x2), abs(y2)) <= 1.5:
-            return x1 * img_w, y1 * img_h, x2 * img_w, y2 * img_h
-        return x1, y1, x2, y2
+        if len(pts_3d) < min_valid:
+            return None
 
-    def denormalize_cxcywh(self, cx, cy, w, h, img_w, img_h):
-        if self.assume_normalized_bbox or max(abs(cx), abs(cy), abs(w), abs(h)) <= 1.5:
-            return cx * img_w, cy * img_h, w * img_w, h * img_h
-        return cx, cy, w, h
+        if 'lt' in pts_3d and 'rt' in pts_3d and 'lb' in pts_3d:
+            p0 = pts_3d['lt']
+            p1 = pts_3d['rt']
+            p3 = pts_3d['lb']
+        elif 'rt' in pts_3d and 'rb' in pts_3d and 'lt' in pts_3d:
+            p0 = pts_3d['rt']
+            p1 = pts_3d['rb']
+            p3 = pts_3d['lt']
+        else:
+            keys = list(pts_3d.keys())
+            p0 = pts_3d[keys[0]]
+            p1 = pts_3d[keys[1]]
+            p3 = pts_3d[keys[2]]
 
-    def get_image_shape(self):
-        if self.latest_image is not None:
-            return self.latest_image.shape[0], self.latest_image.shape[1]
-        return 640, 640
+        v1 = p1 - p0
+        v2 = p3 - p0
 
-    def throttled_warn(self, text):
+        normal = np.cross(v1, v2)
+        normal = normalize_vec(normal)
+
+        if normal is None:
+            return None
+
+        # 坐标定义：
+        # x = 左右
+        # y = 上下
+        # z = 深度
+        nx, ny, nz = normal
+
+        yaw = math.atan2(nx, nz)
+        pitch = math.atan2(-ny, math.sqrt(nx * nx + nz * nz))
+        roll = 0.0
+
+        return {
+            'normal': normal,
+            'yaw_deg': math.degrees(yaw),
+            'pitch_deg': math.degrees(pitch),
+            'roll_deg': math.degrees(roll),
+            'corner_count': len(pts_3d),
+        }
+
+    def publish_pose3d(self, point_msg, angle_info):
+        pose_msg = PoseStamped()
+        pose_msg.header = point_msg.header
+
+        pose_msg.pose.position.x = point_msg.point.x
+        pose_msg.pose.position.y = point_msg.point.y
+        pose_msg.pose.position.z = point_msg.point.z
+
+        if angle_info is None:
+            pose_msg.pose.orientation.w = 1.0
+        else:
+            yaw = math.radians(angle_info['yaw_deg'])
+            pitch = math.radians(angle_info['pitch_deg'])
+            roll = math.radians(angle_info['roll_deg'])
+            pose_msg.pose.orientation = quat_from_euler(roll, pitch, yaw)
+
+        self.pose3d_pub.publish(pose_msg)
+
+    # =========================
+    # Drawing helpers
+    # =========================
+    def draw_cross(self, img, u, v, color, label):
+        h, w = img.shape[:2]
+
+        u = int(round(u))
+        v = int(round(v))
+
+        if u < 0 or u >= w or v < 0 or v >= h:
+            return
+
+        cv2.drawMarker(
+            img,
+            (u, v),
+            color,
+            markerType=cv2.MARKER_CROSS,
+            markerSize=22,
+            thickness=2
+        )
+
+        cv2.circle(img, (u, v), 5, color, 2)
+
+        cv2.putText(
+            img,
+            label,
+            (u + 7, max(20, v - 8)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.45,
+            color,
+            1
+        )
+
+    def draw_overlay(self, img, det, samples, depth_info, angle_info, pose_msg, depth_img):
+        b = det.box
+
+        x1 = int(b.x1)
+        y1 = int(b.y1)
+        x2 = int(b.x2)
+        y2 = int(b.y2)
+        cu = int(b.center_u)
+        cvp = int(b.center_v)
+
+        h, w = img.shape[:2]
+
+        # QR bbox
+        cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+        # 绿色十字：目标中心
+        self.draw_cross(img, cu, cvp, (0, 255, 0), 'target center')
+
+        # 蓝色十字：相机中心 / 图像中心
+        if self.cx is not None and self.cy is not None:
+            center_u = int(round(self.cx))
+            center_v = int(round(self.cy))
+        else:
+            center_u = int(w / 2)
+            center_v = int(h / 2)
+
+        if bool(self.get_parameter('draw_camera_center').value):
+            self.draw_cross(img, center_u, center_v, (255, 0, 0), 'image center')
+
+        # 目标中心到图像中心的显示线
+        if bool(self.get_parameter('draw_image_center_line').value):
+            cv2.line(img, (cu, cvp), (center_u, center_v), (0, 0, 255), 2)
+            cv2.line(img, (cu, cvp), (center_u, cvp), (0, 255, 255), 2)
+            cv2.line(img, (center_u, cvp), (center_u, center_v), (255, 0, 255), 2)
+
+            du = cu - center_u
+            dv = cvp - center_v
+
+            cv2.putText(
+                img,
+                f'target-center error: dx={du:+d}px dy={dv:+d}px',
+                (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.65,
+                (0, 0, 255),
+                2
+            )
+
+        # 深度采样点
+        if bool(self.get_parameter('draw_sample_points').value):
+            for s in samples:
+                name = s['name']
+                u = int(round(s['u_rgb']))
+                v = int(round(s['v_rgb']))
+
+                color = (0, 255, 255)
+                if name == 'center':
+                    color = (255, 255, 0)
+
+                cv2.circle(img, (u, v), 3, color, -1)
+
+        # 红色 pickup target
+        if bool(self.get_parameter('draw_alignment_target').value):
+            uv = self.project_alignment_target(depth_info['robust_depth_mm'])
+
+            if uv is not None:
+                target_u, target_v = uv
+
+                self.draw_cross(img, target_u, target_v, (0, 0, 255), 'pickup target')
+
+                if bool(self.get_parameter('draw_alignment_lines').value):
+                    # 红色斜线：QR 当前中心 -> 平台对齐点
+                    cv2.line(img, (cu, cvp), (target_u, target_v), (0, 0, 255), 2)
+
+                    # 黄色横线：x 左右误差
+                    cv2.line(img, (cu, cvp), (target_u, cvp), (0, 255, 255), 2)
+
+                    # 紫色竖线：y 升降误差
+                    cv2.line(img, (target_u, cvp), (target_u, target_v), (255, 0, 255), 2)
+
+                    du_pickup = target_u - cu
+                    dv_pickup = target_v - cvp
+
+                    cv2.putText(
+                        img,
+                        f'pickup error: du={du_pickup:+d}px dv={dv_pickup:+d}px',
+                        (10, 58),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.55,
+                        (0, 0, 255),
+                        2
+                    )
+
+        # 坐标显示
+        text1 = (
+            f"x={pose_msg.point.x*1000.0:.1f} "
+            f"y={pose_msg.point.y*1000.0:.1f} "
+            f"z={pose_msg.point.z*1000.0:.1f} mm"
+        )
+
+        cv2.putText(
+            img,
+            text1,
+            (10, img.shape[0] - 75),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.58,
+            (255, 255, 255),
+            2
+        )
+
+        c_depth = depth_info['center_depth_mm']
+        c_text = 'None' if c_depth is None else f'{c_depth:.1f}'
+
+        text2 = (
+            f"depth center={c_text} robust={depth_info['robust_depth_mm']:.1f} "
+            f"valid={depth_info['valid_count']}/{depth_info['filtered_count']} "
+            f"ok={depth_info['consistency_ok']}"
+        )
+
+        cv2.putText(
+            img,
+            text2,
+            (10, img.shape[0] - 50),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.48,
+            (255, 255, 255),
+            1
+        )
+
+        if angle_info is not None:
+            text3 = (
+                f"yaw={angle_info['yaw_deg']:.1f} "
+                f"pitch={angle_info['pitch_deg']:.1f} "
+                f"corners={angle_info['corner_count']}"
+            )
+        else:
+            text3 = "yaw=None pitch=None"
+
+        cv2.putText(
+            img,
+            text3,
+            (10, img.shape[0] - 28),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.48,
+            (255, 255, 255),
+            1
+        )
+
+        if bool(self.get_parameter('draw_size_info').value) and depth_img is not None:
+            dh, dw = depth_img.shape[:2]
+            text4 = f"RGB={w}x{h} Depth={dw}x{dh} scale_depth={self.get_parameter('scale_rgb_to_depth').value}"
+            cv2.putText(
+                img,
+                text4,
+                (10, img.shape[0] - 8),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.45,
+                (255, 255, 255),
+                1
+            )
+
+    # =========================
+    # Main loop
+    # =========================
+    def select_best_detection(self):
+        if self.last_detections is None:
+            return None
+
+        if len(self.last_detections.detections) == 0:
+            return None
+
+        return max(
+            self.last_detections.detections,
+            key=lambda d: float(d.confidence)
+        )
+
+    def loop(self):
+        if self.last_image_msg is None:
+            return
+
         now = self.get_clock().now()
-        if (now - self.last_warn_time).nanoseconds > 2_000_000_000:
-            self.get_logger().warn(text)
-            self.last_warn_time = now
+        rate = float(self.get_parameter('publish_rate_hz').value)
 
-    # ---------- target geometry ----------
-    def compute_target(self, det):
-        u = float(det.cx)
-        v = float(det.cy)
-        z_mm = self.get_depth_median_mm(int(round(u)), int(round(v)))
-        if z_mm is None:
-            return None
+        if rate > 0.0:
+            dt = (now - self.last_pub_time).nanoseconds * 1e-9
+            if dt < 1.0 / rate:
+                return
 
-        fx = float(self.camera_info.k[0])
-        fy = float(self.camera_info.k[4])
-        cx0 = float(self.camera_info.k[2])
-        cy0 = float(self.camera_info.k[5])
-        if fx <= 0.0 or fy <= 0.0:
-            return None
-
-        x_mm = (u - cx0) * z_mm / fx
-        y_mm = (v - cy0) * z_mm / fy
-        dist_mm = math.sqrt(x_mm*x_mm + y_mm*y_mm + z_mm*z_mm)
-        width_mm = float(det.w) * z_mm / fx
-        height_mm = float(det.h) * z_mm / fy
-
-        camera_frame = self.camera_info.header.frame_id or 'oak_rgb_camera_optical_frame'
-
-        camera_point = PointStamped()
-        camera_point.header.stamp = self.get_clock().now().to_msg()
-        camera_point.header.frame_id = camera_frame
-        camera_point.point.x = x_mm / 1000.0
-        camera_point.point.y = y_mm / 1000.0
-        camera_point.point.z = z_mm / 1000.0
+        self.last_pub_time = now
 
         try:
-            transform = self.tf_buffer.lookup_transform(
-                self.target_frame,
-                camera_point.header.frame_id,
-                rclpy.time.Time(),
-                timeout=rclpy.duration.Duration(seconds=0.05)
-            )
-            target_point = do_transform_point(camera_point, transform)
-            target_point.header.stamp = self.get_clock().now().to_msg()
-            target_point.header.frame_id = self.target_frame
+            img = self.bridge.imgmsg_to_cv2(self.last_image_msg, desired_encoding='bgr8')
         except Exception as e:
-            self.throttled_warn(f'TF failed: {camera_point.header.frame_id} -> {self.target_frame}: {e}')
-            return None
+            self.get_logger().warn(f'Failed to convert image: {e}')
+            return
 
-        info = TargetPoseInfo()
-        info.header = target_point.header
-        info.valid = True
-        info.score = float(det.score)
-        info.bbox_center_u = float(u)
-        info.bbox_center_v = float(v)
-        info.bbox_width_px = float(det.w)
-        info.bbox_height_px = float(det.h)
-        info.camera_point = camera_point.point
-        info.target_point = target_point.point
-        info.target_frame = self.target_frame
-        info.depth_m = z_mm / 1000.0
-        info.distance_3d_m = dist_mm / 1000.0
-        info.width_m = width_mm / 1000.0
-        info.height_m = height_mm / 1000.0
-        info.target_id = det.label
-        info.ocr_text = ''
-        return camera_point, target_point, info
+        depth_img = self.convert_depth_image()
+        best_det = self.select_best_detection()
 
-    def get_depth_median_mm(self, u, v):
-        depth = self.latest_depth
-        if depth is None:
-            return None
-        h, w = depth.shape[:2]
-        if u < 0 or u >= w or v < 0 or v >= h:
-            return None
-        r = self.roi_half_size
-        x1, x2 = max(0, u - r), min(w, u + r + 1)
-        y1, y2 = max(0, v - r), min(h, v + r + 1)
-        roi = depth[y1:y2, x1:x2].astype(np.float32)
-        valid = roi[np.isfinite(roi)]
-        valid = valid[valid > 0.0]
-        if valid.size == 0:
-            return None
-        med = float(np.median(valid))
-        if med < 20.0:
-            valid = valid * 1000.0
-        valid = valid[(valid >= self.min_depth_mm) & (valid <= self.max_depth_mm)]
-        if valid.size == 0:
-            return None
-        return float(np.median(valid))
+        if best_det is None or depth_img is None:
+            if bool(self.get_parameter('draw_overlay').value):
+                self.overlay_pub.publish(
+                    self.bridge.cv2_to_imgmsg(img, encoding='bgr8')
+                )
+            return
 
-    # ---------- drawing ----------
-    def draw_bbox(self, image, det, color):
-        cx = int(round(det.cx))
-        cy = int(round(det.cy))
-        bw = int(round(det.w))
-        bh = int(round(det.h))
-        x1 = max(0, cx - bw // 2)
-        y1 = max(0, cy - bh // 2)
-        x2 = min(image.shape[1] - 1, cx + bw // 2)
-        y2 = min(image.shape[0] - 1, cy + bh // 2)
-        cv2.rectangle(image, (x1, y1), (x2, y2), color, 2)
-        cv2.circle(image, (cx, cy), 4, color, -1)
-        if det.label:
-            cv2.putText(image, det.label, (x1, max(20, y1 - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2)
+        samples = self.sample_depths(depth_img, best_det)
 
-    def draw_status(self, image, text):
-        cv2.putText(image, text, (20, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 4)
-        cv2.putText(image, text, (20, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+        min_valid = int(self.get_parameter('min_valid_depth_points').value)
 
-    def draw_target_text(self, image, det, camera_point, target_point, info):
-        cx = int(round(det.cx))
-        cy = int(round(det.cy))
-        lines = [
-            f'CAM optical: X={camera_point.point.x*1000:.0f} Y={camera_point.point.y*1000:.0f} Z={camera_point.point.z*1000:.0f} mm',
-            f'{self.target_frame}: X={target_point.point.x*1000:.0f} Y={target_point.point.y*1000:.0f} Z={target_point.point.z*1000:.0f} mm',
-            f'Depth={info.depth_m*1000:.0f} mm Dist={info.distance_3d_m*1000:.0f} mm Score={det.score:.2f}',
-        ]
-        x = max(10, min(cx + 10, image.shape[1] - 560))
-        y = max(30, cy - 55)
-        for i, line in enumerate(lines):
-            yy = y + i * 28
-            cv2.putText(image, line, (x, yy), cv2.FONT_HERSHEY_SIMPLEX, 0.62, (0, 0, 0), 4)
-            cv2.putText(image, line, (x, yy), cv2.FONT_HERSHEY_SIMPLEX, 0.62, (255, 255, 255), 2)
+        if len(samples) < min_valid:
+            self.log_debug(f'NO_POSE not enough depth samples {len(samples)}/{min_valid}')
 
-    def publish_image(self, image):
-        msg = self.bridge.cv2_to_imgmsg(image, encoding='bgr8')
-        if self.latest_image_header is not None:
-            msg.header = self.latest_image_header
-        else:
-            msg.header.stamp = self.get_clock().now().to_msg()
-        self.image_pub.publish(msg)
+            if bool(self.get_parameter('draw_overlay').value):
+                # 即使没有深度，也画出目标框和中心，方便调试
+                b = best_det.box
+                x1 = int(b.x1)
+                y1 = int(b.y1)
+                x2 = int(b.x2)
+                y2 = int(b.y2)
+                cu = int(b.center_u)
+                cvp = int(b.center_v)
+
+                cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                self.draw_cross(img, cu, cvp, (0, 255, 0), 'target center')
+
+                if self.cx is not None and self.cy is not None:
+                    self.draw_cross(img, self.cx, self.cy, (255, 0, 0), 'image center')
+
+                if depth_img is not None:
+                    dh, dw = depth_img.shape[:2]
+                    cv2.putText(
+                        img,
+                        f'NO DEPTH samples={len(samples)}/{min_valid} RGB={img.shape[1]}x{img.shape[0]} Depth={dw}x{dh}',
+                        (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.65,
+                        (0, 0, 255),
+                        2
+                    )
+
+                self.overlay_pub.publish(
+                    self.bridge.cv2_to_imgmsg(img, encoding='bgr8')
+                )
+            return
+
+        depth_mm, depth_info = self.robust_depth_from_samples(samples)
+
+        if depth_mm is None:
+            self.log_debug('NO_POSE no robust depth')
+
+            if bool(self.get_parameter('draw_overlay').value):
+                self.overlay_pub.publish(
+                    self.bridge.cv2_to_imgmsg(img, encoding='bgr8')
+                )
+            return
+
+        cu = float(best_det.box.center_u)
+        cvp = float(best_det.box.center_v)
+
+        pose_msg = self.make_pose_msg(cu, cvp, depth_mm)
+
+        if pose_msg is None:
+            return
+
+        angle_info = None
+
+        if bool(self.get_parameter('enable_plane_angle_estimation').value):
+            angle_info = self.estimate_plane_angles(depth_img, best_det)
+
+        self.pose_pub.publish(pose_msg)
+        self.publish_pose3d(pose_msg, angle_info)
+
+        yaw_text = 'None' if angle_info is None else f"{angle_info['yaw_deg']:.1f}"
+        pitch_text = 'None' if angle_info is None else f"{angle_info['pitch_deg']:.1f}"
+
+        self.log_debug(
+            f'target {pose_msg.header.frame_id}: '
+            f'x={pose_msg.point.x * 1000.0:.1f} '
+            f'y={pose_msg.point.y * 1000.0:.1f} '
+            f'z={pose_msg.point.z * 1000.0:.1f} mm | '
+            f'depth_center={depth_info["center_depth_mm"]} '
+            f'depth_robust={depth_info["robust_depth_mm"]:.1f} '
+            f'valid={depth_info["valid_count"]} '
+            f'ok={depth_info["consistency_ok"]} '
+            f'yaw={yaw_text} pitch={pitch_text}'
+        )
+
+        if bool(self.get_parameter('draw_overlay').value):
+            self.draw_overlay(img, best_det, samples, depth_info, angle_info, pose_msg, depth_img)
+            self.overlay_pub.publish(
+                self.bridge.cv2_to_imgmsg(img, encoding='bgr8')
+            )
 
 
 def main(args=None):
     rclpy.init(args=args)
     node = TargetPositionOverlayNode()
+
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
-    node.destroy_node()
-    rclpy.shutdown()
+    finally:
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':

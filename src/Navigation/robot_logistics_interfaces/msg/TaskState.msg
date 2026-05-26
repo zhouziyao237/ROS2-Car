@@ -1,0 +1,18 @@
+uint8 STATE_IDLE = 0
+uint8 STATE_TASK_RECEIVED = 1
+uint8 STATE_CHECK_SEMANTIC_LIBRARY = 2
+uint8 STATE_SEARCH_RELOCALIZATION_ANCHOR = 3
+uint8 STATE_FRONTIER_SEARCH_TARGET = 4
+uint8 STATE_NAV_TO_PREDICTED_SHELF = 5
+uint8 STATE_NAV_TO_CONFIRMED_SHELF = 6
+uint8 STATE_ALIGNING = 7
+uint8 STATE_GRABBING = 8
+uint8 STATE_SUCCESS = 9
+uint8 STATE_FAILED = 10
+
+uint8 state
+string shelf_id
+string layer_id
+string column_id
+string package_code
+string error_msg

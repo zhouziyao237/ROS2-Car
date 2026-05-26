@@ -1,0 +1,87 @@
+qr_lift_control_node:
+  ros__parameters:
+    target_pose_topic: /target_pose_base
+    platform_target_topic: /platform/target
+    platform_target_type: auto_aim_interfaces/msg/PlatformTarget
+
+    enable_topic: /qr_lift_control/enable
+    freeze_topic: /qr_lift_control/freeze
+    home_topic: /qr_lift_control/home
+    set_lift_topic: /qr_lift_control/set_lift_mm
+    debug_topic: /qr_lift_control/debug
+
+    arm_start_topic: /pickup_extend/start
+    arm_retract_topic: /pickup_extend/retract
+
+    lift_field: target_lift_z_mm
+    platform_extend_field: target_slide_x_mm
+    hand_extend_field: target_screw_x_mm
+
+    publish_rate_hz: 20.0
+    verbose: true
+
+    # 平台升降范围
+    platform_min_height_mm: 0.0
+    platform_max_height_mm: 330.0
+    initial_lift_target_mm: 0.0
+
+    # 坐标定义：
+    # x = 左右
+    # y = 升降
+    # z = 深度
+    lift_axis: "y"
+
+    # 二次升降精对齐目标
+    # 如果平台取件点比相机中心低 6cm，根据方向改成 60 或 -60
+    lift_axis_target_mm: 0.0
+
+    lift_step_mm: 0.5
+    lift_deadband_mm: 30.0
+
+    # 如果升降方向反了，只改这个为 -1.0
+    lift_direction: 1.0
+
+    lift_filter_window: 9
+    max_jump_lift_mm: 60.0
+    lift_required_same_direction_frames: 5
+    lift_command_interval_sec: 0.20
+
+    lost_timeout_sec: 0.60
+    return_home_when_lost: false
+    return_home_step_mm: 4.0
+
+    # 伸出深度用 z
+    arm_depth_axis: "z"
+    arm_depth_direction: 1.0
+
+    # 第一节平台臂：相机跟着平台伸出
+    platform_extend_min_mm: 0.0
+    platform_extend_max_mm: 120.0
+    platform_extend_step_mm: 5.0
+
+    # 第一节伸出后，希望相机距离包裹还剩多少
+    platform_z_target_mm: 220.0
+    platform_z_deadband_mm: 20.0
+
+    # 第二节小臂：相机不跟着第二节
+    hand_extend_min_mm: 0.0
+    hand_extend_max_mm: 200.0
+
+    # 小臂末端最终距离包裹保留距离
+    pickup_keep_distance_mm: 50.0
+
+    # 相机到第二节小臂零位末端的前后偏移
+    camera_to_hand_tip_zero_z_mm: 0.0
+
+    # 第二节补偿：伸不够加正数，伸太多加负数
+    hand_extend_offset_mm: 0.0
+
+    # 深度稳定判断
+    arm_depth_filter_window: 5
+    arm_depth_required_valid_samples: 4
+    arm_depth_max_jump_mm: 80.0
+
+    platform_settle_wait_sec: 0.8
+    hand_extend_wait_sec: 1.2
+    hand_retract_wait_sec: 1.0
+    platform_retract_wait_sec: 1.0

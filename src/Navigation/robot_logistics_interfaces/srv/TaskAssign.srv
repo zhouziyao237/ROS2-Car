@@ -1,0 +1,4 @@
+string pick_code
+---
+bool accept
+string msg
