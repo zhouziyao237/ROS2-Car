@@ -5,9 +5,9 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Global Options1
-        - /RobotModel1
+        - /D435 RGB1
       Splitter Ratio: 0.5
-    Tree Height: 151
+    Tree Height: 70
   - Class: rviz_common/Selection
     Name: Selection
   - Class: rviz_common/Tool Properties
@@ -102,67 +102,6 @@ Visualization Manager:
                       {}
       Update Interval: 0
       Value: true
-    - Alpha: 1
-      Class: rviz_default_plugins/RobotModel
-      Collision Enabled: false
-      Description File: ""
-      Description Source: Parameter
-      Description Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /robot_description
-      Enabled: true
-      Links:
-        All Links Enabled: true
-        BL-Link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        BR-Link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        Expand Joint Details: false
-        Expand Link Details: false
-        Expand Tree: false
-        FL-Link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        FR-Link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        Link Tree Style: Links in Alphabetic Order
-        SCAN-Link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        base_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        cam1_Link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-      Mass Properties:
-        Inertia: false
-        Mass: false
-      Name: RobotModel
-      TF Prefix: ""
-      Update Interval: 0
-      Value: true
-      Visual Enabled: true
     - Alpha: 0.699999988079071
       Class: rviz_default_plugins/Map
       Color Scheme: map
@@ -378,7 +317,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /camera/camera/color/image_raw
+        Value: /vision/qr_debug_image
       Value: true
     - Alpha: 1
       Class: rviz_default_plugins/Polygon
@@ -435,18 +374,18 @@ Visualization Manager:
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0.1751723438501358
-        Y: 0.28059661388397217
-        Z: 0.3376375138759613
+        X: 0.493367075920105
+        Y: 0.26823511719703674
+        Z: 0.40297624468803406
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.3647964000701904
+      Pitch: 1.5697963237762451
       Target Frame: base_link
       Value: Orbit (rviz_default_plugins)
-      Yaw: 3.293182849884033
+      Yaw: 3.228182792663574
     Saved: ~
 Window Geometry:
   D435 RGB:
@@ -456,7 +395,7 @@ Window Geometry:
   Height: 1016
   Hide Left Dock: false
   Hide Right Dock: false
-  QMainWindow State: 000000ff00000000fd00000001000000000000019b000003a2fc0200000006fb0000001000440034003300350020005200470042010000003b000000ad0000002800fffffffb000000100044006900730070006c00610079007301000000ee00000118000000c700fffffffb0000001200530065006c0065006300740069006f006e010000020c000000880000005c00fffffffb0000001e0054006f006f006c002000500072006f0070006500720074006900650073010000029a000000890000005c00fffffffb0000000a005600690065007700730100000329000000b4000000a000fffffffb0000000a0049006d00610067006501000003c700000016000000000000000000000599000003a200000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  QMainWindow State: 000000ff00000000fd00000001000000000000019b000003a2fc0200000006fb0000001000440034003300350020005200470042010000003b000001650000002800fffffffb000000100044006900730070006c00610079007301000001a6000000c7000000c700fffffffb0000001200530065006c0065006300740069006f006e01000002730000005c0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007301000002d50000005c0000005c00fffffffb0000000a005600690065007700730100000337000000a6000000a000fffffffb0000000a0049006d00610067006501000003c700000016000000000000000000000599000003a200000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   Selection:
     collapsed: false
   Tool Properties:

@@ -1,0 +1,666 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import math
+import re
+from collections import deque
+
+import cv2
+import numpy as np
+import rclpy
+from rclpy.node import Node
+
+from cv_bridge import CvBridge
+
+from sensor_msgs.msg import Image, CameraInfo
+from robot_logistics_interfaces.msg import SemanticObservation
+
+
+class VisionQrDepthNode(Node):
+    """
+    Real QR + depth semantic observation node.
+
+    Input:
+      RGB image
+      aligned depth image
+      color camera_info
+
+    Output:
+      /vision/semantic_observation
+      /vision/qr_debug_image
+
+    QR format supported:
+      S03-C3   -> column_qr
+      S03-L2   -> layer_qr
+      S03-R2-C3 / S03-L2-C3 -> package/cell-style fallback
+      PKG-xxxx / Pxxxx      -> package_qr fallback
+
+    Pose convention:
+      - pose.header.frame_id = camera_info.header.frame_id if available
+      - position is QR center in camera optical frame
+      - orientation local +X axis follows QR/depth plane normal
+      - semantic_registrar_node later transforms it into map
+    """
+
+    def __init__(self):
+        super().__init__('vision_qr_depth_node')
+
+        self.declare_parameter('enabled', True)
+        self.declare_parameter('rgb_topic', '/camera/camera/color/image_raw')
+        self.declare_parameter('camera_info_topic', '/camera/camera/color/camera_info')
+        self.declare_parameter(
+            'depth_topics',
+            ['/camera/camera/aligned_depth_to_color/image_raw',
+             '/camera/camera/depth/image_rect_raw',
+             '/camera/camera/depth/image_raw']
+        )
+        self.declare_parameter('observation_topic', '/vision/semantic_observation')
+        self.declare_parameter('debug_image_topic', '/vision/qr_debug_image')
+        self.declare_parameter('fallback_frame_id', 'camera_color_optical_frame')
+
+        self.declare_parameter('publish_period_sec', 0.10)
+        self.declare_parameter('min_depth_m', 0.15)
+        self.declare_parameter('max_depth_m', 5.0)
+        self.declare_parameter('corner_depth_window', 7)
+        self.declare_parameter('center_depth_window', 9)
+        self.declare_parameter('min_valid_corner_depths', 3)
+        self.declare_parameter('draw_osd', True)
+
+        self.enabled = bool(self.get_parameter('enabled').value)
+        self.rgb_topic = str(self.get_parameter('rgb_topic').value)
+        self.camera_info_topic = str(self.get_parameter('camera_info_topic').value)
+        self.depth_topics = list(self.get_parameter('depth_topics').value)
+        self.observation_topic = str(self.get_parameter('observation_topic').value)
+        self.debug_image_topic = str(self.get_parameter('debug_image_topic').value)
+        self.fallback_frame_id = str(self.get_parameter('fallback_frame_id').value)
+
+        self.publish_period_sec = float(self.get_parameter('publish_period_sec').value)
+        self.min_depth_m = float(self.get_parameter('min_depth_m').value)
+        self.max_depth_m = float(self.get_parameter('max_depth_m').value)
+        self.corner_depth_window = int(self.get_parameter('corner_depth_window').value)
+        self.center_depth_window = int(self.get_parameter('center_depth_window').value)
+        self.min_valid_corner_depths = int(self.get_parameter('min_valid_corner_depths').value)
+        self.draw_osd = bool(self.get_parameter('draw_osd').value)
+
+        self.bridge = CvBridge()
+        self.qr_detector = cv2.QRCodeDetector()
+
+        self.last_rgb_msg = None
+        self.last_depth_msg = None
+        self.last_depth_cv = None
+        self.last_camera_info = None
+        self.last_publish_time = self.get_clock().now()
+
+        self.recent_raw = deque(maxlen=20)
+
+        self.obs_pub = self.create_publisher(SemanticObservation, self.observation_topic, 20)
+        self.debug_pub = self.create_publisher(Image, self.debug_image_topic, 5)
+
+        self.create_subscription(Image, self.rgb_topic, self.rgb_cb, 10)
+        self.create_subscription(CameraInfo, self.camera_info_topic, self.camera_info_cb, 10)
+
+        for topic in self.depth_topics:
+            self.create_subscription(Image, topic, self.depth_cb, 10)
+
+        self.get_logger().info('vision_qr_depth_node started: QR corner depth plane + OSD')
+        self.get_logger().info(f'rgb_topic={self.rgb_topic}')
+        self.get_logger().info(f'camera_info_topic={self.camera_info_topic}')
+        self.get_logger().info(f'depth_topics={self.depth_topics}')
+        self.get_logger().info(f'observation_topic={self.observation_topic}')
+        self.get_logger().info(f'debug_image_topic={self.debug_image_topic}')
+        self.get_logger().info(f'fallback_frame_id={self.fallback_frame_id}')
+
+    # -------------------------
+    # callbacks
+    # -------------------------
+
+    def camera_info_cb(self, msg: CameraInfo):
+        self.last_camera_info = msg
+
+    def depth_cb(self, msg: Image):
+        try:
+            if msg.encoding in ['16UC1', 'mono16']:
+                depth = self.bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
+            else:
+                depth = self.bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
+
+            self.last_depth_msg = msg
+            self.last_depth_cv = np.asarray(depth)
+        except Exception as exc:
+            self.get_logger().warn(f'failed to convert depth image: {repr(exc)}')
+
+    def rgb_cb(self, msg: Image):
+        if not self.enabled:
+            return
+
+        now = self.get_clock().now()
+        if (now - self.last_publish_time).nanoseconds * 1e-9 < self.publish_period_sec:
+            return
+        self.last_publish_time = now
+
+        self.last_rgb_msg = msg
+
+        if self.last_camera_info is None:
+            self.get_logger().warn('waiting for camera_info')
+            return
+
+        if self.last_depth_cv is None:
+            self.get_logger().warn('waiting for depth image')
+            return
+
+        try:
+            bgr = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+        except Exception as exc:
+            self.get_logger().warn(f'failed to convert rgb image: {repr(exc)}')
+            return
+
+        detections = self.detect_qr_multi(bgr)
+
+        osd = bgr.copy()
+        published_count = 0
+
+        for det in detections:
+            raw = det['raw']
+            corners = det['corners']
+
+            parsed = self.parse_qr_payload(raw)
+            if parsed is None:
+                self.draw_detection(osd, corners, raw, 'ignored', None, None, color=(0, 165, 255))
+                continue
+
+            pose_result = self.estimate_qr_pose_from_corners_depth(
+                corners,
+                self.last_depth_cv,
+                self.last_camera_info
+            )
+
+            if pose_result is None:
+                self.draw_detection(osd, corners, raw, parsed['obs_type'], None, None, color=(0, 0, 255))
+                continue
+
+            center, quat, normal, valid_corner_count = pose_result
+
+            obs = self.make_observation(
+                rgb_msg=self.last_rgb_msg,
+                raw=raw,
+                parsed=parsed,
+                center=center,
+                quat=quat
+            )
+
+            self.obs_pub.publish(obs)
+            published_count += 1
+
+            distance = math.sqrt(center[0] * center[0] + center[1] * center[1] + center[2] * center[2])
+
+            self.draw_detection(
+                osd,
+                corners,
+                raw,
+                parsed['obs_type'],
+                center,
+                normal,
+                color=(0, 255, 0),
+                extra=f'd={distance:.2f}m n=({normal[0]:.2f},{normal[1]:.2f},{normal[2]:.2f}) c={valid_corner_count}'
+            )
+
+            self.get_logger().info(
+                f'QR obs raw="{raw}" type={parsed["obs_type"]} '
+                f'shelf={parsed["shelf_id"]} layer={parsed["layer_id"]} column={parsed["column_id"]} '
+                f'row={parsed["row"]} col={parsed["col"]} pkg={parsed["package_code"]} '
+                f'camera_xyz=({center[0]:.2f},{center[1]:.2f},{center[2]:.2f}) '
+                f'normal=({normal[0]:.2f},{normal[1]:.2f},{normal[2]:.2f}) '
+                f'source=qr_corner_depth_plane'
+            )
+
+        if self.draw_osd:
+            self.draw_osd_header(osd, detections, published_count)
+            try:
+                dbg = self.bridge.cv2_to_imgmsg(osd, encoding='bgr8')
+                dbg.header = msg.header
+                self.debug_pub.publish(dbg)
+            except Exception as exc:
+                self.get_logger().warn(f'failed to publish debug image: {repr(exc)}')
+
+    # -------------------------
+    # QR detection
+    # -------------------------
+
+    def detect_qr_multi(self, bgr):
+        detections = []
+
+        gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+
+        # First try multi.
+        try:
+            ok, decoded_info, points, _ = self.qr_detector.detectAndDecodeMulti(gray)
+            if ok and points is not None:
+                for raw, pts in zip(decoded_info, points):
+                    raw = self.normalize_raw(raw)
+                    if not raw:
+                        continue
+                    corners = np.asarray(pts, dtype=np.float32).reshape(4, 2)
+                    detections.append({'raw': raw, 'corners': corners})
+        except Exception:
+            pass
+
+        # Fallback single.
+        if not detections:
+            try:
+                raw, points, _ = self.qr_detector.detectAndDecode(gray)
+                raw = self.normalize_raw(raw)
+                if raw and points is not None:
+                    corners = np.asarray(points, dtype=np.float32).reshape(4, 2)
+                    detections.append({'raw': raw, 'corners': corners})
+            except Exception:
+                pass
+
+        # Deduplicate by raw + approximate center.
+        unique = []
+        seen = set()
+        for det in detections:
+            c = det['corners'].mean(axis=0)
+            key = (det['raw'], int(c[0] / 10), int(c[1] / 10))
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(det)
+
+        return unique
+
+    def normalize_raw(self, raw):
+        if raw is None:
+            return ''
+        raw = str(raw).strip()
+        raw = raw.replace(' ', '')
+        raw = raw.replace('_', '-')
+        return raw.upper()
+
+    # -------------------------
+    # QR payload parsing
+    # -------------------------
+
+    def parse_qr_payload(self, raw):
+        raw = self.normalize_raw(raw)
+        if not raw:
+            return None
+
+        # S03-C3
+        m = re.match(r'^(S\d+)-C(\d+)$', raw)
+        if m:
+            shelf = m.group(1)
+            col = int(m.group(2))
+            return {
+                'obs_type': 'column_qr',
+                'shelf_id': shelf,
+                'face': '',
+                'column_id': f'C{col}',
+                'layer_id': '',
+                'package_code': '',
+                'row': 0,
+                'col': col,
+            }
+
+        # S03-L2
+        m = re.match(r'^(S\d+)-L(\d+)$', raw)
+        if m:
+            shelf = m.group(1)
+            row = int(m.group(2))
+            return {
+                'obs_type': 'layer_qr',
+                'shelf_id': shelf,
+                'face': '',
+                'column_id': '',
+                'layer_id': f'L{row}',
+                'package_code': '',
+                'row': row,
+                'col': 0,
+            }
+
+        # S03-L2-C3 / S03-R2-C3
+        m = re.match(r'^(S\d+)-(?:L|R)(\d+)-C(\d+)$', raw)
+        if m:
+            shelf = m.group(1)
+            row = int(m.group(2))
+            col = int(m.group(3))
+            return {
+                'obs_type': 'package_qr',
+                'shelf_id': shelf,
+                'face': '',
+                'column_id': f'C{col}',
+                'layer_id': f'L{row}',
+                'package_code': raw,
+                'row': row,
+                'col': col,
+            }
+
+        # Package fallback, currently not registered as shelf pose.
+        if raw.startswith('PKG') or raw.startswith('P'):
+            return {
+                'obs_type': 'package_qr',
+                'shelf_id': '',
+                'face': '',
+                'column_id': '',
+                'layer_id': '',
+                'package_code': raw,
+                'row': 0,
+                'col': 0,
+            }
+
+        return None
+
+    # -------------------------
+    # Depth geometry
+    # -------------------------
+
+    def depth_at_pixel_median(self, depth_img, u, v, win):
+        if depth_img is None:
+            return None
+
+        h, w = depth_img.shape[:2]
+        u = int(round(float(u)))
+        v = int(round(float(v)))
+
+        r = max(1, int(win) // 2)
+        u0 = max(0, u - r)
+        u1 = min(w, u + r + 1)
+        v0 = max(0, v - r)
+        v1 = min(h, v + r + 1)
+
+        if u0 >= u1 or v0 >= v1:
+            return None
+
+        patch = np.asarray(depth_img[v0:v1, u0:u1]).reshape(-1)
+        vals = []
+
+        for d in patch:
+            d = float(d)
+            if not math.isfinite(d) or d <= 0.0:
+                continue
+
+            # RealSense aligned depth usually 16UC1 in millimeters.
+            if d > 20.0:
+                d *= 0.001
+
+            if self.min_depth_m < d < self.max_depth_m:
+                vals.append(d)
+
+        if not vals:
+            return None
+
+        vals.sort()
+        return float(vals[len(vals) // 2])
+
+    def deproject_pixel(self, u, v, z, camera_info):
+        fx = float(camera_info.k[0])
+        fy = float(camera_info.k[4])
+        cx = float(camera_info.k[2])
+        cy = float(camera_info.k[5])
+
+        x = (float(u) - cx) * z / fx
+        y = (float(v) - cy) * z / fy
+
+        return np.array([x, y, z], dtype=np.float64)
+
+    def estimate_qr_pose_from_corners_depth(self, corners, depth_img, camera_info):
+        corners = np.asarray(corners, dtype=np.float64).reshape(-1, 2)
+        if corners.shape[0] < 4:
+            return None
+
+        pts3 = []
+        valid_count = 0
+
+        # Try each corner. If corner depth fails, use center depth fallback for that corner.
+        center_uv = corners[:4].mean(axis=0)
+        center_z = self.depth_at_pixel_median(
+            depth_img,
+            center_uv[0],
+            center_uv[1],
+            self.center_depth_window
+        )
+
+        for u, v in corners[:4]:
+            z = self.depth_at_pixel_median(depth_img, u, v, self.corner_depth_window)
+            if z is not None:
+                valid_count += 1
+            elif center_z is not None:
+                z = center_z
+            else:
+                return None
+
+            pts3.append(self.deproject_pixel(u, v, z, camera_info))
+
+        if valid_count < self.min_valid_corner_depths and center_z is None:
+            return None
+
+        p0, p1, p2, p3 = pts3
+
+        # Plane normal from QR corner geometry.
+        # Depending on QR point order, normal direction may flip.
+        v01 = p1 - p0
+        v03 = p3 - p0
+        normal = np.cross(v01, v03)
+
+        n = np.linalg.norm(normal)
+        if n < 1e-9:
+            return None
+
+        normal = normal / n
+
+        # In optical frame, +Z points forward from camera.
+        # A visible QR front face should usually have normal pointing toward camera,
+        # i.e. roughly -Z. If it points +Z, flip it.
+        if normal[2] > 0.0:
+            normal = -normal
+
+        quat = self.quat_from_camera_normal(normal)
+        if quat is None:
+            return None
+
+        center = np.mean(np.asarray(pts3), axis=0)
+
+        return center.tolist(), quat, normal.tolist(), valid_count
+
+    def quat_from_camera_normal(self, normal):
+        normal = np.asarray(normal, dtype=np.float64)
+        n = np.linalg.norm(normal)
+        if n < 1e-9:
+            return None
+
+        x_axis = normal / n
+
+        # Stable reference for building full orientation.
+        # Optical frame: x right, y down, z forward.
+        ref = np.array([0.0, -1.0, 0.0], dtype=np.float64)
+
+        if abs(float(np.dot(x_axis, ref))) > 0.95:
+            ref = np.array([1.0, 0.0, 0.0], dtype=np.float64)
+
+        y_axis = np.cross(ref, x_axis)
+        yn = np.linalg.norm(y_axis)
+        if yn < 1e-9:
+            return None
+        y_axis = y_axis / yn
+
+        z_axis = np.cross(x_axis, y_axis)
+        zn = np.linalg.norm(z_axis)
+        if zn < 1e-9:
+            return None
+        z_axis = z_axis / zn
+
+        R = np.array([
+            [x_axis[0], y_axis[0], z_axis[0]],
+            [x_axis[1], y_axis[1], z_axis[1]],
+            [x_axis[2], y_axis[2], z_axis[2]],
+        ], dtype=np.float64)
+
+        return self.quat_from_rotation_matrix(R)
+
+    def quat_from_rotation_matrix(self, R):
+        tr = float(np.trace(R))
+
+        if tr > 0.0:
+            S = math.sqrt(tr + 1.0) * 2.0
+            qw = 0.25 * S
+            qx = (R[2, 1] - R[1, 2]) / S
+            qy = (R[0, 2] - R[2, 0]) / S
+            qz = (R[1, 0] - R[0, 1]) / S
+        elif R[0, 0] > R[1, 1] and R[0, 0] > R[2, 2]:
+            S = math.sqrt(1.0 + R[0, 0] - R[1, 1] - R[2, 2]) * 2.0
+            qw = (R[2, 1] - R[1, 2]) / S
+            qx = 0.25 * S
+            qy = (R[0, 1] + R[1, 0]) / S
+            qz = (R[0, 2] + R[2, 0]) / S
+        elif R[1, 1] > R[2, 2]:
+            S = math.sqrt(1.0 + R[1, 1] - R[0, 0] - R[2, 2]) * 2.0
+            qw = (R[0, 2] - R[2, 0]) / S
+            qx = (R[0, 1] + R[1, 0]) / S
+            qy = 0.25 * S
+            qz = (R[1, 2] + R[2, 1]) / S
+        else:
+            S = math.sqrt(1.0 + R[2, 2] - R[0, 0] - R[1, 1]) * 2.0
+            qw = (R[1, 0] - R[0, 1]) / S
+            qx = (R[0, 2] + R[2, 0]) / S
+            qy = (R[1, 2] + R[2, 1]) / S
+            qz = 0.25 * S
+
+        qn = math.sqrt(qx * qx + qy * qy + qz * qz + qw * qw)
+        if qn < 1e-9:
+            return None
+
+        return [qx / qn, qy / qn, qz / qn, qw / qn]
+
+    # -------------------------
+    # Message creation
+    # -------------------------
+
+    def make_observation(self, rgb_msg, raw, parsed, center, quat):
+        obs = SemanticObservation()
+
+        obs.header.stamp = rgb_msg.header.stamp
+        obs.header.frame_id = self.get_camera_frame()
+
+        obs.obs_type = parsed['obs_type']
+        obs.shelf_id = parsed['shelf_id']
+        obs.face = parsed['face']
+        obs.column_id = parsed['column_id']
+        obs.layer_id = parsed['layer_id']
+        obs.package_code = parsed['package_code']
+        obs.row = int(parsed['row'])
+        obs.col = int(parsed['col'])
+
+        obs.pose.header.stamp = rgb_msg.header.stamp
+        obs.pose.header.frame_id = self.get_camera_frame()
+
+        obs.pose.pose.position.x = float(center[0])
+        obs.pose.pose.position.y = float(center[1])
+        obs.pose.pose.position.z = float(center[2])
+
+        obs.pose.pose.orientation.x = float(quat[0])
+        obs.pose.pose.orientation.y = float(quat[1])
+        obs.pose.pose.orientation.z = float(quat[2])
+        obs.pose.pose.orientation.w = float(quat[3])
+
+        obs.confidence = float(0.85)
+        obs.has_pose = True
+
+        return obs
+
+    def get_camera_frame(self):
+        if self.last_camera_info is not None and self.last_camera_info.header.frame_id:
+            return self.last_camera_info.header.frame_id
+        return self.fallback_frame_id
+
+    # -------------------------
+    # OSD
+    # -------------------------
+
+    def draw_detection(self, img, corners, raw, obs_type, center, normal, color=(0, 255, 0), extra=''):
+        pts = np.asarray(corners, dtype=np.int32).reshape(-1, 2)
+
+        if len(pts) >= 4:
+            cv2.polylines(img, [pts], True, color, 2)
+
+            for i, p in enumerate(pts[:4]):
+                cv2.circle(img, tuple(p), 4, color, -1)
+                cv2.putText(
+                    img,
+                    str(i),
+                    (int(p[0]) + 3, int(p[1]) - 3),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.4,
+                    color,
+                    1,
+                    cv2.LINE_AA
+                )
+
+        c = pts.mean(axis=0).astype(int) if len(pts) > 0 else np.array([20, 40])
+        text1 = f'{raw} {obs_type}'
+        cv2.putText(
+            img,
+            text1,
+            (int(c[0]), int(c[1]) - 10),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            color,
+            2,
+            cv2.LINE_AA
+        )
+
+        if center is not None:
+            text2 = f'xyz=({center[0]:.2f},{center[1]:.2f},{center[2]:.2f})'
+            cv2.putText(
+                img,
+                text2,
+                (int(c[0]), int(c[1]) + 16),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.45,
+                color,
+                1,
+                cv2.LINE_AA
+            )
+
+        if extra:
+            cv2.putText(
+                img,
+                extra,
+                (int(c[0]), int(c[1]) + 34),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.42,
+                color,
+                1,
+                cv2.LINE_AA
+            )
+
+    def draw_osd_header(self, img, detections, published_count):
+        frame = self.get_camera_frame()
+        text = f'QR detections={len(detections)} published={published_count} frame={frame}'
+
+        cv2.rectangle(img, (0, 0), (img.shape[1], 28), (0, 0, 0), -1)
+        cv2.putText(
+            img,
+            text,
+            (8, 20),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55,
+            (255, 255, 255),
+            1,
+            cv2.LINE_AA
+        )
+
+
+def main():
+    rclpy.init()
+    node = VisionQrDepthNode()
+
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+
+    node.destroy_node()
+    rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()

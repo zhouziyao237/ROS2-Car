@@ -105,6 +105,11 @@ def make_semantic_system(context, *args, **kwargs):
     ]
 
 
+def delayed(period, actions):
+    """把一组 action 延迟启动，避免硬件、TF、SLAM、Nav2 同时抢资源。"""
+    return TimerAction(period=period, actions=actions)
+
+
 def generate_launch_description():
     start_lidar = LaunchConfiguration('start_lidar')
     start_serial = LaunchConfiguration('start_serial')
@@ -130,14 +135,277 @@ def generate_launch_description():
     serial_pkg = get_package_share_directory('rm_serial_driver')
     lslidar_pkg = get_package_share_directory('lslidar_driver')
 
-    rf2o_params_file = LaunchConfiguration('rf2o_params_file')
     slam_params_file = LaunchConfiguration('slam_params_file')
     nav2_params_file = LaunchConfiguration('nav2_params_file')
     rviz_config = LaunchConfiguration('rviz_config')
 
     # -------------------------
-    # 底盘串口：只负责接收 /cmd_vel_selected 控制底盘
-    # 注意：rm_serial_driver 不能再发布 /odom 或 odom->base_link
+    # Phase 0: URDF + joint states
+    # 先把 base_link、SCAN-Link、cam1_Link 等静态/动态 TF 树建出来。
+    # -------------------------
+    robot_state_publisher = OpaqueFunction(function=make_robot_state_publisher)
+    joint_state_publisher = OpaqueFunction(function=make_joint_state_publisher)
+
+    # -------------------------
+    # Phase 1: LSLIDAR M10P
+    # 只把 serial_port 参数传给 lslidar，不要把外层 launch 参数乱传。
+    # -------------------------
+    lidar_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(lslidar_pkg, 'launch', 'lsm10p_uart_launch.py')
+        ),
+        condition=IfCondition(start_lidar),
+        launch_arguments={
+            'serial_port': lidar_serial_port,
+        }.items()
+    )
+
+    # -------------------------
+    # Phase 2: /scan -> /scan_front
+    # 等 lslidar 先发布 /scan 后再启动，避免刚启动就空等。
+    # -------------------------
+    front_scan_filter_node = Node(
+        package='nav_stack_core_v2',
+        executable='front_scan_filter',
+        name='front_scan_filter',
+        output='screen',
+        condition=IfCondition(start_lidar),
+        parameters=[{
+            'input_topic': raw_scan_topic,
+            'output_topic': nav_scan_topic,
+
+            'filter_mode': 'block_sector',
+            'block_start_deg': 180.0,
+            'block_end_deg': 280.0,
+
+            'min_range': 0.18,
+            'max_range': 12.0,
+            'frame_id': '',
+
+            'reverse_scan': False,
+
+            'force_fixed_count': True,
+            'fixed_count': 1324,
+            'fixed_angle_min': 0.0,
+            'fixed_angle_max': 6.283185307179586,
+
+            'output_max_hz': 12.0,
+            'stamp_policy': 'now',
+        }]
+    )
+
+    # -------------------------
+    # Phase 3: RF2O
+    # 先让 /scan 稳定，再启动 rf2o。
+    # rf2o 只输出 /odom_laser，不直接发布 TF，避免和 adapter 抢 odom->base_link。
+    # -------------------------
+    rf2o_node = Node(
+        package='rf2o_laser_odometry',
+        executable='rf2o_laser_odometry_node',
+        name='rf2o_laser_odometry',
+        output='screen',
+        condition=IfCondition(start_lidar),
+        parameters=[{
+            'laser_scan_topic': raw_scan_topic,
+            'odom_topic': '/odom_laser',
+            'publish_tf': False,
+            'base_frame_id': 'base_link',
+            'odom_frame_id': 'odom',
+            'init_pose_from_topic': '',
+            'freq': 12.0,
+        }],
+    )
+
+    rf2o_odom_adapter_node = Node(
+        package='nav_stack_core_v2',
+        executable='rf2o_odom_adapter',
+        name='rf2o_odom_adapter',
+        output='screen',
+        condition=IfCondition(start_lidar),
+        parameters=[{
+            'input_odom_topic': '/odom_laser',
+            'output_odom_topic': '/odom',
+            'odom_frame': 'odom',
+            'base_frame': 'base_link',
+            'publish_odom_topic': True,
+            'publish_tf': True,
+            'zero_z': True,
+            'stamp_policy': 'now',
+        }],
+    )
+
+    # -------------------------
+    # Phase 4: cmd_vel mux
+    # 这个节点不依赖底盘串口，可以先启动，后续 serial 启动后直接接 /cmd_vel_selected。
+    # -------------------------
+    cmd_vel_mux_node = Node(
+        package='nav_stack_core_v2',
+        executable='cmd_vel_mode_mux',
+        name='cmd_vel_mode_mux',
+        output='screen',
+        parameters=[{
+            'manual_topic': '/cmd_vel_manual',
+            'manual_topic_alt': '',
+
+            'auto_topic': '/cmd_vel_smoothed',
+            'auto_topic_alt': '/cmd_vel',
+
+            'output_topic': serial_cmd_vel_topic,
+
+            'mode_topic': '/control_mode',
+            'chassis_mode_topic': '',
+
+            'publish_rate': 50.0,
+            'cmd_timeout': 0.08,
+            'default_mode': 'auto',
+
+            'swap_xy': False,
+            'invert_x': False,
+            'invert_y': True,
+            'invert_z': False,
+
+            'debug_cmd': True,
+            'debug_period': 0.5,
+        }]
+    )
+
+    # -------------------------
+    # Phase 5: RealSense D435
+    # 只传 RealSense 自己支持的参数，避免出现大量 "Parameter not supported"。
+    # -------------------------
+    realsense_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(
+                get_package_share_directory('realsense2_camera'),
+                'launch',
+                'rs_launch.py'
+            )
+        ),
+        condition=IfCondition(start_realsense),
+        launch_arguments={
+            'enable_color': 'true',
+            'enable_depth': 'true',
+            'pointcloud.enable': 'false',
+            'align_depth.enable': 'true',
+            'enable_sync': 'true',
+
+            'rgb_camera.color_profile': '424x240x15',
+            'depth_module.depth_profile': '424x240x15',
+        }.items()
+    )
+
+    camera_link_static_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='camera_link_static_tf',
+        output='screen',
+        condition=IfCondition(start_realsense),
+        arguments=[
+            '--x', '0.0',
+            '--y', '0.0',
+            '--z', '0.0',
+            '--roll', '3.1415926',
+            '--pitch', '0.349066',
+            '--yaw', '0.0',
+            '--frame-id', 'cam1_Link',
+            '--child-frame-id', 'camera_link'
+        ],
+    )
+
+    # -------------------------
+    # Phase 6: D435 depth -> /d435_scan
+    # 等 D435 驱动完全启动后再启动。
+    # -------------------------
+    d435_depth_to_scan_node = Node(
+        package='nav_stack_core_v2',
+        executable='d435_depth_to_scan',
+        name='d435_depth_to_scan_node',
+        output='screen',
+        condition=IfCondition(start_d435_scan),
+        parameters=[{
+            'depth_image_topic': '/camera/camera/aligned_depth_to_color/image_raw',
+            'camera_info_topic': '/camera/camera/color/camera_info',
+            'output_scan_topic': d435_scan_topic,
+
+            'output_frame': 'base_link',
+
+            'scan_height_pixels': 16,
+            'range_min': 0.25,
+            'range_max': 3.0,
+            'angle_min_deg': -35.0,
+            'angle_max_deg': 35.0,
+        }],
+    )
+
+    # -------------------------
+    # Phase 7: /scan_front + /d435_scan -> /scan_fused
+    # scan_fusion 必须等 /scan_front 和 /d435_scan 都存在后再启动。
+    # -------------------------
+    scan_fusion_node = Node(
+        package='nav_stack_core_v2',
+        executable='scan_fusion_node',
+        name='scan_fusion_node',
+        output='screen',
+        condition=IfCondition(start_scan_fusion),
+        parameters=[{
+            'lidar_scan_topic': nav_scan_topic,
+            'depth_scan_topic': d435_scan_topic,
+            'output_scan_topic': fused_scan_topic,
+
+            'enable_d435_clearing': False,
+
+            'range_min': 0.18,
+            'range_max': 12.0,
+            'depth_timeout_sec': 0.5,
+        }],
+    )
+
+    # -------------------------
+    # Phase 8: SLAM
+    # SLAM 等 odom->base_link、base_link->SCAN-Link、/scan_front 都稳定后再启动。
+    # 注意：SLAM 固定吃 /scan_front，不建议吃 /scan_fused。
+    # -------------------------
+    slam_toolbox_node = Node(
+        package='slam_toolbox',
+        executable='async_slam_toolbox_node',
+        name='slam_toolbox',
+        output='screen',
+        parameters=[
+            slam_params_file,
+            {
+                'use_sim_time': False,
+                'odom_frame': 'odom',
+                'map_frame': 'map',
+                'base_frame': 'base_link',
+                'scan_topic': slam_scan_topic,
+            }
+        ],
+    )
+
+    # -------------------------
+    # Phase 9: Nav2
+    # Nav2 最后启动，等 SLAM 已经发布 map->odom。
+    # -------------------------
+    nav2 = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(
+                get_package_share_directory('nav2_bringup'),
+                'launch',
+                'navigation_launch.py'
+            )
+        ),
+        condition=IfCondition(start_nav2),
+        launch_arguments={
+            'use_sim_time': 'false',
+            'params_file': nav2_params_file,
+            'autostart': 'true',
+        }.items()
+    )
+
+    # -------------------------
+    # Phase 10: 底盘串口
+    # 放到后面，避免 /dev/ttyACM0 不存在时一开始就刷崩整个启动日志。
+    # 若只是调 SLAM，建议 start_serial:=false。
     # -------------------------
     serial_driver_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -167,304 +435,25 @@ def generate_launch_description():
     )
 
     # -------------------------
-    # LSLIDAR M10P
+    # Phase 11: semantic
+    # 放到 SLAM/Nav2 后面，避免抢 TF 和 topic。
     # -------------------------
-    lidar_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(lslidar_pkg, 'launch', 'lsm10p_uart_launch.py')
-        ),
-        condition=IfCondition(start_lidar),
-        launch_arguments={
-            'serial_port': lidar_serial_port,
-        }.items()
-    )
+    semantic_system = OpaqueFunction(function=make_semantic_system)
 
     # -------------------------
-    # URDF + joint states
+    # Phase 12: RViz
+    # 最后启动，避免启动初期 RViz 大量订阅 scan/map/image 导致队列和 QoS 警告。
     # -------------------------
-    robot_state_publisher = OpaqueFunction(function=make_robot_state_publisher)
-    joint_state_publisher = OpaqueFunction(function=make_joint_state_publisher)
-
-    # -------------------------
-    # /scan -> /scan_front
-    # SLAM 固定用 /scan_front
-    # 不要把 nav_scan_topic 改成 /scan_fused，否则 /scan_front 可能没了
-    # -------------------------
-    front_scan_filter_node = Node(
-        package='nav_stack_core_v2',
-        executable='front_scan_filter',
-        name='front_scan_filter',
+    rviz_node = Node(
+        package='rviz2',
+        executable='rviz2',
+        name='rviz2',
         output='screen',
+        condition=IfCondition(use_rviz),
+        arguments=['-d', rviz_config],
         parameters=[{
-            'input_topic': raw_scan_topic,
-            'output_topic': nav_scan_topic,
-
-            'filter_mode': 'block_sector',
-            'block_start_deg': 180.0,
-            'block_end_deg': 280.0,
-
-            'min_range': 0.18,
-            'max_range': 12.0,
-            'frame_id': '',
-
-            'reverse_scan': False,
-
-            'force_fixed_count': True,
-            'fixed_count': 1324,
-            'fixed_angle_min': 0.0,
-            'fixed_angle_max': 6.283185307179586,
-
-            # 如果 front_scan_filter.py 支持这两个参数，就启用低延迟策略
-            'output_max_hz': 12.0,
-            'stamp_policy': 'now',
-        }]
-    )
-
-    # -------------------------
-    # cmd_vel mux
-    # Nav2: /cmd_vel 或 /cmd_vel_smoothed
-    # 输出：/cmd_vel_selected -> rm_serial_driver
-    # -------------------------
-    cmd_vel_mux_node = Node(
-        package='nav_stack_core_v2',
-        executable='cmd_vel_mode_mux',
-        name='cmd_vel_mode_mux',
-        output='screen',
-        parameters=[{
-            'manual_topic': '/cmd_vel_manual',
-            'manual_topic_alt': '',
-
-            'auto_topic': '/cmd_vel_smoothed',
-            'auto_topic_alt': '/cmd_vel',
-
-            'output_topic': serial_cmd_vel_topic,
-
-            'mode_topic': '/control_mode',
-            'chassis_mode_topic': '',
-
-            'publish_rate': 50.0,
-            'cmd_timeout': 0.08,
-            'default_mode': 'auto',
-
-            # 按你当前底盘坐标修正
-            'swap_xy': True,
-            'invert_x': True,
-            'invert_y': False,
-            'invert_z': False,
-
-            'debug_cmd': True,
-            'debug_period': 0.5,
-        }]
-    )
-
-    # -------------------------
-    # RF2O：只输出 /odom_laser，不发 TF，不直接发 /odom
-    # -------------------------
-    rf2o_node = Node(
-        package='rf2o_laser_odometry',
-        executable='rf2o_laser_odometry_node',
-        name='rf2o_laser_odometry',
-        output='screen',
-        parameters=[{
-            'laser_scan_topic': '/scan',
-            'odom_topic': '/odom_laser',
-            'publish_tf': False,
-            'base_frame_id': 'base_link',
-            'odom_frame_id': 'odom',
-            'init_pose_from_topic': '',
-            'freq': 12.0,
+            'use_sim_time': False,
         }],
-    )
-
-    # -------------------------
-    # /odom_laser -> /odom + odom -> base_link
-    # -------------------------
-    rf2o_odom_adapter_node = Node(
-        package='nav_stack_core_v2',
-        executable='rf2o_odom_adapter',
-        name='rf2o_odom_adapter',
-        output='screen',
-        parameters=[{
-            'input_odom_topic': '/odom_laser',
-            'output_odom_topic': '/odom',
-            'odom_frame': 'odom',
-            'base_frame': 'base_link',
-            'publish_odom_topic': True,
-            'publish_tf': True,
-            'zero_z': True,
-        }],
-    )
-
-    # -------------------------
-    # RealSense D435
-    # -------------------------
-    realsense_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(
-                get_package_share_directory('realsense2_camera'),
-                'launch',
-                'rs_launch.py'
-            )
-        ),
-        condition=IfCondition(start_realsense),
-        launch_arguments={
-            'enable_color': 'true',
-            'enable_depth': 'true',
-            'pointcloud.enable': 'false',
-            'align_depth.enable': 'true',
-            'enable_sync': 'true',
-
-            'rgb_camera.color_profile': '424x240x15',
-            'depth_module.depth_profile': '424x240x15',
-        }.items()
-    )
-
-    # 把 RealSense 驱动自己的 camera_link 接到 robot2 URDF 里的 cam1_Link。
-    # URDF 已经有 base_link -> cam1_Link，所以这里用 0 0 0 0 0 0。
-    camera_link_static_tf = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='camera_link_static_tf',
-        output='screen',
-        arguments=[
-            '0', '0', '0',
-            '0', '0', '0',
-            'cam1_Link',
-            'camera_link'
-        ],
-        condition=IfCondition(start_realsense),
-    )
-
-    # -------------------------
-    # D435 depth -> /d435_scan
-    # -------------------------
-    d435_depth_to_scan = TimerAction(
-        period=3.0,
-        actions=[
-            Node(
-                package='nav_stack_core_v2',
-                executable='d435_depth_to_scan',
-                name='d435_depth_to_scan_node',
-                output='screen',
-                condition=IfCondition(start_d435_scan),
-                parameters=[{
-                    'depth_image_topic': '/camera/camera/aligned_depth_to_color/image_raw',
-                    'camera_info_topic': '/camera/camera/color/camera_info',
-                    'output_scan_topic': d435_scan_topic,
-
-                    # 直接输出到 base_link，方便 scan_fusion 和 costmap 使用
-                    'output_frame': 'base_link',
-
-                    'scan_height_pixels': 16,
-                    'range_min': 0.25,
-                    'range_max': 3.0,
-                    'angle_min_deg': -35.0,
-                    'angle_max_deg': 35.0,
-                }],
-            )
-        ]
-    )
-
-    # -------------------------
-    # /scan_front + /d435_scan -> /scan_fused
-    # -------------------------
-    scan_fusion = TimerAction(
-        period=5.0,
-        actions=[
-            Node(
-                package='nav_stack_core_v2',
-                executable='scan_fusion_node',
-                name='scan_fusion_node',
-                output='screen',
-                condition=IfCondition(start_scan_fusion),
-                parameters=[{
-                    'lidar_scan_topic': nav_scan_topic,
-                    'depth_scan_topic': d435_scan_topic,
-                    'output_scan_topic': fused_scan_topic,
-
-                    'enable_d435_clearing': False,
-
-                    'range_min': 0.18,
-                    'range_max': 12.0,
-                    'depth_timeout_sec': 0.5,
-                }],
-            )
-        ]
-    )
-
-    # -------------------------
-    # SLAM：只吃 /scan_front
-    # 输出 /map 和 map -> odom
-    # -------------------------
-    slam_toolbox = TimerAction(
-        period=7.0,
-        actions=[
-            Node(
-                package='slam_toolbox',
-                executable='async_slam_toolbox_node',
-                name='slam_toolbox',
-                output='screen',
-                parameters=[
-                    slam_params_file,
-                    {
-                        'use_sim_time': False,
-                        'odom_frame': 'odom',
-                        'map_frame': 'map',
-                        'base_frame': 'base_link',
-                        'scan_topic': slam_scan_topic,
-                    }
-                ],
-            )
-        ]
-    )
-
-    # -------------------------
-    # Nav2：延迟启动，等 map -> base_link 出来
-    # Nav2 是否用 /scan_fused，由 nav2_params_file 控制
-    # -------------------------
-    nav2 = TimerAction(
-        period=15.0,
-        actions=[
-            IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(
-                    os.path.join(
-                        get_package_share_directory('nav2_bringup'),
-                        'launch',
-                        'navigation_launch.py'
-                    )
-                ),
-                condition=IfCondition(start_nav2),
-                launch_arguments={
-                    'use_sim_time': 'false',
-                    'params_file': nav2_params_file,
-                    'autostart': 'true',
-                }.items()
-            )
-        ]
-    )
-
-    semantic_system = TimerAction(
-        period=20.0,
-        actions=[
-            OpaqueFunction(function=make_semantic_system)
-        ]
-    )
-
-    rviz = TimerAction(
-        period=8.0,
-        actions=[
-            Node(
-                package='rviz2',
-                executable='rviz2',
-                name='rviz2',
-                output='screen',
-                condition=IfCondition(use_rviz),
-                arguments=['-d', rviz_config],
-                parameters=[{
-                    'use_sim_time': False,
-                }],
-            )
-        ]
     )
 
     return LaunchDescription([
@@ -508,14 +497,9 @@ def generate_launch_description():
         DeclareLaunchArgument('serial_cmd_vel_topic', default_value='/cmd_vel_selected'),
 
         DeclareLaunchArgument('raw_scan_topic', default_value='/scan'),
-
-        # 这个保持 /scan_front，不要改成 /scan_fused
         DeclareLaunchArgument('nav_scan_topic', default_value='/scan_front'),
-
         DeclareLaunchArgument('d435_scan_topic', default_value='/d435_scan'),
         DeclareLaunchArgument('fused_scan_topic', default_value='/scan_fused'),
-
-        # slam_toolbox 固定吃 /scan_front
         DeclareLaunchArgument('slam_scan_topic', default_value='/scan_front'),
 
         DeclareLaunchArgument(
@@ -524,24 +508,71 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument('reset_semantic_map', default_value='false'),
 
-        serial_driver_launch,
-        lidar_launch,
+        # 0.0s：先建 TF 树
+        delayed(0.0, [
+            robot_state_publisher,
+            joint_state_publisher,
+        ]),
 
-        robot_state_publisher,
-        joint_state_publisher,
+        # 1.0s：雷达先启动，先稳定 /scan
+        delayed(1.0, [
+            lidar_launch,
+        ]),
 
-        front_scan_filter_node,
-        cmd_vel_mux_node,
-        rf2o_node,
-        rf2o_odom_adapter_node,
+        # 3.0s：有 /scan 后再启动前向过滤
+        delayed(3.0, [
+            front_scan_filter_node,
+        ]),
 
-        realsense_launch,
-        camera_link_static_tf,
-        d435_depth_to_scan,
-        scan_fusion,
+        # 5.0s：有稳定 scan 后再启动 rf2o 和 odom TF
+        delayed(5.0, [
+            rf2o_node,
+            rf2o_odom_adapter_node,
+        ]),
 
-        slam_toolbox,
-        nav2,
-        semantic_system,
-        rviz,
+        # 6.0s：cmd_vel mux 可以较早启动，但不抢硬件
+        delayed(6.0, [
+            cmd_vel_mux_node,
+        ]),
+
+        # 8.0s：再启动 D435，避免和雷达/TF 初始化抢资源
+        delayed(8.0, [
+            realsense_launch,
+            camera_link_static_tf,
+        ]),
+
+        # 13.0s：D435 图像流稳定后，再转 /d435_scan
+        delayed(13.0, [
+            d435_depth_to_scan_node,
+        ]),
+
+        # 16.0s：scan_front 和 d435_scan 都稳定后，再 fusion
+        delayed(16.0, [
+            scan_fusion_node,
+        ]),
+
+        # 20.0s：最后启动 SLAM，等 TF 和 scan 都稳定
+        delayed(20.0, [
+            slam_toolbox_node,
+        ]),
+
+        # 28.0s：等 SLAM 发布 map->odom 后，再启动 Nav2
+        delayed(28.0, [
+            nav2,
+        ]),
+
+        # 32.0s：底盘串口靠后启动；调试 SLAM 时建议 start_serial:=false
+        delayed(32.0, [
+            serial_driver_launch,
+        ]),
+
+        # 36.0s：语义系统最后再进
+        delayed(36.0, [
+            semantic_system,
+        ]),
+
+        # 40.0s：RViz 最后启动，减少启动期队列爆掉和 QoS 警告
+        delayed(40.0, [
+            rviz_node,
+        ]),
     ])

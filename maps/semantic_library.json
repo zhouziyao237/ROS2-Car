@@ -1,66 +1,115 @@
 {
-  "version": 2,
-  "semantic_mode": "shelf_column_layer",
+  "version": 4,
+  "semantic_mode": "front_side_dual_qr_fusion",
   "shelves": {
     "S03": {
       "shelf_id": "S03",
-      "column_id": "C3",
-      "col": 3,
+      "front_anchor": {
+        "seen": true,
+        "layer_id": "L1",
+        "row": 1,
+        "x": 0.07653559365291202,
+        "y": -0.745510628513799,
+        "normal_x": -0.37522742185529173,
+        "normal_y": 0.9269327817527174,
+        "yaw": 1.9554384379207304,
+        "stamp": 1779888686.989893,
+        "confidence": 0.8500000238418579,
+        "source": "layer_qr_front_face"
+      },
       "column_anchor": {
         "seen": true,
         "column_id": "C3",
         "col": 3,
-        "x": 0.4714398797319412,
-        "y": 0.02064792358915125,
-        "normal_x": -0.99996145222469,
-        "normal_y": -0.008780322584564302,
-        "yaw": -3.1328122181828553,
-        "stamp": 1779799231.2920382,
-        "confidence": 0.8500000238418579
+        "x": -0.031390329180443904,
+        "y": -0.6694249299619286,
+        "side_normal_x": 0.2915747765029588,
+        "side_normal_y": 0.9565480383688263,
+        "side_yaw": 1.274923589190722,
+        "front_yaw_candidate": 2.845719915985619,
+        "stamp": 1779888717.4131045,
+        "confidence": 0.8500000238418579,
+        "face": "side",
+        "source": "column_qr_side_face"
+      },
+      "side_column_anchors": {
+        "C3": {
+          "seen": true,
+          "column_id": "C3",
+          "col": 3,
+          "x": -0.031390329180443904,
+          "y": -0.6694249299619286,
+          "side_normal_x": 0.2915747765029588,
+          "side_normal_y": 0.9565480383688263,
+          "side_yaw": 1.274923589190722,
+          "front_yaw_candidate": 2.845719915985619,
+          "stamp": 1779888717.4131045,
+          "confidence": 0.8500000238418579,
+          "face": "side",
+          "source": "column_qr_side_face"
+        }
       },
       "layers": {
         "L1": {
           "seen": true,
           "layer_id": "L1",
           "row": 1,
-          "x": 0.48087687293480313,
-          "y": -0.034013804803099415,
-          "normal_x": -0.9998279934885603,
-          "normal_y": -0.018546790467337263,
-          "yaw": -3.123044799659711,
-          "stamp": 1779799278.9541123,
-          "confidence": 0.8500000238418579
+          "x": 0.07653559365291202,
+          "y": -0.745510628513799,
+          "normal_x": -0.37522742185529173,
+          "normal_y": 0.9269327817527174,
+          "yaw": 1.9554384379207304,
+          "stamp": 1779888686.989893,
+          "confidence": 0.8500000238418579,
+          "face": "front",
+          "source": "layer_qr_front_face"
         }
       },
+      "column_id": "C3",
+      "col": 3,
       "current_map_pose": {
         "valid": true,
-        "x": 0.8796038750752573,
-        "y": -0.01562596746848504,
-        "yaw": 3.1287705242238566,
-        "stamp": 1779799278.9541123,
-        "source": "column_layer_qr_depth_fusion",
+        "x": 0.7072863719516664,
+        "y": -1.8616070769089803,
+        "yaw": -2.7641332226912807,
+        "stamp": 1779888717.4131045,
+        "source": "front_side_qr_intersection",
         "fusion": {
-          "has_column_qr": true,
-          "has_layer_qr": true
+          "has_front_anchor": true,
+          "has_side_column_anchor": true,
+          "dual_qr_intersection": true,
+          "created_from_side_column_qr": false,
+          "yaw_guarded": true
         }
       },
       "approach_pose": {
         "valid": true,
-        "x": -0.02032214278768496,
-        "y": -0.0040863672437189795,
-        "yaw": -0.01282212936593664,
-        "distance": 0.9,
-        "source": "column_layer_qr_depth_fusion"
+        "x": -0.3152780133294082,
+        "y": -2.2670230089525276,
+        "yaw": 0.3774594308985124,
+        "distance": 1.1,
+        "source": "front_side_qr_intersection"
       },
       "geometry": {
         "width": 1.85,
         "depth": 0.35,
         "height": 1.5,
-        "source": "nominal_size_column_layer_qr_depth_fusion"
+        "source": "nominal_size"
+      },
+      "calibration": {
+        "shelf_width": 1.85,
+        "shelf_depth": 0.35,
+        "face_to_center_offset": 0.175,
+        "front_label_lateral_offset": 0.0,
+        "side_label_width_offset": 0.925,
+        "side_label_front_offset": 0.175,
+        "column_side_yaw_offset_deg": 90.0,
+        "approach_distance": 1.1,
+        "allow_side_qr_create_candidate_pose": true
       },
       "confidence": 0.8500000238418579,
-      "status": "active",
-      "last_seen": 1779799278.9541123
+      "status": "active_front_side_fused",
+      "last_seen": 1779888717.4131045
     }
   }
 }
