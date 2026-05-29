@@ -82,15 +82,44 @@ class SemanticRegistrarNode(Node):
         # Candidate front yaw from side QR:
         # side normal rotated ±90 deg gives front normal candidate.
         self.declare_parameter('column_side_yaw_offset_deg', 90.0)
-        self.declare_parameter('allow_side_qr_create_candidate_pose', True)
+        self.declare_parameter('allow_side_qr_create_candidate_pose', False)
 
         # Nav approach point.
         self.declare_parameter('approach_distance', 1.10)
 
         # Observation quality and yaw stability.
         self.declare_parameter('min_confidence', 0.20)
-        self.declare_parameter('max_yaw_jump_deg', 35.0)
-        self.declare_parameter('yaw_smooth_alpha', 0.35)
+        self.declare_parameter('max_yaw_jump_deg', 180.0)
+        self.declare_parameter('yaw_smooth_alpha', 1.0)
+        # Moving shelf mode:
+        # In real tests, shelf can move/rotate. A newly observed front/layer QR
+        # should immediately re-align shelf pose. Old side/column QR must not
+        # pull the shelf to a stale intersection.
+        self.declare_parameter('moving_shelf_realign_mode', True)
+        self.declare_parameter('prefer_latest_front_qr', True)
+        self.declare_parameter('enable_front_side_intersection', False)
+        self.declare_parameter('max_front_side_pair_age_sec', 1.0)
+        # Fast single QR yaw update.
+        # Camera installation assumption:
+        #   camera x+ = depth/front direction, roughly robot x+.
+        #   camera is upside-down / reverse mounted: roll ~= 180 deg.
+        #   camera looks down about 20 deg.
+        self.declare_parameter('use_single_qr_normal_yaw', False)
+        self.declare_parameter('camera_mount_yaw_deg', 0.0)
+        self.declare_parameter('camera_mount_pitch_down_deg', 20.0)
+        self.declare_parameter('camera_mount_roll_deg', 180.0)
+
+        # Which local axis of QR pose orientation represents QR plane normal.
+        # If yaw direction is wrong, try '-x', 'z', or '-z'.
+        self.declare_parameter('qr_pose_normal_axis', 'x')
+
+        # QR normal often points toward camera; invert to get shelf front outward normal.
+        self.declare_parameter('normal_points_to_camera', True)
+
+        # Front QR is on shelf front face. If yaw is reversed 180 deg, change to 0.
+        self.declare_parameter('front_qr_yaw_offset_deg', 180.0)
+        self.declare_parameter('right_side_qr_yaw_offset_deg', 90.0)
+        self.declare_parameter('left_side_qr_yaw_offset_deg', -90.0)
 
         self.semantic_map_path = Path(self.get_parameter('semantic_map_path').value)
         self.input_topic = str(self.get_parameter('input_topic').value)
@@ -122,6 +151,10 @@ class SemanticRegistrarNode(Node):
         self.min_confidence = float(self.get_parameter('min_confidence').value)
         self.max_yaw_jump = math.radians(float(self.get_parameter('max_yaw_jump_deg').value))
         self.yaw_smooth_alpha = float(self.get_parameter('yaw_smooth_alpha').value)
+        self.moving_shelf_realign_mode = bool(self.get_parameter('moving_shelf_realign_mode').value)
+        self.prefer_latest_front_qr = bool(self.get_parameter('prefer_latest_front_qr').value)
+        self.enable_front_side_intersection = bool(self.get_parameter('enable_front_side_intersection').value)
+        self.max_front_side_pair_age_sec = float(self.get_parameter('max_front_side_pair_age_sec').value)
 
         self.semantic_map_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -171,19 +204,28 @@ class SemanticRegistrarNode(Node):
         qr_x = float(pose_map.pose.position.x)
         qr_y = float(pose_map.pose.position.y)
 
-        raw_yaw = self.quat_to_yaw(
-            pose_map.pose.orientation.x,
-            pose_map.pose.orientation.y,
-            pose_map.pose.orientation.z,
-            pose_map.pose.orientation.w,
-        )
+        # Prefer fast single-QR normal based yaw.
+        # It compensates camera reverse mounting and pitch-down,
+        # then combines QR direction with current robot yaw in map.
+        obs_yaw = None
+        if bool(self.get_parameter('use_single_qr_normal_yaw').value):
+            obs_yaw = self.estimate_shelf_yaw_from_single_qr_normal(obs)
 
-        nx = math.cos(raw_yaw)
-        ny = math.sin(raw_yaw)
+        # Fallback to old pose quaternion yaw if normal-based yaw is unavailable.
+        if obs_yaw is None:
+            raw_yaw = self.quat_to_yaw(
+                pose_map.pose.orientation.x,
+                pose_map.pose.orientation.y,
+                pose_map.pose.orientation.z,
+                pose_map.pose.orientation.w,
+            )
 
-        # Make the observed QR plane normal face robot side.
-        nx, ny = self.ensure_normal_faces_robot(qr_x, qr_y, nx, ny)
-        obs_yaw = math.atan2(ny, nx)
+            nx = math.cos(raw_yaw)
+            ny = math.sin(raw_yaw)
+
+            # Make the observed QR plane normal face robot side.
+            nx, ny = self.ensure_normal_faces_robot(qr_x, qr_y, nx, ny)
+            obs_yaw = math.atan2(ny, nx)
 
         stamp = self.stamp_to_float(obs.header.stamp)
         if stamp <= 0.0:
@@ -407,31 +449,84 @@ class SemanticRegistrarNode(Node):
     # Fusion
     # ------------------------------------------------------------------
 
+    def is_front_observation(self, obs_type, face):
+        """
+        Decide whether the current QR observation belongs to the shelf front face.
+
+        Rules:
+          - layer_qr / row_qr are front-face anchors by definition.
+          - face == front is front-face anchor.
+          - column_qr is NOT front unless face is explicitly front.
+        """
+        obs_type = str(obs_type or '').strip().lower()
+        face = str(face or '').strip().lower()
+
+        if face == 'front':
+            return True
+
+        if obs_type in ['layer_qr', 'row_qr', 'front_qr']:
+            return True
+
+        return False
+
+    def is_side_observation(self, obs_type, face):
+        """
+        Decide whether the current QR observation belongs to shelf side/column face.
+        """
+        obs_type = str(obs_type or '').strip().lower()
+        face = str(face or '').strip().lower()
+
+        if face in ['left', 'right', 'side', 'column']:
+            return True
+
+        if obs_type in ['column_qr', 'side_qr', 'left_side_qr', 'right_side_qr', 'side_qr_left', 'side_qr_right']:
+            return True
+
+        return False
+
+    def face_type_to_front_yaw(self, obs_yaw, obs_type, face):
+        """
+        Convert observed QR face yaw to shelf front yaw.
+
+        obs_yaw is the yaw of the observed QR face normal in map.
+        For front QR, front yaw is obs_yaw.
+        For side QR, rotate ±90 deg according to side face.
+        """
+        obs_type = str(obs_type or '').strip().lower()
+        face = str(face or '').strip().lower()
+
+        front_offset = math.radians(float(self.get_parameter('front_qr_yaw_offset_deg').value))
+        right_offset = math.radians(float(self.get_parameter('right_side_qr_yaw_offset_deg').value))
+        left_offset = math.radians(float(self.get_parameter('left_side_qr_yaw_offset_deg').value))
+
+        if self.is_front_observation(obs_type, face):
+            return self.normalize_angle(obs_yaw + front_offset)
+
+        if face == 'right' or obs_type in ['right_side_qr', 'side_qr_right']:
+            return self.normalize_angle(obs_yaw + right_offset)
+
+        if face == 'left' or obs_type in ['left_side_qr', 'side_qr_left']:
+            return self.normalize_angle(obs_yaw + left_offset)
+
+        # Generic column QR: default side-to-front conversion.
+        # If this is wrong in your physical setup, tune right_side_qr_yaw_offset_deg.
+        if self.is_side_observation(obs_type, face):
+            return self.normalize_angle(obs_yaw + right_offset)
+
+        return self.normalize_angle(obs_yaw + front_offset)
+
+
     def recompute_best_shelf_pose(self, shelf, new_obs_type, new_obs_yaw, stamp, confidence):
-        """
-        Decide best available pose source and update current_map_pose / approach_pose.
-
-        Priority:
-          1. front + side intersection
-          2. front only
-          3. side only candidate
-        """
-
         old_pose = shelf.get('current_map_pose', {})
         old_valid = bool(old_pose.get('valid', False))
         old_yaw = float(old_pose.get('yaw', new_obs_yaw)) if old_valid else new_obs_yaw
 
+        # Front/layer QR is authoritative for current moving shelf pose.
         if self.has_front_anchor(shelf):
             front_yaw_meas = float(shelf['front_anchor'].get('yaw', new_obs_yaw))
             front_yaw = self.guard_and_smooth_yaw(old_yaw, front_yaw_meas, old_valid)
 
-            dual_center = self.estimate_shelf_center_from_front_and_side(shelf, front_yaw)
-            if dual_center is not None:
-                cx, cy = dual_center
-                source = 'front_side_qr_intersection'
-            else:
-                cx, cy = self.estimate_shelf_center_from_front_anchor(shelf, front_yaw)
-                source = 'front_layer_qr'
+            cx, cy = self.estimate_shelf_center_from_front_anchor(shelf, front_yaw)
 
             self.write_shelf_pose(
                 shelf=shelf,
@@ -439,50 +534,49 @@ class SemanticRegistrarNode(Node):
                 cy=cy,
                 front_yaw=front_yaw,
                 stamp=stamp,
-                source=source,
+                source='front_layer_qr_realign',
                 confidence=confidence,
-                status='active_front_side_fused' if source == 'front_side_qr_intersection' else 'active_front_anchor'
+                status='active_front_realign'
             )
             return
 
-        if self.has_side_anchor(shelf) and self.allow_side_qr_create_candidate_pose:
-            side = shelf.get('column_anchor', {})
-            side_yaw = float(side.get('side_yaw', new_obs_yaw))
-            front_yaw_meas = self.side_yaw_to_front_candidate(side_yaw)
-            front_yaw = self.guard_and_smooth_yaw(old_yaw, front_yaw_meas, old_valid)
-
-            cx, cy = self.estimate_shelf_center_from_side_anchor(shelf, side_yaw, front_yaw)
-
-            self.write_shelf_pose(
-                shelf=shelf,
-                cx=cx,
-                cy=cy,
-                front_yaw=front_yaw,
-                stamp=stamp,
-                source='side_column_qr_candidate',
-                confidence=confidence,
-                status='active_side_column_candidate'
+        # Side/column QR should not create a final shelf pose by itself in moving-shelf mode.
+        # It is only stored as an auxiliary anchor. This prevents C3 from drawing a vertical shelf.
+        if self.has_side_anchor(shelf):
+            shelf['status'] = 'side_anchor_only_no_pose'
+            shelf['last_seen'] = stamp
+            self.get_logger().warn(
+                f'side/column anchor observed but no front anchor yet; '
+                f'not creating shelf pose from side alone. obs_type={new_obs_type}'
             )
             return
 
         shelf['status'] = 'partial_anchor_only'
         shelf['last_seen'] = stamp
 
+
     def estimate_shelf_center_from_front_anchor(self, shelf, front_yaw):
         front = shelf.get('front_anchor', {})
-        fx = float(front.get('x', 0.0))
-        fy = float(front.get('y', 0.0))
+        qx = float(front.get('x', 0.0))
+        qy = float(front.get('y', 0.0))
 
-        nx = math.cos(front_yaw)
-        ny = math.sin(front_yaw)
+        back_offset = float(self.get_parameter('front_qr_back_offset_m').value)
+        lateral_offset = float(self.get_parameter('front_qr_lateral_offset_m').value)
 
-        tx = -ny
-        ty = nx
+        # front_yaw is shelf front outward normal.
+        # Back into shelf is front_yaw + pi.
+        bx = math.cos(front_yaw + math.pi)
+        by = math.sin(front_yaw + math.pi)
 
-        cx = fx - nx * self.face_to_center_offset - tx * self.front_label_lateral_offset
-        cy = fy - ny * self.face_to_center_offset - ty * self.front_label_lateral_offset
+        # Tangent along shelf face.
+        tx = -math.sin(front_yaw)
+        ty = math.cos(front_yaw)
+
+        cx = qx + back_offset * bx + lateral_offset * tx
+        cy = qy + back_offset * by + lateral_offset * ty
 
         return cx, cy
+
 
     def estimate_shelf_center_from_side_anchor(self, shelf, side_yaw, front_yaw):
         side = shelf.get('column_anchor', {})
@@ -737,6 +831,173 @@ class SemanticRegistrarNode(Node):
             ny = -ny
 
         return nx, ny
+
+
+    # ------------------------------------------------------------------
+    # Fast single QR normal yaw estimation
+    # ------------------------------------------------------------------
+
+    def rotate_x(self, x, y, z, roll):
+        c = math.cos(roll)
+        ss = math.sin(roll)
+        return x, c * y - ss * z, ss * y + c * z
+
+    def rotate_y(self, x, y, z, pitch):
+        c = math.cos(pitch)
+        ss = math.sin(pitch)
+        return c * x + ss * z, y, -ss * x + c * z
+
+    def rotate_z(self, x, y, z, yaw):
+        c = math.cos(yaw)
+        ss = math.sin(yaw)
+        return c * x - ss * y, ss * x + c * y, z
+
+    def get_pose_normal_axis_vector(self):
+        axis = str(self.get_parameter('qr_pose_normal_axis').value).strip().lower()
+
+        if axis == 'x':
+            return 1.0, 0.0, 0.0
+        if axis == '-x':
+            return -1.0, 0.0, 0.0
+        if axis == 'y':
+            return 0.0, 1.0, 0.0
+        if axis == '-y':
+            return 0.0, -1.0, 0.0
+        if axis == 'z':
+            return 0.0, 0.0, 1.0
+        if axis == '-z':
+            return 0.0, 0.0, -1.0
+
+        self.get_logger().warn(f'unknown qr_pose_normal_axis="{axis}", fallback to x')
+        return 1.0, 0.0, 0.0
+
+    def get_qr_normal_from_observation(self, obs):
+        """
+        Return QR plane normal in observation/camera frame.
+
+        Priority:
+          1. obs.normal.x/y/z if message provides it
+          2. obs.normal_x/y/z if message provides it
+          3. derive from obs.pose.pose.orientation and qr_pose_normal_axis
+        """
+
+        if hasattr(obs, 'normal'):
+            n = getattr(obs, 'normal')
+            if all(hasattr(n, k) for k in ('x', 'y', 'z')):
+                return float(n.x), float(n.y), float(n.z)
+
+        if all(hasattr(obs, k) for k in ('normal_x', 'normal_y', 'normal_z')):
+            return float(obs.normal_x), float(obs.normal_y), float(obs.normal_z)
+
+        try:
+            q = obs.pose.pose.orientation
+            local_axis = self.get_pose_normal_axis_vector()
+            nx, ny, nz = self.rotate_vector_by_quat(
+                local_axis,
+                (q.x, q.y, q.z, q.w)
+            )
+            return float(nx), float(ny), float(nz)
+        except Exception as e:
+            self.get_logger().warn(
+                f'failed to derive QR normal from observation pose: {repr(e)}'
+            )
+            return None
+
+    def estimate_shelf_yaw_from_single_qr_normal(self, obs):
+        """
+        Fast estimate shelf front yaw from ONE observed QR.
+
+        Your robot convention:
+          base_link:
+            x+ = robot forward / forward-backward motion axis
+            y+ = lateral axis
+            z+ = up
+
+          camera observation frame:
+            x+ = depth/front direction, roughly aligned with robot x+
+            y+ = lateral axis
+            z+ = vertical axis
+
+        Mount compensation:
+          camera_mount_roll_deg       : 180 deg for upside-down / reverse mounted camera
+          camera_mount_pitch_down_deg : 20 deg if camera looks downward
+          camera_mount_yaw_deg        : 0 if camera depth x+ points robot x+
+        """
+
+        normal = self.get_qr_normal_from_observation(obs)
+        if normal is None:
+            return None
+
+        nx, ny, nz = normal
+
+        yaw_mount = math.radians(float(self.get_parameter('camera_mount_yaw_deg').value))
+        pitch_down = math.radians(float(self.get_parameter('camera_mount_pitch_down_deg').value))
+        roll_mount = math.radians(float(self.get_parameter('camera_mount_roll_deg').value))
+
+        # Apply camera reverse mount / pitch / yaw compensation.
+        # Order: roll for upside-down mounting, pitch for downward view, yaw for front/back installation.
+        nx, ny, nz = self.rotate_x(nx, ny, nz, roll_mount)
+        nx, ny, nz = self.rotate_y(nx, ny, nz, pitch_down)
+        nx, ny, nz = self.rotate_z(nx, ny, nz, yaw_mount)
+
+        # If the observed plane normal points toward camera, invert it
+        # so that it represents shelf front outward normal.
+        if bool(self.get_parameter('normal_points_to_camera').value):
+            nx, ny, nz = -nx, -ny, -nz
+
+        horizontal_len = math.hypot(nx, ny)
+        if horizontal_len < 1e-6:
+            self.get_logger().warn(
+                'QR normal horizontal length too small after mount compensation: '
+                f'normal=({nx:.3f},{ny:.3f},{nz:.3f})'
+            )
+            return None
+
+        nx /= horizontal_len
+        ny /= horizontal_len
+
+        qr_yaw_base = math.atan2(ny, nx)
+
+        robot_pose = self.lookup_robot_pose()
+        if robot_pose is None:
+            self.get_logger().warn('failed to get robot pose for single QR yaw update')
+            return None
+
+        _, _, base_yaw = robot_pose
+        qr_yaw_map = base_yaw + qr_yaw_base
+
+        obs_type = str(getattr(obs, 'obs_type', 'layer_qr'))
+
+        front_offset = math.radians(float(self.get_parameter('front_qr_yaw_offset_deg').value))
+        right_offset = math.radians(float(self.get_parameter('right_side_qr_yaw_offset_deg').value))
+        left_offset = math.radians(float(self.get_parameter('left_side_qr_yaw_offset_deg').value))
+
+        if obs_type in ['layer_qr', 'front_qr', 'row_qr']:
+            shelf_yaw = qr_yaw_map + front_offset
+        elif obs_type in ['column_qr', 'right_side_qr', 'side_qr_right']:
+            shelf_yaw = qr_yaw_map + right_offset
+        elif obs_type in ['left_side_qr', 'side_qr_left']:
+            shelf_yaw = qr_yaw_map + left_offset
+        else:
+            shelf_yaw = qr_yaw_map + front_offset
+
+        shelf_yaw = self.normalize_angle(shelf_yaw)
+
+        self.get_logger().info(
+            'single QR shelf yaw update: '
+            f'obs_type={obs_type}, '
+            f'normal_raw=({normal[0]:.3f},{normal[1]:.3f},{normal[2]:.3f}), '
+            f'normal_base=({nx:.3f},{ny:.3f},{nz:.3f}), '
+            f'mount_yaw={math.degrees(yaw_mount):.1f}, '
+            f'pitch_down={math.degrees(pitch_down):.1f}, '
+            f'roll={math.degrees(roll_mount):.1f}, '
+            f'qr_yaw_base={math.degrees(qr_yaw_base):.1f}, '
+            f'base_yaw={math.degrees(base_yaw):.1f}, '
+            f'shelf_yaw={math.degrees(shelf_yaw):.1f}'
+        )
+
+        return shelf_yaw
+
 
     # ------------------------------------------------------------------
     # Math helpers

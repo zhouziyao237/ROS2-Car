@@ -43,6 +43,7 @@ setup(
 
             'semantic_task_manager_node = robot_logistics_semantic.semantic_task_manager_node:main',
             'semantic_registrar_node = robot_logistics_semantic.semantic_registrar_node:main',
+            'front_qr_semantic_writer_node = robot_logistics_semantic.front_qr_semantic_writer_node:main',
             'semantic_relocalizer_node = robot_logistics_semantic.semantic_relocalizer_node:main',
             'semantic_marker_publisher_node = robot_logistics_semantic.semantic_marker_publisher_node:main',
             'nav_to_qr_server = robot_logistics_semantic.nav_to_qr_server:main',

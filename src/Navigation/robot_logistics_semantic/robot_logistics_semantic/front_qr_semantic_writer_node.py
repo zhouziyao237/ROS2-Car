@@ -1,0 +1,317 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import json
+import math
+from pathlib import Path
+
+import rclpy
+from rclpy.node import Node
+
+from robot_logistics_interfaces.msg import SemanticObservation
+
+import tf2_ros
+from tf2_geometry_msgs import do_transform_pose
+
+
+def yaw_from_quat(q):
+    siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
+    cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+    return math.atan2(siny_cosp, cosy_cosp)
+
+
+def normalize_angle(a):
+    while a > math.pi:
+        a -= 2.0 * math.pi
+    while a < -math.pi:
+        a += 2.0 * math.pi
+    return a
+
+
+class FrontQRSemanticWriter(Node):
+    """
+    兜底语义写入节点。
+
+    作用：
+    1. 订阅 /vision/semantic_observation。
+    2. 只处理 front/layer/row QR。
+    3. 直接把 QR 的 map 位姿写入 semantic_library.json。
+    4. 避免旧 C3 / side QR 把货架方向拉歪。
+    5. 支持倒装相机导致的左右镜像修正。
+
+    参数：
+      front_qr_yaw_offset_deg:
+        控制货架横竖方向。你已经实测 0.0 是正确的。
+
+      front_qr_lateral_axis_sign:
+        控制左右镜像。
+        1.0  = 不翻转左右
+        -1.0 = 翻转左右
+    """
+
+    def __init__(self):
+        super().__init__("front_qr_semantic_writer_node")
+
+        self.declare_parameter("input_topic", "/vision/semantic_observation")
+        self.declare_parameter("semantic_map_path", "/host-home/maps/semantic_library.json")
+        self.declare_parameter("target_frame", "map")
+
+        # 你已经实测这个值对，保持 0.0。
+        self.declare_parameter("front_qr_yaw_offset_deg", 0.0)
+        # Use robot base yaw as reference, then apply signed QR yaw delta.
+        # For upside-down camera, delta direction may be reversed.
+        self.declare_parameter("use_base_yaw_delta_mode", True)
+        self.declare_parameter("base_frame", "base_link")
+        self.declare_parameter("front_qr_yaw_delta_sign", -1.0)
+
+        # 位置以 QR 深度点为主；之后需要时再微调。
+        self.declare_parameter("front_qr_back_offset_m", 0.0)
+        self.declare_parameter("front_qr_lateral_offset_m", 0.0)
+
+        # 倒装/镜像导致左右反，用这个翻转横向轴。
+        self.declare_parameter("front_qr_lateral_axis_sign", -1.0)
+
+        self.declare_parameter("shelf_width_m", 1.20)
+        self.declare_parameter("shelf_depth_m", 0.35)
+        self.declare_parameter("approach_distance_m", 1.10)
+
+        self.input_topic = str(self.get_parameter("input_topic").value)
+        self.semantic_map_path = Path(str(self.get_parameter("semantic_map_path").value))
+        self.target_frame = str(self.get_parameter("target_frame").value)
+
+        self.tf_buffer = tf2_ros.Buffer(cache_time=rclpy.duration.Duration(seconds=10.0))
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+
+        self.sub = self.create_subscription(
+            SemanticObservation,
+            self.input_topic,
+            self.on_obs,
+            10,
+        )
+
+        self.get_logger().info(
+            "front_qr_semantic_writer_node started: "
+            f"input={self.input_topic}, "
+            f"semantic_map_path={self.semantic_map_path}, "
+            f"target_frame={self.target_frame}"
+        )
+
+    def lookup_base_yaw(self):
+        base_frame = str(self.get_parameter("base_frame").value)
+        try:
+            tf_base = self.tf_buffer.lookup_transform(
+                self.target_frame,
+                base_frame,
+                rclpy.time.Time(),
+                timeout=rclpy.duration.Duration(seconds=0.10),
+            )
+            return yaw_from_quat(tf_base.transform.rotation)
+        except Exception as e:
+            self.get_logger().warn(f"failed TF {base_frame}->{self.target_frame} for base yaw: {repr(e)}")
+            return None
+
+    def is_front_obs(self, msg):
+        obs_type = str(msg.obs_type or "").lower()
+        face = str(msg.face or "").lower()
+
+        if face == "front":
+            return True
+
+        return obs_type in ["layer_qr", "row_qr", "front_qr"]
+
+    def load_map(self):
+        if self.semantic_map_path.exists():
+            try:
+                data = json.loads(self.semantic_map_path.read_text())
+                if isinstance(data, dict):
+                    data.setdefault("shelves", {})
+                    return data
+            except Exception as e:
+                self.get_logger().warn(f"failed to read semantic map, recreating: {repr(e)}")
+
+        return {"shelves": {}}
+
+    def save_map(self, data):
+        self.semantic_map_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.semantic_map_path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+        tmp.replace(self.semantic_map_path)
+
+    def on_obs(self, msg):
+        if not msg.shelf_id:
+            return
+
+        if not self.is_front_obs(msg):
+            return
+
+        if not bool(msg.has_pose):
+            return
+
+        src_frame = msg.pose.header.frame_id or msg.header.frame_id
+        if not src_frame:
+            self.get_logger().warn("observation has no frame_id")
+            return
+
+        try:
+            tf = self.tf_buffer.lookup_transform(
+                self.target_frame,
+                src_frame,
+                rclpy.time.Time(),
+                timeout=rclpy.duration.Duration(seconds=0.25),
+            )
+        except Exception as e:
+            self.get_logger().warn(f"failed TF {src_frame}->{self.target_frame}: {repr(e)}")
+            return
+
+        try:
+            pose_map = do_transform_pose(msg.pose.pose, tf)
+        except Exception as e:
+            self.get_logger().warn(f"do_transform_pose failed: {repr(e)}")
+            return
+
+        qx = float(pose_map.position.x)
+        qy = float(pose_map.position.y)
+
+        raw_yaw = yaw_from_quat(pose_map.orientation)
+        yaw_offset = math.radians(float(self.get_parameter("front_qr_yaw_offset_deg").value))
+
+        # Important:
+        # With the upside-down camera, the QR yaw delta relative to robot heading
+        # can be mirrored. Instead of using shelf_yaw = raw_yaw + offset directly,
+        # use:
+        #   delta = raw_yaw - base_yaw
+        #   shelf_yaw = base_yaw + sign * delta + offset
+        #
+        # If sign =  1.0: same as normal direction.
+        # If sign = -1.0: mirror / reverse the angle difference.
+        if bool(self.get_parameter("use_base_yaw_delta_mode").value):
+            base_yaw = self.lookup_base_yaw()
+            if base_yaw is not None:
+                delta = normalize_angle(raw_yaw - base_yaw)
+                delta_sign = float(self.get_parameter("front_qr_yaw_delta_sign").value)
+                shelf_yaw = normalize_angle(base_yaw + delta_sign * delta + yaw_offset)
+            else:
+                delta = 0.0
+                delta_sign = 1.0
+                shelf_yaw = normalize_angle(raw_yaw + yaw_offset)
+        else:
+            base_yaw = 0.0
+            delta = 0.0
+            delta_sign = 1.0
+            shelf_yaw = normalize_angle(raw_yaw + yaw_offset)
+
+        back_offset = float(self.get_parameter("front_qr_back_offset_m").value)
+        lateral_offset = float(self.get_parameter("front_qr_lateral_offset_m").value)
+        lateral_axis_sign = float(self.get_parameter("front_qr_lateral_axis_sign").value)
+
+        # shelf_yaw 表示货架正面朝外的法向。
+        # 往货架内部推，是 shelf_yaw + pi。
+        bx = math.cos(shelf_yaw + math.pi)
+        by = math.sin(shelf_yaw + math.pi)
+
+        # 货架横向 tangent。左右反时，用 lateral_axis_sign = -1.0 翻转。
+        tx = lateral_axis_sign * (-math.sin(shelf_yaw))
+        ty = lateral_axis_sign * ( math.cos(shelf_yaw))
+
+        sx = qx + back_offset * bx + lateral_offset * tx
+        sy = qy + back_offset * by + lateral_offset * ty
+
+        approach_distance = float(self.get_parameter("approach_distance_m").value)
+        app_x = sx + approach_distance * math.cos(shelf_yaw)
+        app_y = sy + approach_distance * math.sin(shelf_yaw)
+        app_yaw = normalize_angle(shelf_yaw + math.pi)
+
+        now_sec = self.get_clock().now().nanoseconds / 1e9
+
+        layer_key = str(msg.layer_id or "L1")
+
+        data = self.load_map()
+        shelves = data.setdefault("shelves", {})
+        shelf = shelves.setdefault(str(msg.shelf_id), {})
+
+        old_layers = shelf.get("layers", {})
+        if not isinstance(old_layers, dict):
+            old_layers = {}
+
+        old_layers[layer_key] = {
+            "seen": True,
+            "row": int(msg.row),
+            "stamp": now_sec,
+            "source": "front_qr_semantic_writer",
+        }
+
+        shelf.update({
+            "shelf_id": str(msg.shelf_id),
+            "status": "active_front_qr_writer",
+            "last_seen": now_sec,
+            "current_map_pose": {
+                "valid": True,
+                "frame": self.target_frame,
+                "x": sx,
+                "y": sy,
+                "yaw": shelf_yaw,
+                "confidence": float(msg.confidence),
+                "stamp": now_sec,
+                "source": "front_qr_depth_primary_writer",
+            },
+            "approach_pose": {
+                "valid": True,
+                "frame": self.target_frame,
+                "x": app_x,
+                "y": app_y,
+                "yaw": app_yaw,
+                "stamp": now_sec,
+                "source": "front_qr_depth_primary_writer",
+            },
+            "layers": old_layers,
+            "front_anchor": {
+                "seen": True,
+                "x": qx,
+                "y": qy,
+                "yaw": shelf_yaw,
+                "stamp": now_sec,
+                "obs_type": str(msg.obs_type),
+                "face": str(msg.face),
+                "frame": self.target_frame,
+            },
+            "calibration": {
+                "shelf_width": float(self.get_parameter("shelf_width_m").value),
+                "shelf_depth": float(self.get_parameter("shelf_depth_m").value),
+                "approach_distance": approach_distance,
+            }
+        })
+
+        self.save_map(data)
+
+        self.get_logger().info(
+            f"updated shelf semantic by front QR writer shelf={msg.shelf_id} "
+            f"obs={msg.obs_type}/{msg.face} "
+            f"qr=({qx:.2f},{qy:.2f}) "
+            f"pose=({sx:.2f},{sy:.2f},{shelf_yaw:.2f}) "
+            f"raw_yaw={raw_yaw:.2f} base_yaw={base_yaw:.2f} delta={delta:.2f} "
+            f"delta_sign={delta_sign:.1f} "
+            f"yaw_offset_deg={float(self.get_parameter('front_qr_yaw_offset_deg').value):.1f} "
+            f"lateral_axis_sign={lateral_axis_sign:.1f}"
+        )
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = FrontQRSemanticWriter()
+
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            node.destroy_node()
+        except Exception:
+            pass
+
+        if rclpy.ok():
+            rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()

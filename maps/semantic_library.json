@@ -1,115 +1,51 @@
 {
-  "version": 4,
-  "semantic_mode": "front_side_dual_qr_fusion",
   "shelves": {
     "S03": {
       "shelf_id": "S03",
-      "front_anchor": {
-        "seen": true,
-        "layer_id": "L1",
-        "row": 1,
-        "x": 0.07653559365291202,
-        "y": -0.745510628513799,
-        "normal_x": -0.37522742185529173,
-        "normal_y": 0.9269327817527174,
-        "yaw": 1.9554384379207304,
-        "stamp": 1779888686.989893,
+      "status": "active_front_qr_writer",
+      "last_seen": 1779978146.6259491,
+      "current_map_pose": {
+        "valid": true,
+        "frame": "map",
+        "x": 1.7651169256937662,
+        "y": -0.8691210543380358,
+        "yaw": -2.452355166331537,
         "confidence": 0.8500000238418579,
-        "source": "layer_qr_front_face"
+        "stamp": 1779978146.6259491,
+        "source": "front_qr_depth_primary_writer"
       },
-      "column_anchor": {
-        "seen": true,
-        "column_id": "C3",
-        "col": 3,
-        "x": -0.031390329180443904,
-        "y": -0.6694249299619286,
-        "side_normal_x": 0.2915747765029588,
-        "side_normal_y": 0.9565480383688263,
-        "side_yaw": 1.274923589190722,
-        "front_yaw_candidate": 2.845719915985619,
-        "stamp": 1779888717.4131045,
-        "confidence": 0.8500000238418579,
-        "face": "side",
-        "source": "column_qr_side_face"
-      },
-      "side_column_anchors": {
-        "C3": {
-          "seen": true,
-          "column_id": "C3",
-          "col": 3,
-          "x": -0.031390329180443904,
-          "y": -0.6694249299619286,
-          "side_normal_x": 0.2915747765029588,
-          "side_normal_y": 0.9565480383688263,
-          "side_yaw": 1.274923589190722,
-          "front_yaw_candidate": 2.845719915985619,
-          "stamp": 1779888717.4131045,
-          "confidence": 0.8500000238418579,
-          "face": "side",
-          "source": "column_qr_side_face"
-        }
+      "approach_pose": {
+        "valid": true,
+        "frame": "map",
+        "x": 0.9162126513976648,
+        "y": -1.568664857885612,
+        "yaw": 0.6892374872582563,
+        "stamp": 1779978146.6259491,
+        "source": "front_qr_depth_primary_writer"
       },
       "layers": {
         "L1": {
           "seen": true,
-          "layer_id": "L1",
           "row": 1,
-          "x": 0.07653559365291202,
-          "y": -0.745510628513799,
-          "normal_x": -0.37522742185529173,
-          "normal_y": 0.9269327817527174,
-          "yaw": 1.9554384379207304,
-          "stamp": 1779888686.989893,
-          "confidence": 0.8500000238418579,
-          "face": "front",
-          "source": "layer_qr_front_face"
+          "stamp": 1779978146.6259491,
+          "source": "front_qr_semantic_writer"
         }
       },
-      "column_id": "C3",
-      "col": 3,
-      "current_map_pose": {
-        "valid": true,
-        "x": 0.7072863719516664,
-        "y": -1.8616070769089803,
-        "yaw": -2.7641332226912807,
-        "stamp": 1779888717.4131045,
-        "source": "front_side_qr_intersection",
-        "fusion": {
-          "has_front_anchor": true,
-          "has_side_column_anchor": true,
-          "dual_qr_intersection": true,
-          "created_from_side_column_qr": false,
-          "yaw_guarded": true
-        }
-      },
-      "approach_pose": {
-        "valid": true,
-        "x": -0.3152780133294082,
-        "y": -2.2670230089525276,
-        "yaw": 0.3774594308985124,
-        "distance": 1.1,
-        "source": "front_side_qr_intersection"
-      },
-      "geometry": {
-        "width": 1.85,
-        "depth": 0.35,
-        "height": 1.5,
-        "source": "nominal_size"
+      "front_anchor": {
+        "seen": true,
+        "x": 1.7651169256937662,
+        "y": -0.8691210543380358,
+        "yaw": -2.452355166331537,
+        "stamp": 1779978146.6259491,
+        "obs_type": "layer_qr",
+        "face": "front",
+        "frame": "map"
       },
       "calibration": {
-        "shelf_width": 1.85,
+        "shelf_width": 1.2,
         "shelf_depth": 0.35,
-        "face_to_center_offset": 0.175,
-        "front_label_lateral_offset": 0.0,
-        "side_label_width_offset": 0.925,
-        "side_label_front_offset": 0.175,
-        "column_side_yaw_offset_deg": 90.0,
-        "approach_distance": 1.1,
-        "allow_side_qr_create_candidate_pose": true
-      },
-      "confidence": 0.8500000238418579,
-      "status": "active_front_side_fused",
-      "last_seen": 1779888717.4131045
+        "approach_distance": 1.1
+      }
     }
   }
 }

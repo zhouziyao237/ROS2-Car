@@ -310,7 +310,7 @@
       xyz="0 0 0" />
   </joint>
   <link
-    name="cam1_Link">
+    name="camera_link">
     <inertial>
       <origin
         xyz="-0.0329788006191327 0.000463667830260528 8.0101235455099E-05"
@@ -331,7 +331,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://robot2/meshes/cam1_Link.STL" />
+          filename="package://robot2/meshes/camera_link.STL" />
       </geometry>
       <material
         name="">
@@ -345,7 +345,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://robot2/meshes/cam1_Link.STL" />
+          filename="package://robot2/meshes/camera_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -358,7 +358,7 @@
     <parent
       link="base_link" />
     <child
-      link="cam1_Link" />
+      link="camera_link" />
     <axis
       xyz="0 0 0" />
   </joint>
