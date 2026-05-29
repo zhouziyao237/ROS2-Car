@@ -46,4 +46,9 @@ install(DIRECTORY
   DESTINATION share/${PROJECT_NAME}
 )
 
+install(PROGRAMS
+  scripts/bt_osd_overlay.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 ament_package()

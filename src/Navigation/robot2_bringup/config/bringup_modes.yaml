@@ -104,31 +104,37 @@ modules:
   cmd_vel_mux:
     type: node
     package: nav_stack_core_v2
-    executable: cmd_vel_mode_mux
+    executable: cmd_vel_mode_mux.py
     name: cmd_vel_mode_mux
     output: screen
-    delay: 3.0
+    delay: 6.0
+    respawn: true
+    respawn_delay: 2.0
     parameters:
-    - manual_topic: /cmd_vel_manual
-      manual_topic_alt: ''
-      manual_alt_topic: ''
-      auto_topic: /cmd_vel_smoothed
-      auto_topic_alt: /cmd_vel
-      nav_topic: /cmd_vel
-      nav_alt_topic: /cmd_vel_smoothed
-      output_topic: /cmd_vel_selected
-      mode_topic: /control_mode
-      chassis_mode_topic: ''
-      publish_rate: 50.0
-      cmd_timeout: 0.08
-      cmd_timeout_sec: 0.08
+    - nav_cmd_topics:
+      - /cmd_vel_smoothed
+      - /cmd_vel
+      - /cmd_vel_nav
+      - /cmd_vel_auto
+      manual_cmd_topics:
+      - /cmd_vel_manual
+      - /cmd_vel_keyboard
+      - /cmd_vel_teleop
+      - /cmd_vel_manual_raw
+      output_cmd_topic: /cmd_vel_selected
+      control_mode_topic: /control_mode
+      publish_rate_hz: 50.0
+      nav_timeout_sec: 0.8
+      manual_timeout_sec: 0.8
       default_mode: auto
       swap_xy: true
       invert_x: true
       invert_y: false
       invert_z: false
-      debug_cmd: true
-      debug_period: 0.5
+      deadband_linear: 0.0
+      deadband_angular: 0.0
+      debug_log: true
+      debug_period_sec: 0.5
   slam:
     type: node
     package: slam_toolbox
@@ -172,27 +178,25 @@ modules:
     respawn: true
     respawn_delay: 2.0
   chassis_serial:
-    type: node
+    type: include
     package: rm_serial_driver
-    executable: rm_serial_driver_node
-    name: rm_serial_driver_node
-    output: screen
-    delay: 9.5
-    parameters:
-    - /host-home/install/rm_serial_driver/share/rm_serial_driver/config/serial_driver.yaml
-    - serial_port: /dev/ttyACM0
-      port: /dev/ttyACM0
+    launch: serial_driver.launch.py
+    delay: 32.0
+    arguments:
+      cmd_vel_topic: /cmd_vel_selected
+      serial_port: /dev/ttyACM0
       device_name: /dev/ttyACM0
-      parity: none
-      flow_control: none
-      stop_bits: '1'
-      nav_cmd_timeout: 0.1
-      nav_cmd_send_rate: 50.0
-    remappings:
-    - - cmd_vel
-      - /cmd_vel_selected
-    - - /red_standard_robot1/cmd_vel
-      - /cmd_vel_selected
+      port: /dev/ttyACM0
+      wheel_vx_scale: '0.0775'
+      wheel_vy_scale: '0.0775'
+      wheel_wz_scale: '1.0'
+      cmd_vx_scale: '1.0'
+      cmd_vy_scale: '1.0'
+      cmd_wz_scale: '1.0'
+      nav_cmd_timeout: '0.10'
+      nav_cmd_send_rate: '50.0'
+      platform_target_topic: /platform/target
+      platform_current_status_topic: /platform/current_status
   realsense:
     type: node
     package: realsense2_camera
@@ -309,6 +313,9 @@ modules:
       observation_topic: /vision/semantic_observation
       allow_side_qr_create_candidate_pose: false
       front_qr_lateral_axis_sign: 1.0
+      approach_distance_m: 0.6
+      front_qr_approach_distance_m: 0.6
+      shelf_approach_distance_m: 0.6
     respawn: true
     respawn_delay: 2.0
   rviz:
@@ -370,20 +377,29 @@ modules:
     name: bt_osd_overlay
     output: screen
     delay: 12.0
-    parameters:
-    - input_image_topic: /camera/camera/color/image_raw
-      output_image_topic: /task/bt_osd/image_raw
-      current_state_topic: /task/current_state
-      status_topic: /task/status
-      current_goal_topic: /task/current_goal
-      trace_topic: /task/bt_trace
-      draw_goal: true
-      draw_trace: true
-      draw_status: true
-      font_scale: 0.55
-      thickness: 1
     respawn: true
     respawn_delay: 2.0
+    parameters:
+    - image_topic: /camera/camera/color/image_raw
+      output_image_topic: /task/bt_osd/image_raw
+      task_status_topic: /task/status
+      current_state_topic: /task/current_state
+      current_goal_topic: /task/current_goal
+      bt_trace_topic: /task/bt_trace
+      semantic_observation_topic: /vision/semantic_observation
+      current_shelf_topic: /semantic/current_shelf
+      goal_pose_topic: /goal_pose
+      selected_cmd_topic: /cmd_vel_selected
+      control_mode_topic: /control_mode
+      nav_cmd_topics:
+      - /cmd_vel
+      - /cmd_vel_smoothed
+      - /cmd_vel_nav
+      - /cmd_vel_auto
+      font_scale: 0.46
+      line_height: 18
+      panel_alpha: 0.58
+      max_lines: 22
   front_qr_semantic_writer:
     type: node
     package: robot_logistics_semantic
@@ -402,11 +418,13 @@ modules:
       front_qr_lateral_offset_m: 0.0
       shelf_width_m: 1.2
       shelf_depth_m: 0.35
-      approach_distance_m: 1.1
+      approach_distance_m: 0.6
       front_qr_lateral_axis_sign: 1.0
       use_base_yaw_delta_mode: true
       base_frame: base_link
       front_qr_yaw_delta_sign: -1.0
+      front_qr_approach_distance_m: 0.6
+      shelf_approach_distance_m: 0.6
     arguments:
       front_qr_back_offset_m: '0.0'
       front_qr_lateral_offset_m: '0.0'
@@ -451,13 +469,13 @@ modes:
     - rf2o
     - rf2o_odom_adapter
     - cmd_vel_mux
+    - chassis_serial
     - realsense
     - d435_depth_to_scan
     - scan_fusion
     - slam
     - nav2
     - goal_pose_bridge
-    - chassis_serial
     - semantic_registrar
     - front_qr_semantic_writer
     - mission_bt

@@ -5,10 +5,8 @@
       <ReceiveShelfGoal/>
 
       <Fallback name="ResolveShelfPoseOrExplore">
-        <!-- First: use real semantic_library.json / session pose if available -->
         <QueryShelfPose/>
 
-        <!-- Second: if shelf pose is unknown, explore and wait for real shelf anchor -->
         <Sequence name="ExploreAndRelocalizeShelf">
           <EnterExploreMode/>
           <SearchShelfReference/>

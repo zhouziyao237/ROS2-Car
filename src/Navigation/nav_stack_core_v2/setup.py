@@ -27,6 +27,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'cmd_vel_mode_mux.py = nav_stack_core_v2.cmd_vel_mode_mux:main',
             'rf2o_odom_adapter = nav_stack_core_v2.rf2o_odom_adapter:main',
             'control_mode_manager = nav_stack_core_v2.control_mode_manager:main',
             'front_scan_filter = nav_stack_core_v2.front_scan_filter:main',

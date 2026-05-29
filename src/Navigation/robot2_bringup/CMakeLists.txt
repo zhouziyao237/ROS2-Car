@@ -11,7 +11,7 @@ install(DIRECTORY
 )
 
 install(PROGRAMS
-  scripts/check_core_topics.sh
+  # scripts/check_core_topics.sh
   DESTINATION lib/${PROJECT_NAME}
 )
 

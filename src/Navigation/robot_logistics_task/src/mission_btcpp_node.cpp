@@ -209,6 +209,10 @@ class SendPlatformTarget:public BT::SyncActionNode{public:SendPlatformTarget(con
 class WaitPickupDone:public BT::StatefulActionNode{double start_=0;public:WaitPickupDone(const std::string&n,const BT::NodeConfiguration&c):BT::StatefulActionNode(n,c){}SIMPLE_PORTS BT::NodeStatus onStart()override{start_=steady_seconds();auto ctx=get_ctx(*this);ctx->set_state("WaitPickupDone");ctx->status("RUNNING","waiting pickup completion");ctx->trace(name(),"RUNNING");return BT::NodeStatus::RUNNING;}BT::NodeStatus onRunning()override{auto ctx=get_ctx(*this);std::lock_guard<std::mutex>l(ctx->mutex);if(ctx->latest_platform_status.find("done")!=std::string::npos||ctx->latest_platform_status.find("DONE")!=std::string::npos){ctx->status("SUCCESS","platform reports done");ctx->trace(name(),"SUCCESS");return BT::NodeStatus::SUCCESS;}if(ctx->allow_demo_anchor_if_missing&&steady_seconds()-start_>1.0){ctx->status("SUCCESS","demo pickup done");ctx->trace(name(),"SUCCESS");return BT::NodeStatus::SUCCESS;}return BT::NodeStatus::RUNNING;}void onHalted()override{get_ctx(*this)->trace(name(),"HALTED");}};
 class PublishTaskDone:public BT::SyncActionNode{public:PublishTaskDone(const std::string&n,const BT::NodeConfiguration&c):BT::SyncActionNode(n,c){}SIMPLE_PORTS BT::NodeStatus tick()override{auto ctx=get_ctx(*this);ctx->set_state("PublishTaskDone");ctx->status("DONE","pickup task completed");ctx->trace(name(),"SUCCESS");{std::lock_guard<std::mutex>l(ctx->mutex);ctx->task=TaskData();ctx->resolved_pose=Pose2D();}return BT::NodeStatus::SUCCESS;}};
 class MissionNode:public rclcpp::Node{std::shared_ptr<SharedContext>ctx_;BT::BehaviorTreeFactory factory_;BT::Blackboard::Ptr blackboard_;std::unique_ptr<BT::Tree>tree_;std::unique_ptr<BT::PublisherZMQ>groot_pub_;rclcpp::Subscription<std_msgs::msg::String>::SharedPtr goal_sub_,cancel_sub_,anchor_sub_,current_shelf_sub_,platform_status_sub_;rclcpp::TimerBase::SharedPtr timer_;public:MissionNode():Node("mission_btcpp_node"){}void init(){declare_parameter<std::string>("bt_xml","/host-home/src/Navigation/robot_logistics_task/behavior_tree/pickup_task_full_groot1.xml");declare_parameter<std::string>("semantic_map_path","/host-home/maps/semantic_library.json");declare_parameter<std::string>("semantic_session_path","/host-home/maps/semantic_session_pose.json");declare_parameter<std::string>("map_session_id","current_slam_session");declare_parameter<std::string>("shelf_goal_topic","/task/shelf_goal");declare_parameter<std::string>("cancel_topic","/task/cancel");declare_parameter<std::string>("task_status_topic","/task/status");declare_parameter<std::string>("current_state_topic","/task/current_state");declare_parameter<std::string>("current_goal_topic","/task/current_goal");declare_parameter<std::string>("bt_trace_topic","/task/bt_trace");declare_parameter<std::string>("bt_xml_topic","/task/bt_tree_xml");declare_parameter<std::string>("goal_pose_topic","/goal_pose");declare_parameter<std::string>("platform_target_topic","/platform/target");declare_parameter<std::string>("platform_status_topic","/platform/status");declare_parameter<std::string>("explore_cmd_topic","/task/explore_cmd");declare_parameter<std::string>("control_mode_topic","/control_mode");declare_parameter<std::string>("anchor_detection_topic","/semantic/anchor_detection");declare_parameter<std::string>("current_shelf_topic","/semantic/current_shelf");declare_parameter<std::string>("map_frame","map");declare_parameter<std::string>("base_frame","base_link");declare_parameter<double>("tick_hz",10.0);declare_parameter<double>("session_pose_max_age_sec",600.0);declare_parameter<double>("min_session_confidence",0.5);declare_parameter<bool>("allow_demo_anchor_if_missing",true);declare_parameter<bool>("enable_groot_monitoring",true);declare_parameter<int>("groot_publisher_port",1666);declare_parameter<int>("groot_server_port",1667);declare_parameter<int>("groot_max_msg_per_second",25);ctx_=std::make_shared<SharedContext>();ctx_->node=shared_from_this();ctx_->semantic_map_path=get_parameter("semantic_map_path").as_string();ctx_->semantic_session_path=get_parameter("semantic_session_path").as_string();ctx_->map_session_id=get_parameter("map_session_id").as_string();ctx_->map_frame=get_parameter("map_frame").as_string();ctx_->session_pose_max_age_sec=get_parameter("session_pose_max_age_sec").as_double();ctx_->min_session_confidence=get_parameter("min_session_confidence").as_double();ctx_->allow_demo_anchor_if_missing=get_parameter("allow_demo_anchor_if_missing").as_bool();ctx_->status_pub=create_publisher<std_msgs::msg::String>(get_parameter("task_status_topic").as_string(),10);ctx_->state_pub=create_publisher<std_msgs::msg::String>(get_parameter("current_state_topic").as_string(),10);ctx_->goal_json_pub=create_publisher<std_msgs::msg::String>(get_parameter("current_goal_topic").as_string(),10);ctx_->trace_pub=create_publisher<std_msgs::msg::String>(get_parameter("bt_trace_topic").as_string(),10);ctx_->bt_xml_pub=create_publisher<std_msgs::msg::String>(get_parameter("bt_xml_topic").as_string(),1);ctx_->goal_pose_pub=create_publisher<geometry_msgs::msg::PoseStamped>(get_parameter("goal_pose_topic").as_string(),10);ctx_->platform_pub=create_publisher<std_msgs::msg::String>(get_parameter("platform_target_topic").as_string(),10);ctx_->explore_pub=create_publisher<std_msgs::msg::String>(get_parameter("explore_cmd_topic").as_string(),10);ctx_->control_mode_pub=create_publisher<std_msgs::msg::String>(get_parameter("control_mode_topic").as_string(),10);goal_sub_=create_subscription<std_msgs::msg::String>(get_parameter("shelf_goal_topic").as_string(),10,[this](std_msgs::msg::String::SharedPtr m){on_goal(m);});cancel_sub_=create_subscription<std_msgs::msg::String>(get_parameter("cancel_topic").as_string(),10,[this](std_msgs::msg::String::SharedPtr){std::lock_guard<std::mutex>l(ctx_->mutex);ctx_->task=TaskData();ctx_->resolved_pose=Pose2D();ctx_->status("CANCELLED","task cancelled");if(tree_)tree_->haltTree();});anchor_sub_=create_subscription<std_msgs::msg::String>(get_parameter("anchor_detection_topic").as_string(),10,[this](std_msgs::msg::String::SharedPtr m){on_anchor(m);});current_shelf_sub_=create_subscription<std_msgs::msg::String>(get_parameter("current_shelf_topic").as_string(),10,[this](std_msgs::msg::String::SharedPtr m){std::lock_guard<std::mutex>l(ctx_->mutex);std::string shelf;if(get_string_json(m->data,"shelf_id",shelf))ctx_->latest_current_shelf=shelf;else ctx_->latest_current_shelf=m->data;});platform_status_sub_=create_subscription<std_msgs::msg::String>(get_parameter("platform_status_topic").as_string(),10,[this](std_msgs::msg::String::SharedPtr m){std::lock_guard<std::mutex>l(ctx_->mutex);ctx_->latest_platform_status=m->data;});factory_.registerNodeType<ReceiveShelfGoal>("ReceiveShelfGoal");factory_.registerNodeType<CheckShelfSessionPoseValid>("CheckShelfSessionPoseValid");factory_.registerNodeType<QueryShelfPose>("QueryShelfPose");factory_.registerNodeType<EnterExploreMode>("EnterExploreMode");factory_.registerNodeType<SearchShelfReference>("SearchShelfReference");factory_.registerNodeType<DetectShelfAnchor>("DetectShelfAnchor");factory_.registerNodeType<EstimateShelfPoseFromAnchor>("EstimateShelfPoseFromAnchor");factory_.registerNodeType<UpdateSemanticSessionPose>("UpdateSemanticSessionPose");factory_.registerNodeType<NavigateToShelf>("NavigateToShelf");factory_.registerNodeType<WaitNavArrive>("WaitNavArrive");factory_.registerNodeType<VerifyShelfQR>("VerifyShelfQR");factory_.registerNodeType<SearchShelfQR>("SearchShelfQR");factory_.registerNodeType<AlignToCell>("AlignToCell");factory_.registerNodeType<SendPlatformTarget>("SendPlatformTarget");factory_.registerNodeType<WaitPickupDone>("WaitPickupDone");factory_.registerNodeType<PublishTaskDone>("PublishTaskDone");blackboard_=BT::Blackboard::create();blackboard_->set("ctx",ctx_);auto xml=get_parameter("bt_xml").as_string();ctx_->bt_xml_pub->publish(std_msgs::msg::String().set__data(read_file_required(xml)));tree_=std::make_unique<BT::Tree>(factory_.createTreeFromFile(xml,blackboard_));if(get_parameter("enable_groot_monitoring").as_bool()){int pub_port=get_parameter("groot_publisher_port").as_int();int srv_port=get_parameter("groot_server_port").as_int();int max_msg=get_parameter("groot_max_msg_per_second").as_int();groot_pub_=std::make_unique<BT::PublisherZMQ>(*tree_,max_msg,pub_port,srv_port);RCLCPP_INFO(get_logger(),"Groot v1 PublisherZMQ enabled. publisher_port=%d server_port=%d",pub_port,srv_port);}double hz=get_parameter("tick_hz").as_double();timer_=create_wall_timer(std::chrono::milliseconds((int)(1000.0/hz)),[this](){tick();});RCLCPP_INFO(get_logger(),"Full semantic relocalization mission BT started.");}private:void on_goal(const std_msgs::msg::String::SharedPtr m){
+    // Every new /task/shelf_goal is treated as a fresh task.
+    // This fixes the case:
+    //   task once -> manual RViz goal -> task again
+    // where the BT may still be RUNNING / halted in an old branch.
     if(tree_){
         tree_->haltTree();
     }
@@ -234,26 +238,36 @@ class MissionNode:public rclcpp::Node{std::shared_ptr<SharedContext>ctx_;BT::Beh
         t.shelf_id=d==std::string::npos?m->data:m->data.substr(0,d);
     }
 
-    double row=0;
-    if(get_number_json(m->data,"row",row))t.row=(int)row;
+    double row=0.0;
+    if(get_number_json(m->data,"row",row)){
+        t.row=(int)row;
+    }
 
-    double x=0,y=0,yaw=0;
+    // Optional direct pose command for debug:
+    // {"shelf_id":"S03","x":0.1,"y":0.2,"yaw":0.0}
+    double x=0.0,y=0.0,yaw=0.0;
     if(get_number_json(m->data,"x",x)&&get_number_json(m->data,"y",y)){
         t.command_has_pose=true;
         t.target_pose.valid=true;
         t.target_pose.x=x;
         t.target_pose.y=y;
-        if(get_number_json(m->data,"yaw",yaw))t.target_pose.yaw=yaw;
+        if(get_number_json(m->data,"yaw",yaw)){
+            t.target_pose.yaw=yaw;
+        }
         t.target_pose.confidence=1.0;
         t.target_pose.stamp=wall_seconds(*this);
         t.target_pose.source="command_direct_pose";
     }
 
     {
-        std::lock_guard<std::mutex>l(ctx_->mutex);
+        std::lock_guard<std::mutex> l(ctx_->mutex);
+
         ctx_->task=t;
+
+        // Critical reset for repeated task.
         ctx_->resolved_pose=Pose2D();
         ctx_->latest_anchor=AnchorData();
+
         ctx_->set_state("TASK_ACCEPTED");
     }
 
