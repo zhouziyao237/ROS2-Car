@@ -400,36 +400,42 @@ modules:
       line_height: 18
       panel_alpha: 0.58
       max_lines: 22
-  front_qr_semantic_writer:
+  apriltag_shelf_bridge:
     type: node
     package: robot_logistics_semantic
-    executable: front_qr_semantic_writer_node
-    name: front_qr_semantic_writer_node
+    executable: apriltag_shelf_bridge_node.py
+    name: apriltag_shelf_bridge_node
     output: screen
-    delay: 13.5
+    delay: 13.2
     respawn: true
     respawn_delay: 2.0
     parameters:
-    - input_topic: /vision/semantic_observation
-      semantic_map_path: /host-home/maps/semantic_library.json
-      target_frame: map
-      front_qr_yaw_offset_deg: -5.0
-      front_qr_back_offset_m: 0.0
-      front_qr_lateral_offset_m: 0.0
-      shelf_width_m: 1.2
-      shelf_depth_m: 0.35
-      approach_distance_m: 0.6
-      front_qr_lateral_axis_sign: 1.0
-      use_base_yaw_delta_mode: true
-      base_frame: base_link
-      front_qr_yaw_delta_sign: -1.0
-      front_qr_approach_distance_m: 0.6
-      shelf_approach_distance_m: 0.6
-    arguments:
-      front_qr_back_offset_m: '0.0'
-      front_qr_lateral_offset_m: '0.0'
-      front_qr_lateral_axis_sign: '1.0'
-      front_qr_yaw_offset_deg: '0.0'
+    - image_topic: /camera/camera/color/image_raw
+      camera_info_topic: /camera/camera/color/camera_info
+      observation_topic: /vision/semantic_observation
+      debug_image_topic: /vision/apriltag_debug_image
+      tag_family: DICT_APRILTAG_36h11
+      tag_size_m: 0.1
+      min_area_px: 250.0
+      publish_debug_image: true
+      frame_id_fallback: camera_color_optical_frame
+      source_name: apriltag_shelf_bridge
+      debug_log: true
+      normal_points_to_camera: true
+  home_anchor_validator:
+    type: node
+    package: robot_logistics_semantic
+    executable: home_anchor_validator_node.py
+    name: home_anchor_validator_node
+    output: screen
+    delay: 13.6
+    respawn: true
+    respawn_delay: 2.0
+    parameters:
+    - observation_topic: /vision/semantic_observation
+      home_anchor_path: /host-home/maps/home_anchor.json
+      status_topic: /semantic/home_anchor_status
+      debug_log: true
 modes:
   hardware:
     enable:
@@ -477,7 +483,8 @@ modes:
     - nav2
     - goal_pose_bridge
     - semantic_registrar
-    - front_qr_semantic_writer
+    - apriltag_shelf_bridge
+    - home_anchor_validator
     - mission_bt
     - bt_osd_overlay
   nav_d435:

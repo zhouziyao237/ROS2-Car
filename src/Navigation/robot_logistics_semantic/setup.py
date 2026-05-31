@@ -34,6 +34,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'home_anchor_validator_node.py = robot_logistics_semantic.home_anchor_validator_node:main',
+            'apriltag_shelf_bridge_node.py = robot_logistics_semantic.apriltag_shelf_bridge_node:main',
             'rviz_restrict_region_node = robot_logistics_semantic.rviz_restrict_region_node:main',
 
             'sim_model_state_odom_node = robot_logistics_semantic.sim_model_state_odom_node:main',
