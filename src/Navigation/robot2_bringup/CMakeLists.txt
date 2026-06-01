@@ -15,4 +15,11 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
 )
 
+
+install(PROGRAMS
+  scripts/pickup_code_input.py
+  scripts/task_cancel_guard.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 ament_package()

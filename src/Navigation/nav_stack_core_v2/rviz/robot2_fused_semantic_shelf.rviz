@@ -1,6 +1,6 @@
 Panels:
   - Class: rviz_common/Displays
-    Help Height: 70
+    Help Height: 0
     Name: Displays
     Property Tree Widget:
       Expanded:
@@ -8,7 +8,7 @@ Panels:
         - /D435 RGB1
         - /Image1
       Splitter Ratio: 0.5
-    Tree Height: 190
+    Tree Height: 447
   - Class: rviz_common/Selection
     Name: Selection
   - Class: rviz_common/Tool Properties
@@ -283,10 +283,7 @@ Visualization Manager:
       Enabled: true
       Name: Semantic Shelf Markers
       Namespaces:
-        semantic_shelf_approach: true
-        semantic_shelf_front_direction: true
-        semantic_shelf_labels: true
-        semantic_shelves: true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -307,7 +304,7 @@ Visualization Manager:
         Value: /explore/markers
       Value: true
     - Class: rviz_default_plugins/Image
-      Enabled: true
+      Enabled: false
       Max Value: 1
       Median window: 5
       Min Value: 0
@@ -319,7 +316,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /vision/qr_debug_image
-      Value: true
+      Value: false
     - Alpha: 1
       Class: rviz_default_plugins/Polygon
       Color: 25; 255; 0
@@ -345,7 +342,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /task/bt_osd/image_raw
+        Value: /vision/apriltag_debug_image
       Value: true
   Enabled: true
   Global Options:
@@ -397,10 +394,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.4447964429855347
+      Pitch: 1.14479660987854
       Target Frame: base_link
       Value: Orbit (rviz_default_plugins)
-      Yaw: 3.1181814670562744
+      Yaw: 3.478182315826416
     Saved: ~
 Window Geometry:
   D435 RGB:
@@ -412,7 +409,7 @@ Window Geometry:
   Hide Right Dock: false
   Image:
     collapsed: false
-  QMainWindow State: 000000ff00000000fd00000001000000000000019b000003a2fc0200000008fb0000001000440034003300350020005200470042010000003b000000a20000000000000000fc0000003b0000013f000000c700fffffffa000000010100000002fb0000000a0049006d0061006700650000000000ffffffff0000000000000000fb000000100044006900730070006c00610079007301000000000000019b0000015600fffffffb0000001200530065006c0065006300740069006f006e01000001800000005c0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007301000001e20000005c0000005c00fffffffb0000000a005600690065007700730100000244000000a0000000a000fffffffb0000000a0049006d00610067006501000002ea000000280000002800fffffffb00000010004400340033003500200052004700420100000318000000c50000002800fffffffb0000000a0049006d006100670065030000005c00000136000002b50000025700000599000003a200000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  QMainWindow State: 000000ff00000000fd00000001000000000000019b000003a2fc0200000008fb0000001000440034003300350020005200470042010000003b000000690000000000000000fc0000003b000001fa000000c700fffffffa000000010100000002fb0000000a0049006d0061006700650000000000ffffffff0000000000000000fb000000100044006900730070006c00610079007301000000000000019b0000015600fffffffb0000001200530065006c0065006300740069006f006e010000023b0000006c0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007301000002ad0000006d0000005c00fffffffb0000000a005600690065007700730100000320000000bd000000a000fffffffb0000000a0049006d0061006700650300000175000001060000019b000001b0fb000000100044003400330035002000520047004200000002d4000001090000002800fffffffb0000000a0049006d006100670065030000005c00000136000002b50000025700000599000003a200000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   Selection:
     collapsed: false
   Tool Properties:

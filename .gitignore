@@ -10,3 +10,4 @@ install/
 build_win32/
 .vscode/
 bin/
+maps/

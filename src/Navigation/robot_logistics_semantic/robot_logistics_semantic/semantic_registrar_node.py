@@ -69,6 +69,13 @@ class SemanticRegistrarNode(Node):
         # Front QR plane -> shelf center offset.
         # If mask is in front of real shelf, increase this.
         self.declare_parameter('face_to_center_offset', 0.175)
+        self.declare_parameter('front_qr_lateral_offset_m', 0.0)
+        self.declare_parameter('side_qr_front_offset_m', 0.175)
+        self.declare_parameter('side_qr_width_offset_m', 0.925)
+        self.declare_parameter('column_qr_front_offset_m', 0.175)
+        self.declare_parameter('column_qr_width_offset_m', 0.925)
+        self.declare_parameter('front_qr_side_offset_m', 0.0)
+        self.declare_parameter('front_qr_back_offset_m', 0.175)
 
         # If front layer QR is not at shelf center line, tune this.
         self.declare_parameter('front_label_lateral_offset', 0.0)
