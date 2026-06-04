@@ -1,0 +1,10 @@
+ros2 launch oak_parcel_pose oak_parcel_pose.launch.py \
+  rgb_topic:=/oak/rgb/image_raw \
+  depth_topic:=/oak/depth/image_raw \
+  camera_info_topic:=/oak/rgb/camera_info \
+  depth_lookup_mode:=scale \
+  use_camera_info:=false \
+  manual_fx:=1483.3427734375 \
+  manual_fy:=1483.3427734375 \
+  manual_cx:=958.3350219726562 \
+  manual_cy:=533.9412231445312

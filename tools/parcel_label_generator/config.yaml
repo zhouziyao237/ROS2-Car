@@ -1,0 +1,21 @@
+font:
+  chinese_font: STSong-Light
+  latin_font: Helvetica
+  latin_bold_font: Helvetica-Bold
+
+text:
+  header: 快递驿站取件标签
+  pickup_badge: 取件码
+  date_label: 日期：
+  order_label: 订单号：
+  slot_format: 货位格式：列-行-4位取件码
+
+barcode:
+  draw_text_below: true
+
+input:
+  delimiter: ","
+  default_date: "2026-06-03 14:28"
+
+debug:
+  dm_frame: false

@@ -1,0 +1,161 @@
+camera_name: oak_rgb_1080p
+image_width: 1920
+image_height: 1080
+fx: 1319.5699423660158
+fy: 1278.9413238797827
+cx: 926.520877915132
+cy: 346.93458819440946
+camera_matrix:
+  rows: 3
+  cols: 3
+  data:
+  - 1319.5699423660158
+  - 0.0
+  - 926.520877915132
+  - 0.0
+  - 1278.9413238797827
+  - 346.93458819440946
+  - 0.0
+  - 0.0
+  - 1.0
+distortion_model: plumb_bob
+distortion_coefficients:
+  rows: 1
+  cols: 5
+  data:
+  - -0.5510111049736213
+  - 2.873622325871516
+  - -0.012985886179765316
+  - -0.011250889506900008
+  - -5.422973267339957
+dist_coeffs_all:
+- -0.5510111049736213
+- 2.873622325871516
+- -0.012985886179765316
+- -0.011250889506900008
+- -5.422973267339957
+rectification_matrix:
+  rows: 3
+  cols: 3
+  data:
+  - 1.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+projection_matrix:
+  rows: 3
+  cols: 4
+  data:
+  - 1319.5699423660158
+  - 0.0
+  - 926.520877915132
+  - 0.0
+  - 0.0
+  - 1278.9413238797827
+  - 346.93458819440946
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+  - 0.0
+square_mm: 16.0
+pattern_inner_corners:
+- 8
+- 12
+valid_image_count: 40
+input_image_count: 40
+opencv_rms: 2.9660548429222717
+reprojection_error_px: 2.9660555162258655
+per_image_reprojection_error_px:
+- 2.3715963963431297
+- 2.1248557783397666
+- 3.7667715204640384
+- 2.6953343234018776
+- 3.7928402923713858
+- 3.3011200166200303
+- 2.003261006790342
+- 3.255845660636311
+- 5.128899426799761
+- 2.738157791944905
+- 5.693322330402762
+- 3.6155402224185513
+- 4.521290192651927
+- 2.437873360333938
+- 3.162855659333534
+- 2.3965895238028656
+- 1.1659404412175474
+- 0.8839470773290282
+- 1.8482307501264958
+- 1.0638092480379888
+- 2.5033754121507905
+- 2.5723595603086933
+- 4.167341351336007
+- 3.42328941431667
+- 1.5267486319590586
+- 0.999575806179613
+- 1.8101559915265748
+- 3.4370170058320384
+- 1.2492545910436916
+- 0.8130543919086933
+- 1.7437580518174078
+- 3.451061107695126
+- 3.1732541722295546
+- 3.448688892127399
+- 2.4459057160332454
+- 1.5204976737588691
+- 2.882108743656122
+- 2.6263646055035617
+- 1.4907218811291056
+- 5.201359323152939
+used_images:
+- /host-home/calib_oak_rgb_1080p/calib_001.png
+- /host-home/calib_oak_rgb_1080p/calib_002.png
+- /host-home/calib_oak_rgb_1080p/calib_003.png
+- /host-home/calib_oak_rgb_1080p/calib_004.png
+- /host-home/calib_oak_rgb_1080p/calib_005.png
+- /host-home/calib_oak_rgb_1080p/calib_006.png
+- /host-home/calib_oak_rgb_1080p/calib_007.png
+- /host-home/calib_oak_rgb_1080p/calib_008.png
+- /host-home/calib_oak_rgb_1080p/calib_009.png
+- /host-home/calib_oak_rgb_1080p/calib_010.png
+- /host-home/calib_oak_rgb_1080p/calib_011.png
+- /host-home/calib_oak_rgb_1080p/calib_012.png
+- /host-home/calib_oak_rgb_1080p/calib_013.png
+- /host-home/calib_oak_rgb_1080p/calib_014.png
+- /host-home/calib_oak_rgb_1080p/calib_015.png
+- /host-home/calib_oak_rgb_1080p/calib_016.png
+- /host-home/calib_oak_rgb_1080p/calib_017.png
+- /host-home/calib_oak_rgb_1080p/calib_018.png
+- /host-home/calib_oak_rgb_1080p/calib_019.png
+- /host-home/calib_oak_rgb_1080p/calib_020.png
+- /host-home/calib_oak_rgb_1080p/calib_021.png
+- /host-home/calib_oak_rgb_1080p/calib_022.png
+- /host-home/calib_oak_rgb_1080p/calib_023.png
+- /host-home/calib_oak_rgb_1080p/calib_024.png
+- /host-home/calib_oak_rgb_1080p/calib_025.png
+- /host-home/calib_oak_rgb_1080p/calib_026.png
+- /host-home/calib_oak_rgb_1080p/calib_027.png
+- /host-home/calib_oak_rgb_1080p/calib_028.png
+- /host-home/calib_oak_rgb_1080p/calib_029.png
+- /host-home/calib_oak_rgb_1080p/calib_030.png
+- /host-home/calib_oak_rgb_1080p/calib_031.png
+- /host-home/calib_oak_rgb_1080p/calib_032.png
+- /host-home/calib_oak_rgb_1080p/calib_033.png
+- /host-home/calib_oak_rgb_1080p/calib_034.png
+- /host-home/calib_oak_rgb_1080p/calib_035.png
+- /host-home/calib_oak_rgb_1080p/calib_036.png
+- /host-home/calib_oak_rgb_1080p/calib_037.png
+- /host-home/calib_oak_rgb_1080p/calib_038.png
+- /host-home/calib_oak_rgb_1080p/calib_039.png
+- /host-home/calib_oak_rgb_1080p/calib_040.png
+recommended_oak_parcel_pose_launch_args:
+  use_camera_info: false
+  manual_fx: 1319.5699423660158
+  manual_fy: 1278.9413238797827
+  manual_cx: 926.520877915132
+  manual_cy: 346.93458819440946
