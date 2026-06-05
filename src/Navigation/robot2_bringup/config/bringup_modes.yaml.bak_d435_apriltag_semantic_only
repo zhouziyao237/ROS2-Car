@@ -280,18 +280,18 @@ modules:
       shelf_width: 1.85
       shelf_depth: 0.35
       shelf_height: 1.5
-      approach_distance: 0.6
-      face_to_center_offset: 0.175
-      front_qr_back_offset_m: 0.175
+      approach_distance: 0.2
+      face_to_center_offset: 0.0
+      front_qr_back_offset_m: 0.0
       front_qr_lateral_offset_m: 0.0
       front_qr_side_offset_m: 0.0
-      side_qr_front_offset_m: 0.175
-      side_qr_width_offset_m: 0.925
-      column_qr_front_offset_m: 0.175
-      column_qr_width_offset_m: 0.925
+      side_qr_front_offset_m: 0.0
+      side_qr_width_offset_m: 0.0
+      column_qr_front_offset_m: 0.0
+      column_qr_width_offset_m: 0.0
       front_label_lateral_offset: 0.0
-      side_label_front_offset: 0.175
-      side_label_width_offset: 0.925
+      side_label_front_offset: 0.0
+      side_label_width_offset: 0.0
       allow_side_qr_create_candidate_pose: true
       moving_shelf_realign_mode: true
       prefer_latest_front_qr: true
@@ -299,9 +299,9 @@ modules:
       qr_pose_normal_axis: x
       use_single_qr_normal_yaw: false
       front_qr_yaw_offset_deg: 0.0
-      right_side_qr_yaw_offset_deg: 90.0
-      left_side_qr_yaw_offset_deg: -90.0
-      column_side_yaw_offset_deg: 90.0
+      right_side_qr_yaw_offset_deg: 0.0
+      left_side_qr_yaw_offset_deg: 0.0
+      column_side_yaw_offset_deg: 0.0
       normal_points_to_camera: true
       max_yaw_jump_deg: 180.0
       yaw_smooth_alpha: 1.0
@@ -351,6 +351,7 @@ modules:
       groot_publisher_port: 1666
       groot_server_port: 1667
       groot_max_msg_per_second: 25
+      approach_distance: 0.2
     respawn: true
     respawn_delay: 2.0
     arguments:
@@ -422,6 +423,9 @@ modules:
       output_frame_id: base_link
       convert_optical_to_camera_link: true
       use_latest_tf_stamp: true
+      normal_direction_sign: -1.0
+      convert_optical_to_base_link: true
+      tag_to_shelf_yaw_offset_deg: 0.0
   home_anchor_validator:
     type: node
     package: robot_logistics_semantic
@@ -491,14 +495,14 @@ modules:
       - /cmd_vel_selected
       - /cmd_vel
       - /cmd_vel_nav
-      cancel_repeat_sec: 2.5
-      zero_vel_hz: 20.0
       path_clear_topics:
       - /plan
       - /local_plan
       - /received_global_plan
       - /transformed_global_plan
       - /unsmoothed_plan
+      cancel_repeat_sec: 2.5
+      zero_vel_hz: 20.0
       clear_path_repeat_sec: 3.0
       clear_path_hz: 20.0
 modes:

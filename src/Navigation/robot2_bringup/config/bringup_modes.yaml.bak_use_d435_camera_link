@@ -263,61 +263,49 @@ modules:
     respawn: true
     respawn_delay: 2.0
   semantic_registrar:
-    type: include
+    type: node
     package: robot_logistics_semantic
-    launch: real_semantic_only.launch.py
+    executable: semantic_registrar_node
+    name: semantic_registrar_node
+    output: screen
     delay: 10.5
-    arguments:
-      semantic_map_path: /host-home/maps/semantic_library.json
-      reset_semantic_map: 'false'
-      max_yaw_jump_deg: '180.0'
-      yaw_smooth_alpha: '1.0'
-      use_single_qr_normal_yaw: 'false'
-      camera_mount_yaw_deg: '0.0'
-      camera_mount_pitch_down_deg: '20.0'
-      camera_mount_roll_deg: '180.0'
-      qr_pose_normal_axis: x
-      normal_points_to_camera: 'true'
-      front_qr_yaw_offset_deg: '0.0'
-      right_side_qr_yaw_offset_deg: '90.0'
-      left_side_qr_yaw_offset_deg: '-90.0'
-      moving_shelf_realign_mode: 'true'
-      prefer_latest_front_qr: 'true'
-      max_front_side_pair_age_sec: '1.0'
-      enable_front_side_intersection: 'false'
-      front_qr_back_offset_m: '0.0'
-      front_qr_lateral_offset_m: '0.0'
-      input_topic: /vision/semantic_observation
-      observation_topic: /vision/semantic_observation
-      allow_side_qr_create_candidate_pose: 'false'
-      front_qr_lateral_axis_sign: '1.0'
-    parameters:
-    - max_yaw_jump_deg: 180.0
-      yaw_smooth_alpha: 1.0
-      use_single_qr_normal_yaw: false
-      camera_mount_yaw_deg: 0.0
-      camera_mount_pitch_down_deg: 20.0
-      camera_mount_roll_deg: 180.0
-      qr_pose_normal_axis: x
-      normal_points_to_camera: true
-      front_qr_yaw_offset_deg: 0.0
-      right_side_qr_yaw_offset_deg: 90.0
-      left_side_qr_yaw_offset_deg: -90.0
-      moving_shelf_realign_mode: true
-      prefer_latest_front_qr: true
-      max_front_side_pair_age_sec: 1.0
-      enable_front_side_intersection: false
-      front_qr_back_offset_m: 0.0
-      front_qr_lateral_offset_m: 0.0
-      input_topic: /vision/semantic_observation
-      observation_topic: /vision/semantic_observation
-      allow_side_qr_create_candidate_pose: false
-      front_qr_lateral_axis_sign: 1.0
-      approach_distance_m: 0.6
-      front_qr_approach_distance_m: 0.6
-      shelf_approach_distance_m: 0.6
     respawn: true
     respawn_delay: 2.0
+    parameters:
+    - input_topic: /vision/semantic_observation
+      semantic_map_path: /host-home/maps/semantic_library.json
+      map_frame: map
+      robot_frame: base_link
+      min_confidence: 0.2
+      shelf_width: 1.85
+      shelf_depth: 0.35
+      shelf_height: 1.5
+      approach_distance: 0.2
+      face_to_center_offset: 0.0
+      front_qr_back_offset_m: 0.0
+      front_qr_lateral_offset_m: 0.0
+      front_qr_side_offset_m: 0.0
+      side_qr_front_offset_m: 0.0
+      side_qr_width_offset_m: 0.0
+      column_qr_front_offset_m: 0.0
+      column_qr_width_offset_m: 0.0
+      front_label_lateral_offset: 0.0
+      side_label_front_offset: 0.0
+      side_label_width_offset: 0.0
+      allow_side_qr_create_candidate_pose: true
+      moving_shelf_realign_mode: true
+      prefer_latest_front_qr: true
+      enable_front_side_intersection: false
+      qr_pose_normal_axis: x
+      use_single_qr_normal_yaw: false
+      front_qr_yaw_offset_deg: 0.0
+      right_side_qr_yaw_offset_deg: 0.0
+      left_side_qr_yaw_offset_deg: 0.0
+      column_side_yaw_offset_deg: 0.0
+      normal_points_to_camera: true
+      max_yaw_jump_deg: 180.0
+      yaw_smooth_alpha: 1.0
+      tf_timeout_sec: 0.5
   rviz:
     type: node
     package: rviz2
@@ -363,6 +351,7 @@ modules:
       groot_publisher_port: 1666
       groot_server_port: 1667
       groot_max_msg_per_second: 25
+      approach_distance: 0.2
     respawn: true
     respawn_delay: 2.0
     arguments:
@@ -386,7 +375,7 @@ modules:
       current_state_topic: /task/current_state
       current_goal_topic: /task/current_goal
       bt_trace_topic: /task/bt_trace
-      semantic_observation_topic: /vision/semantic_observation
+      semantic_observation_topic: /vision/apriltag_semantic_observation
       current_shelf_topic: /semantic/current_shelf
       goal_pose_topic: /goal_pose
       selected_cmd_topic: /cmd_vel_selected
@@ -400,36 +389,122 @@ modules:
       line_height: 18
       panel_alpha: 0.58
       max_lines: 22
+      apriltag_observation_topic: /vision/apriltag_semantic_observation
+      front_writer_status_topic: /semantic/front_qr_writer_status
+      home_status_topic: /semantic/home_anchor_status
+  apriltag_shelf_bridge:
+    type: node
+    package: robot_logistics_semantic
+    executable: apriltag_shelf_bridge_node.py
+    name: apriltag_shelf_bridge_node
+    output: screen
+    delay: 13.2
+    respawn: true
+    respawn_delay: 2.0
+    parameters:
+    - image_topic: /camera/camera/color/image_raw
+      camera_info_topic: /camera/camera/color/camera_info
+      debug_image_topic: /vision/apriltag_debug_image
+      tag_family: DICT_APRILTAG_36h11
+      tag_size_m: 0.1
+      min_area_px: 250.0
+      publish_debug_image: true
+      frame_id_fallback: camera_color_optical_frame
+      source_name: apriltag_shelf_bridge
+      debug_log: true
+      normal_points_to_camera: true
+      typed_observation_topic: /vision/semantic_observation
+      json_observation_topic: /vision/apriltag_semantic_observation
+      depth_topics:
+      - /camera/camera/aligned_depth_to_color/image_raw
+      - /camera/camera/depth/image_rect_raw
+      database_path: /host-home/maps/apriltag_shelf_database.json
+      depth_topic: /camera/camera/aligned_depth_to_color/image_raw
+      output_frame_id: base_link
+      convert_optical_to_camera_link: true
+      use_latest_tf_stamp: true
+      normal_direction_sign: -1.0
+      convert_optical_to_base_link: true
+      tag_to_shelf_yaw_offset_deg: 0.0
+  home_anchor_validator:
+    type: node
+    package: robot_logistics_semantic
+    executable: home_anchor_validator_node.py
+    name: home_anchor_validator_node
+    output: screen
+    delay: 13.6
+    respawn: true
+    respawn_delay: 2.0
+    parameters:
+    - observation_topic: /vision/apriltag_semantic_observation
+      home_anchor_path: /host-home/maps/home_anchor.json
+      status_topic: /semantic/home_anchor_status
+      debug_log: true
   front_qr_semantic_writer:
     type: node
     package: robot_logistics_semantic
     executable: front_qr_semantic_writer_node
     name: front_qr_semantic_writer_node
     output: screen
-    delay: 13.5
+    delay: 13.7
     respawn: true
     respawn_delay: 2.0
     parameters:
-    - input_topic: /vision/semantic_observation
+    - input_topic: /vision/apriltag_semantic_observation
       semantic_map_path: /host-home/maps/semantic_library.json
-      target_frame: map
-      front_qr_yaw_offset_deg: -5.0
-      front_qr_back_offset_m: 0.0
-      front_qr_lateral_offset_m: 0.0
-      shelf_width_m: 1.2
-      shelf_depth_m: 0.35
-      approach_distance_m: 0.6
-      front_qr_lateral_axis_sign: 1.0
-      use_base_yaw_delta_mode: true
-      base_frame: base_link
-      front_qr_yaw_delta_sign: -1.0
-      front_qr_approach_distance_m: 0.6
-      shelf_approach_distance_m: 0.6
-    arguments:
-      front_qr_back_offset_m: '0.0'
-      front_qr_lateral_offset_m: '0.0'
-      front_qr_lateral_axis_sign: '1.0'
-      front_qr_yaw_offset_deg: '0.0'
+      map_frame: map
+      camera_frame_fallback: camera_color_optical_frame
+      tf_timeout_sec: 0.5
+      min_confidence: 0.2
+      shelf_width: 1.85
+      shelf_depth: 0.35
+      shelf_height: 1.5
+      face_to_center_offset: 0.175
+      approach_distance: 0.6
+      front_qr_yaw_offset_deg: 0.0
+      normal_points_to_camera: true
+      require_apriltag_source: false
+      debug_log: true
+  semantic_marker_publisher:
+    type: node
+    package: robot_logistics_semantic
+    executable: semantic_marker_publisher_node
+    name: semantic_marker_publisher_node
+    output: screen
+    delay: 11.5
+    respawn: true
+    respawn_delay: 2.0
+    parameters:
+    - semantic_map_path: /host-home/maps/semantic_library.json
+      map_frame: map
+      publish_rate_hz: 2.0
+  task_cancel_guard:
+    type: node
+    package: robot2_bringup
+    executable: task_cancel_guard.py
+    name: task_cancel_guard_node
+    output: screen
+    delay: 12.5
+    respawn: true
+    respawn_delay: 2.0
+    parameters:
+    - task_goal_topic: /task/shelf_goal
+      task_cancel_topic: /task/cancel
+      task_status_topic: /task/status
+      cmd_vel_topics:
+      - /cmd_vel_selected
+      - /cmd_vel
+      - /cmd_vel_nav
+      path_clear_topics:
+      - /plan
+      - /local_plan
+      - /received_global_plan
+      - /transformed_global_plan
+      - /unsmoothed_plan
+      cancel_repeat_sec: 2.5
+      zero_vel_hz: 20.0
+      clear_path_repeat_sec: 3.0
+      clear_path_hz: 20.0
 modes:
   hardware:
     enable:
@@ -476,9 +551,12 @@ modes:
     - slam
     - nav2
     - goal_pose_bridge
+    - apriltag_shelf_bridge
     - semantic_registrar
-    - front_qr_semantic_writer
+    - home_anchor_validator
+    - semantic_marker_publisher
     - mission_bt
+    - task_cancel_guard
     - bt_osd_overlay
   nav_d435:
     enable:

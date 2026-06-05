@@ -281,17 +281,17 @@ modules:
       shelf_depth: 0.35
       shelf_height: 1.5
       approach_distance: 0.2
-      face_to_center_offset: 0.175
-      front_qr_back_offset_m: 0.175
+      face_to_center_offset: 0.0
+      front_qr_back_offset_m: 0.0
       front_qr_lateral_offset_m: 0.0
       front_qr_side_offset_m: 0.0
-      side_qr_front_offset_m: 0.175
-      side_qr_width_offset_m: 0.925
-      column_qr_front_offset_m: 0.175
-      column_qr_width_offset_m: 0.925
+      side_qr_front_offset_m: 0.0
+      side_qr_width_offset_m: 0.0
+      column_qr_front_offset_m: 0.0
+      column_qr_width_offset_m: 0.0
       front_label_lateral_offset: 0.0
-      side_label_front_offset: 0.175
-      side_label_width_offset: 0.925
+      side_label_front_offset: 0.0
+      side_label_width_offset: 0.0
       allow_side_qr_create_candidate_pose: true
       moving_shelf_realign_mode: true
       prefer_latest_front_qr: true
@@ -299,13 +299,16 @@ modules:
       qr_pose_normal_axis: x
       use_single_qr_normal_yaw: false
       front_qr_yaw_offset_deg: 0.0
-      right_side_qr_yaw_offset_deg: 90.0
-      left_side_qr_yaw_offset_deg: -90.0
-      column_side_yaw_offset_deg: 90.0
+      right_side_qr_yaw_offset_deg: 0.0
+      left_side_qr_yaw_offset_deg: 0.0
+      column_side_yaw_offset_deg: 0.0
       normal_points_to_camera: true
       max_yaw_jump_deg: 180.0
       yaw_smooth_alpha: 1.0
       tf_timeout_sec: 0.5
+      camera_mount_pitch_down_deg: 0.0
+      camera_mount_roll_deg: 0.0
+      camera_mount_yaw_deg: 0.0
   rviz:
     type: node
     package: rviz2
@@ -405,7 +408,7 @@ modules:
     - image_topic: /camera/camera/color/image_raw
       camera_info_topic: /camera/camera/color/camera_info
       debug_image_topic: /vision/apriltag_debug_image
-      tag_family: DICT_APRILTAG_36h11
+      tag_family: tag36h11
       tag_size_m: 0.1
       min_area_px: 250.0
       publish_debug_image: true
@@ -420,9 +423,14 @@ modules:
       - /camera/camera/depth/image_rect_raw
       database_path: /host-home/maps/apriltag_shelf_database.json
       depth_topic: /camera/camera/aligned_depth_to_color/image_raw
-      output_frame_id: base_link
+      output_frame_id: camera_link
       convert_optical_to_camera_link: true
       use_latest_tf_stamp: true
+      normal_direction_sign: -1.0
+      convert_optical_to_base_link: true
+      tag_to_shelf_yaw_offset_deg: 0.0
+      decision_margin_min: 20.0
+      hamming_max: 0
   home_anchor_validator:
     type: node
     package: robot_logistics_semantic

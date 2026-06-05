@@ -4,116 +4,206 @@
 import json
 import math
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import cv2
 import numpy as np
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
 from cv_bridge import CvBridge
-from sensor_msgs.msg import Image, CameraInfo
 from std_msgs.msg import String
+from sensor_msgs.msg import Image, CameraInfo
 
 from robot_logistics_interfaces.msg import SemanticObservation
 
+try:
+    from pupil_apriltags import Detector
+except Exception as e:
+    Detector = None
+    PUPIL_IMPORT_ERROR = e
+else:
+    PUPIL_IMPORT_ERROR = None
 
-def vec_norm(v: np.ndarray) -> Optional[np.ndarray]:
-    n = float(np.linalg.norm(v))
-    if n < 1e-8:
-        return None
-    return v / n
+
+def normalize_family_name(name: str) -> str:
+    s = str(name).strip()
+
+    mapping = {
+        "DICT_APRILTAG_16h5": "tag16h5",
+        "DICT_APRILTAG_25h9": "tag25h9",
+        "DICT_APRILTAG_36h10": "tag36h10",
+        "DICT_APRILTAG_36h11": "tag36h11",
+        "16h5": "tag16h5",
+        "25h9": "tag25h9",
+        "36h10": "tag36h10",
+        "36h11": "tag36h11",
+        "tag16h5": "tag16h5",
+        "tag25h9": "tag25h9",
+        "tag36h10": "tag36h10",
+        "tag36h11": "tag36h11",
+    }
+
+    return mapping.get(s, "tag36h11")
 
 
-def yaw_norm(a: float) -> float:
-    while a > math.pi:
-        a -= 2.0 * math.pi
-    while a < -math.pi:
-        a += 2.0 * math.pi
-    return a
+def rotation_matrix_to_quaternion(R: np.ndarray) -> Tuple[float, float, float, float]:
+    R = np.asarray(R, dtype=np.float64)
+    tr = float(R[0, 0] + R[1, 1] + R[2, 2])
+
+    if tr > 0.0:
+        S = math.sqrt(tr + 1.0) * 2.0
+        qw = 0.25 * S
+        qx = (R[2, 1] - R[1, 2]) / S
+        qy = (R[0, 2] - R[2, 0]) / S
+        qz = (R[1, 0] - R[0, 1]) / S
+    elif R[0, 0] > R[1, 1] and R[0, 0] > R[2, 2]:
+        S = math.sqrt(max(1.0 + R[0, 0] - R[1, 1] - R[2, 2], 1e-12)) * 2.0
+        qw = (R[2, 1] - R[1, 2]) / S
+        qx = 0.25 * S
+        qy = (R[0, 1] + R[1, 0]) / S
+        qz = (R[0, 2] + R[2, 0]) / S
+    elif R[1, 1] > R[2, 2]:
+        S = math.sqrt(max(1.0 + R[1, 1] - R[0, 0] - R[2, 2], 1e-12)) * 2.0
+        qw = (R[0, 2] - R[2, 0]) / S
+        qx = (R[0, 1] + R[1, 0]) / S
+        qy = 0.25 * S
+        qz = (R[1, 2] + R[2, 1]) / S
+    else:
+        S = math.sqrt(max(1.0 + R[2, 2] - R[0, 0] - R[1, 1], 1e-12)) * 2.0
+        qw = (R[1, 0] - R[0, 1]) / S
+        qx = (R[0, 2] + R[2, 0]) / S
+        qy = (R[1, 2] + R[2, 1]) / S
+        qz = 0.25 * S
+
+    norm = math.sqrt(qx * qx + qy * qy + qz * qz + qw * qw)
+
+    if norm < 1e-12:
+        return 0.0, 0.0, 0.0, 1.0
+
+    return qx / norm, qy / norm, qz / norm, qw / norm
+
+
+def yaw_rotation_matrix(yaw_rad: float) -> np.ndarray:
+    c = math.cos(yaw_rad)
+    s = math.sin(yaw_rad)
+
+    return np.array([
+        [c, -s, 0.0],
+        [s,  c, 0.0],
+        [0.0, 0.0, 1.0],
+    ], dtype=np.float64)
+
+
+def optical_to_base_pose(t_opt: np.ndarray, R_opt_tag: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    只用于兼容旧测试模式。
+
+    D435 optical frame:
+      x right
+      y down
+      z forward
+
+    base-like frame:
+      x forward
+      y left
+      z up
+
+    正式语义库建议不要用这个硬转换。
+    正式模式应该直接发布 camera_color_optical_frame，让 semantic_registrar 通过 TF 转到 map。
+    """
+    C = np.array([
+        [0.0, 0.0, 1.0],
+        [-1.0, 0.0, 0.0],
+        [0.0, -1.0, 0.0],
+    ], dtype=np.float64)
+
+    t_base = C @ t_opt.reshape(3)
+    R_base_tag = C @ R_opt_tag
+
+    return t_base.reshape(3), R_base_tag
 
 
 class AprilTagShelfBridge(Node):
     """
-    AprilTag 替换原 QR 识别入口。
+    D435 + AprilTag shelf semantic bridge.
 
-    输入：
-      /camera/camera/color/image_raw
-      /camera/camera/color/camera_info
-      /camera/camera/aligned_depth_to_color/image_raw
-
-    输出：
-      /vision/semantic_observation
-        robot_logistics_interfaces/msg/SemanticObservation
-        给 semantic_registrar_node 做正面/侧面融合。
-
-      /vision/apriltag_semantic_observation
-        std_msgs/String JSON
-        给 HOME / OSD / 调试用。
-
-      /vision/apriltag_debug_image
-        带框调试图。
+    正式逻辑：
+      1. 不使用 OpenCV cv2.aruco，避免 Segmentation fault。
+      2. 使用 pupil_apriltags.Detector。
+      3. AprilTag 贴在货架中心。
+      4. pose_t 直接是 tag center translation。
+      5. pose_R 直接是 AprilTag 6D orientation。
+      6. 不用 normal 重建 yaw。
+      7. 不用 QR offset 反推货架中心。
+      8. 默认 frame_id = camera_color_optical_frame，让 semantic_registrar 使用 TF 转到 map。
     """
 
     def __init__(self):
         super().__init__("apriltag_shelf_bridge_node")
 
+        if Detector is None:
+            raise RuntimeError(f"pupil_apriltags import failed: {PUPIL_IMPORT_ERROR}")
+
         self.declare_parameter("image_topic", "/camera/camera/color/image_raw")
         self.declare_parameter("camera_info_topic", "/camera/camera/color/camera_info")
-        self.declare_parameter("depth_topic", "/camera/camera/aligned_depth_to_color/image_raw")
 
         self.declare_parameter("typed_observation_topic", "/vision/semantic_observation")
         self.declare_parameter("json_observation_topic", "/vision/apriltag_semantic_observation")
         self.declare_parameter("debug_image_topic", "/vision/apriltag_debug_image")
 
-        self.declare_parameter("tag_family", "DICT_APRILTAG_36h11")
+        self.declare_parameter("tag_family", "tag36h11")
         self.declare_parameter("tag_size_m", 0.10)
         self.declare_parameter("database_path", "/host-home/maps/apriltag_shelf_database.json")
 
-        self.declare_parameter("min_area_px", 160.0)
-        self.declare_parameter("min_depth_m", 0.15)
-        self.declare_parameter("max_depth_m", 5.0)
-        self.declare_parameter("depth_patch_radius_px", 4)
+        self.declare_parameter("quad_decimate", 1.0)
+        self.declare_parameter("decision_margin_min", 20.0)
+        self.declare_parameter("hamming_max", 0)
 
-        # true: normal 指向相机/机器人，也就是货架正面朝外方向。
-        self.declare_parameter("normal_points_to_camera", True)
+        # 正式建议：输出 camera_color_optical_frame。
+        # semantic_registrar 会根据 TF 转到 map，这样 D435 安装角度由 URDF/TF 负责。
+        self.declare_parameter("output_frame_id", "camera_color_optical_frame")
 
-        # semantic_registrar 需要一个能连到 map/base_link 的 frame。
-        # RealSense 的 camera_color_optical_frame 当前不在同一 TF tree，
-        # 所以这里默认把 optical 坐标转换到 URDF 里的 camera_link。
-        self.declare_parameter("output_frame_id", "base_link")
-        self.declare_parameter("convert_optical_to_camera_link", True)
+        # 兼容旧测试。正式建议 False。
+        self.declare_parameter("convert_optical_to_base_link", False)
 
-        # True 时，SemanticObservation 的 stamp 使用 0，让 tf2 查询 latest transform。
-        # 这样可以避免 base_link->map 因时间戳太旧而 ExtrapolationException。
+        # true 时 stamp=0，让 semantic_registrar 用 latest TF。
         self.declare_parameter("use_latest_tf_stamp", True)
+
+        # AprilTag 图案坐标系与货架坐标系之间的固定安装偏移。
+        # 如果贴纸方向和货架方向一致，用 0。
+        # 如果贴纸旋转 90/180/-90，只改这个参数。
+        self.declare_parameter("tag_to_shelf_yaw_offset_deg", 0.0)
 
         self.declare_parameter("publish_debug_image", True)
         self.declare_parameter("debug_log", True)
 
         self.bridge = CvBridge()
+
         self.camera_info: Optional[CameraInfo] = None
-        self.depth_img = None
-        self.depth_encoding = ""
+        self.camera_params: Optional[Tuple[float, float, float, float]] = None
         self.color_frame_id = "camera_color_optical_frame"
 
-        self.db = self.load_database()
-        self.detector = self.make_detector()
+        self.database: Dict[str, Any] = self.load_database()
 
-        sensor_qos = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT,
-            durability=DurabilityPolicy.VOLATILE,
-            history=HistoryPolicy.KEEP_LAST,
-            depth=5,
+        family = normalize_family_name(str(self.get_parameter("tag_family").value))
+
+        self.detector = Detector(
+            families=family,
+            nthreads=1,
+            quad_decimate=float(self.get_parameter("quad_decimate").value),
+            quad_sigma=0.0,
+            refine_edges=1,
+            decode_sharpening=0.25,
+            debug=0,
         )
 
         self.image_sub = self.create_subscription(
             Image,
             str(self.get_parameter("image_topic").value),
             self.on_image,
-            sensor_qos,
+            10,
         )
 
         self.info_sub = self.create_subscription(
@@ -121,13 +211,6 @@ class AprilTagShelfBridge(Node):
             str(self.get_parameter("camera_info_topic").value),
             self.on_camera_info,
             10,
-        )
-
-        self.depth_sub = self.create_subscription(
-            Image,
-            str(self.get_parameter("depth_topic").value),
-            self.on_depth,
-            sensor_qos,
         )
 
         self.typed_pub = self.create_publisher(
@@ -148,239 +231,44 @@ class AprilTagShelfBridge(Node):
             10,
         )
 
-        self.get_logger().info(
-            "apriltag_shelf_bridge_node started. "
-            f"typed={self.get_parameter('typed_observation_topic').value}, "
-            f"json={self.get_parameter('json_observation_topic').value}, "
-            f"depth={self.get_parameter('depth_topic').value}"
-        )
-
-    def log_debug(self, text: str):
-        if bool(self.get_parameter("debug_log").value):
-            self.get_logger().info(text)
+        self.get_logger().info("apriltag_shelf_bridge_node started: pupil_apriltags DIRECT 6D pose mode")
+        self.get_logger().info(f"family={family}, tag_size_m={float(self.get_parameter('tag_size_m').value)}")
 
     def load_database(self) -> Dict[str, Any]:
-        p = Path(str(self.get_parameter("database_path").value))
-        if not p.exists():
-            self.get_logger().warn(f"tag database not found: {p}, fallback rule will be used")
+        path = Path(str(self.get_parameter("database_path").value))
+
+        if not path.exists():
+            self.get_logger().warn(f"database not found: {path}, fallback to tag id rule")
             return {}
+
         try:
-            data = json.loads(p.read_text())
-            return data.get("tags", {})
+            data = json.loads(path.read_text())
+            if isinstance(data, dict):
+                return data
         except Exception as e:
-            self.get_logger().warn(f"failed to read tag database: {repr(e)}")
-            return {}
+            self.get_logger().warn(f"failed to read database {path}: {e}")
 
-    def make_detector(self):
-        aruco = cv2.aruco
-        family = str(self.get_parameter("tag_family").value)
-
-        if not hasattr(aruco, family):
-            self.get_logger().warn(f"unknown tag family {family}, fallback DICT_APRILTAG_36h11")
-            family = "DICT_APRILTAG_36h11"
-
-        dictionary = aruco.getPredefinedDictionary(getattr(aruco, family))
-
-        if hasattr(aruco, "ArucoDetector"):
-            params = aruco.DetectorParameters()
-            return aruco.ArucoDetector(dictionary, params)
-
-        return (dictionary, aruco.DetectorParameters_create())
-
-    def detect(self, gray):
-        aruco = cv2.aruco
-        if hasattr(aruco, "ArucoDetector") and not isinstance(self.detector, tuple):
-            corners, ids, _ = self.detector.detectMarkers(gray)
-            return corners, ids
-        dictionary, params = self.detector
-        corners, ids, _ = aruco.detectMarkers(gray, dictionary, parameters=params)
-        return corners, ids
+        return {}
 
     def on_camera_info(self, msg: CameraInfo):
         self.camera_info = msg
-        if msg.header.frame_id:
-            self.color_frame_id = msg.header.frame_id
+        self.color_frame_id = msg.header.frame_id or "camera_color_optical_frame"
 
-    def on_depth(self, msg: Image):
-        try:
-            self.depth_img = self.bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
-            self.depth_encoding = msg.encoding
-        except Exception as e:
-            self.get_logger().warn(f"depth convert failed: {repr(e)}")
-
-    def intrinsics(self):
-        if self.camera_info is None:
-            return None
-        k = self.camera_info.k
+        k = msg.k
         fx = float(k[0])
         fy = float(k[4])
         cx = float(k[2])
         cy = float(k[5])
-        if fx <= 0 or fy <= 0:
-            return None
-        return fx, fy, cx, cy
 
-    def depth_raw_to_m(self, raw) -> Optional[float]:
-        try:
-            d = float(raw)
-        except Exception:
-            return None
+        self.camera_params = (fx, fy, cx, cy)
 
-        if not math.isfinite(d) or d <= 0:
-            return None
+    def tag_info_from_id(self, tag_id: int) -> Dict[str, Any]:
+        tags = self.database.get("tags", {})
 
-        enc = self.depth_encoding.upper()
-        if "16UC1" in enc or d > 20.0:
-            d *= 0.001
+        if str(tag_id) in tags and isinstance(tags[str(tag_id)], dict):
+            return dict(tags[str(tag_id)])
 
-        if d < float(self.get_parameter("min_depth_m").value):
-            return None
-        if d > float(self.get_parameter("max_depth_m").value):
-            return None
-
-        return d
-
-    def depth_at(self, u: float, v: float, radius: int) -> Optional[float]:
-        if self.depth_img is None:
-            return None
-
-        h, w = self.depth_img.shape[:2]
-        cx = int(round(u))
-        cy = int(round(v))
-
-        vals = []
-        for yy in range(cy - radius, cy + radius + 1):
-            if yy < 0 or yy >= h:
-                continue
-            for xx in range(cx - radius, cx + radius + 1):
-                if xx < 0 or xx >= w:
-                    continue
-                d = self.depth_raw_to_m(self.depth_img[yy, xx])
-                if d is not None:
-                    vals.append(d)
-
-        if not vals:
-            return None
-
-        return float(np.median(np.array(vals, dtype=np.float32)))
-
-    def deproject(self, u: float, v: float, z: float) -> Optional[np.ndarray]:
-        intr = self.intrinsics()
-        if intr is None:
-            return None
-
-        fx, fy, cx, cy = intr
-        x = (float(u) - cx) * z / fx
-        y = (float(v) - cy) * z / fy
-
-        return np.array([x, y, z], dtype=np.float64)
-
-    def pnp_pose(self, pts_2d: np.ndarray) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
-        intr = self.intrinsics()
-        if intr is None:
-            return None, None
-
-        fx, fy, cx, cy = intr
-        k = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]], dtype=np.float64)
-
-        if self.camera_info is not None and len(self.camera_info.d) > 0:
-            dist = np.array(self.camera_info.d, dtype=np.float64)
-        else:
-            dist = np.zeros((5, 1), dtype=np.float64)
-
-        s = float(self.get_parameter("tag_size_m").value) / 2.0
-
-        # OpenCV ArUco corners 顺序通常为 TL, TR, BR, BL。
-        obj = np.array([
-            [-s,  s, 0.0],
-            [ s,  s, 0.0],
-            [ s, -s, 0.0],
-            [-s, -s, 0.0],
-        ], dtype=np.float64)
-
-        try:
-            ok, rvec, tvec = cv2.solvePnP(
-                obj,
-                pts_2d.astype(np.float64),
-                k,
-                dist,
-                flags=cv2.SOLVEPNP_IPPE_SQUARE,
-            )
-            if not ok:
-                ok, rvec, tvec = cv2.solvePnP(obj, pts_2d.astype(np.float64), k, dist)
-            if not ok:
-                return None, None
-
-            rot, _ = cv2.Rodrigues(rvec)
-            n = rot[:, 2].reshape(3)
-            n = vec_norm(n)
-            if n is not None:
-                # 统一 normal 指向相机，camera optical 下指向相机通常 z 为负。
-                if bool(self.get_parameter("normal_points_to_camera").value):
-                    if n[2] > 0:
-                        n = -n
-                else:
-                    if n[2] < 0:
-                        n = -n
-
-            return tvec.reshape(3), n
-        except Exception:
-            return None, None
-
-    def depth_pose(self, pts_2d: np.ndarray) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
-        radius = int(self.get_parameter("depth_patch_radius_px").value)
-
-        center = np.mean(pts_2d, axis=0)
-
-        # 中心 + 四角 + 四条边中点，增强斜面拟合。
-        samples_2d = [center]
-        samples_2d += [pts_2d[i] for i in range(4)]
-        for i in range(4):
-            samples_2d.append((pts_2d[i] + pts_2d[(i + 1) % 4]) * 0.5)
-
-        points = []
-        for p in samples_2d:
-            d = self.depth_at(float(p[0]), float(p[1]), radius)
-            if d is None:
-                continue
-            xyz = self.deproject(float(p[0]), float(p[1]), d)
-            if xyz is not None:
-                points.append(xyz)
-
-        if len(points) < 1:
-            return None, None
-
-        # 中心点优先用中心深度；若没有，取所有点均值。
-        center_depth = self.depth_at(float(center[0]), float(center[1]), radius)
-        if center_depth is not None:
-            center_xyz = self.deproject(float(center[0]), float(center[1]), center_depth)
-        else:
-            center_xyz = np.mean(np.array(points), axis=0)
-
-        normal = None
-        if len(points) >= 4:
-            pts = np.array(points, dtype=np.float64)
-            centroid = pts.mean(axis=0)
-            _, _, vh = np.linalg.svd(pts - centroid)
-            n = vh[-1, :]
-            n = vec_norm(n)
-            if n is not None:
-                if bool(self.get_parameter("normal_points_to_camera").value):
-                    if n[2] > 0:
-                        n = -n
-                else:
-                    if n[2] < 0:
-                        n = -n
-                normal = n
-
-        return center_xyz, normal
-
-    def tag_info(self, tag_id: int) -> Dict[str, Any]:
-        key = str(int(tag_id))
-        if key in self.db:
-            return dict(self.db[key])
-
-        if int(tag_id) == 0:
+        if tag_id == 0:
             return {
                 "tag_id": 0,
                 "display_code": "HOME",
@@ -399,7 +287,7 @@ class AprilTagShelfBridge(Node):
 
         if row == 0:
             return {
-                "tag_id": int(tag_id),
+                "tag_id": tag_id,
                 "display_code": f"{shelf_number:02d}00",
                 "type": "column_tag",
                 "obs_type": "column_qr",
@@ -411,7 +299,7 @@ class AprilTagShelfBridge(Node):
             }
 
         return {
-            "tag_id": int(tag_id),
+            "tag_id": tag_id,
             "display_code": f"{shelf_number:02d}{row:02d}",
             "type": "row_tag",
             "obs_type": "layer_qr",
@@ -423,292 +311,206 @@ class AprilTagShelfBridge(Node):
             "layer_id": f"L{row}",
         }
 
-    def set_field(self, msg, name: str, value):
-        if not hasattr(msg, name):
-            return
-        try:
-            setattr(msg, name, value)
-        except Exception:
-            try:
-                current = getattr(msg, name)
-                if isinstance(current, str):
-                    setattr(msg, name, str(value))
-                elif isinstance(current, bool):
-                    setattr(msg, name, bool(value))
-                elif isinstance(current, int):
-                    setattr(msg, name, int(value))
-                elif isinstance(current, float):
-                    setattr(msg, name, float(value))
-            except Exception:
-                pass
+    def apply_tag_to_shelf_yaw_offset(self, R: np.ndarray) -> np.ndarray:
+        offset_deg = float(self.get_parameter("tag_to_shelf_yaw_offset_deg").value)
 
+        if abs(offset_deg) < 1e-9:
+            return R
 
-    def quat_from_normal_x_axis(self, normal):
-        """
-        Build quaternion in camera frame.
-        Convention for semantic_registrar:
-          qr_pose_normal_axis = x
-        Therefore local +X axis of pose orientation points along tag/shelf normal.
-        """
-        import numpy as np
-        import math
+        Rz = yaw_rotation_matrix(math.radians(offset_deg))
+        return R @ Rz
 
-        x_axis = np.array(normal, dtype=np.float64)
-        n = float(np.linalg.norm(x_axis))
-        if n < 1e-8:
-            x_axis = np.array([0.0, 0.0, -1.0], dtype=np.float64)
-        else:
-            x_axis = x_axis / n
+    def make_stamp(self):
+        stamp = self.get_clock().now().to_msg()
 
-        # Pick an auxiliary axis not parallel to x_axis.
-        aux = np.array([0.0, 1.0, 0.0], dtype=np.float64)
-        if abs(float(np.dot(aux, x_axis))) > 0.90:
-            aux = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+        if bool(self.get_parameter("use_latest_tf_stamp").value):
+            stamp.sec = 0
+            stamp.nanosec = 0
 
-        z_axis = np.cross(x_axis, aux)
-        z_norm = float(np.linalg.norm(z_axis))
-        if z_norm < 1e-8:
-            z_axis = np.array([0.0, 0.0, 1.0], dtype=np.float64)
-        else:
-            z_axis = z_axis / z_norm
-
-        y_axis = np.cross(z_axis, x_axis)
-        y_axis = y_axis / max(float(np.linalg.norm(y_axis)), 1e-8)
-
-        # Rotation matrix columns are local axes expressed in camera frame.
-        R = np.array([
-            [x_axis[0], y_axis[0], z_axis[0]],
-            [x_axis[1], y_axis[1], z_axis[1]],
-            [x_axis[2], y_axis[2], z_axis[2]],
-        ], dtype=np.float64)
-
-        tr = float(R[0, 0] + R[1, 1] + R[2, 2])
-        if tr > 0.0:
-            S = math.sqrt(tr + 1.0) * 2.0
-            qw = 0.25 * S
-            qx = (R[2, 1] - R[1, 2]) / S
-            qy = (R[0, 2] - R[2, 0]) / S
-            qz = (R[1, 0] - R[0, 1]) / S
-        elif R[0, 0] > R[1, 1] and R[0, 0] > R[2, 2]:
-            S = math.sqrt(1.0 + R[0, 0] - R[1, 1] - R[2, 2]) * 2.0
-            qw = (R[2, 1] - R[1, 2]) / S
-            qx = 0.25 * S
-            qy = (R[0, 1] + R[1, 0]) / S
-            qz = (R[0, 2] + R[2, 0]) / S
-        elif R[1, 1] > R[2, 2]:
-            S = math.sqrt(1.0 + R[1, 1] - R[0, 0] - R[2, 2]) * 2.0
-            qw = (R[0, 2] - R[2, 0]) / S
-            qx = (R[0, 1] + R[1, 0]) / S
-            qy = 0.25 * S
-            qz = (R[1, 2] + R[2, 1]) / S
-        else:
-            S = math.sqrt(1.0 + R[2, 2] - R[0, 0] - R[1, 1]) * 2.0
-            qw = (R[1, 0] - R[0, 1]) / S
-            qx = (R[0, 2] + R[2, 0]) / S
-            qy = (R[1, 2] + R[2, 1]) / S
-            qz = 0.25 * S
-
-        qn = math.sqrt(qx*qx + qy*qy + qz*qz + qw*qw)
-        if qn < 1e-8:
-            return 0.0, 0.0, 0.0, 1.0
-        return qx/qn, qy/qn, qz/qn, qw/qn
+        return stamp
 
     def build_semantic_msg(self, obs: Dict[str, Any]) -> SemanticObservation:
         msg = SemanticObservation()
 
-        stamp = self.get_clock().now().to_msg()
-        if bool(self.get_parameter("use_latest_tf_stamp").value):
-            stamp.sec = 0
-            stamp.nanosec = 0
-        frame_id = str(obs.get("camera_frame", self.color_frame_id))
+        stamp = self.make_stamp()
+        frame_id = str(obs.get("frame_id", self.color_frame_id))
 
         msg.header.stamp = stamp
         msg.header.frame_id = frame_id
+
+        msg.pose.header.stamp = stamp
+        msg.pose.header.frame_id = frame_id
 
         msg.obs_type = str(obs.get("obs_type", obs.get("type", "")))
         msg.shelf_id = str(obs.get("shelf_id", ""))
         msg.face = str(obs.get("face", ""))
         msg.layer_id = str(obs.get("layer_id", ""))
 
-        # column_qr 的 column_id 原接口需要 string；没有就用 C{col}
+        row = int(obs.get("row", 0))
         col = int(obs.get("col", 0))
+
+        msg.row = row
         msg.col = col
         msg.column_id = str(obs.get("column_id", f"C{col}" if col > 0 else ""))
-
-        msg.row = int(obs.get("row", 0))
         msg.package_code = str(obs.get("package_code", ""))
         msg.confidence = float(obs.get("confidence", 1.0))
+        msg.has_pose = True
 
-        xyz = obs.get("camera_xyz", [0.0, 0.0, 0.0])
-        normal = obs.get("normal", [0.0, 0.0, -1.0])
+        x, y, z = obs["position"]
+        qx, qy, qz, qw = obs["quaternion"]
 
-        # 关键：registrar 只认 msg.pose + msg.has_pose。
-        msg.pose.header.stamp = stamp
-        msg.pose.header.frame_id = frame_id
-        msg.pose.pose.position.x = float(xyz[0])
-        msg.pose.pose.position.y = float(xyz[1])
-        msg.pose.pose.position.z = float(xyz[2])
+        msg.pose.pose.position.x = float(x)
+        msg.pose.pose.position.y = float(y)
+        msg.pose.pose.position.z = float(z)
 
-        qx, qy, qz, qw = self.quat_from_normal_x_axis(normal)
         msg.pose.pose.orientation.x = float(qx)
         msg.pose.pose.orientation.y = float(qy)
         msg.pose.pose.orientation.z = float(qz)
         msg.pose.pose.orientation.w = float(qw)
 
-        msg.has_pose = True
-
         return msg
 
-    def build_obs(self, tag_id: int, pts_2d: np.ndarray) -> Optional[Dict[str, Any]]:
-        area = float(cv2.contourArea(pts_2d.astype(np.float32)))
-        if area < float(self.get_parameter("min_area_px").value):
-            return None
+    def build_json_msg(self, obs: Dict[str, Any]) -> String:
+        msg = String()
+        msg.data = json.dumps(obs, ensure_ascii=False)
+        return msg
 
-        info = self.tag_info(tag_id)
-        obs_type = str(info.get("obs_type", info.get("type", "")))
+    def draw_debug_tag(self, frame, det, obs):
+        corners = np.asarray(det.corners, dtype=np.int32)
+        cv2.polylines(frame, [corners], True, (0, 255, 255), 2)
 
-        xyz_depth, normal_depth = self.depth_pose(pts_2d)
-        xyz_pnp, normal_pnp = self.pnp_pose(pts_2d)
+        c = np.asarray(det.center, dtype=np.int32)
+        label = f"{obs.get('raw')} id={obs.get('tag_id')} {obs.get('shelf_id','')} {obs.get('layer_id','')}"
+        cv2.putText(
+            frame,
+            label,
+            (int(c[0]) + 5, int(c[1]) - 5),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55,
+            (0, 255, 255),
+            2,
+            cv2.LINE_AA,
+        )
 
-        # 位置优先用深度；深度缺失再用 PnP。
-        xyz = xyz_depth if xyz_depth is not None else xyz_pnp
-
-        # 姿态 normal 优先用 PnP，因为 AprilTag 的角点姿态比几个深度点拟合更稳定；
-        # 深度 normal 用来兜底。
-        normal = normal_pnp if normal_pnp is not None else normal_depth
-
-        if xyz is None:
-            return None
-
-        if normal is None:
-            normal = np.array([0.0, 0.0, -1.0], dtype=np.float64)
-
-        raw = str(info.get("display_code", str(tag_id)))
-        shelf_id = str(info.get("shelf_id", ""))
-        layer_id = str(info.get("layer_id", ""))
-
-        cell_id = ""
-        if shelf_id and layer_id:
-            cell_id = f"{shelf_id}-{layer_id}"
-
-        # 坐标系修复：
-        # AprilTag / depth 算出来的是 color optical frame 坐标：
-        #   x右, y下, z前
-        # 但当前 TF 树里能连到 base/map 的是 URDF camera_link：
-        #   x前, y左, z上
-        # 因此这里把位置和法向都转换到 camera_link，再发布给 semantic_registrar。
-        output_frame = str(self.get_parameter("output_frame_id").value)
-        if bool(self.get_parameter("convert_optical_to_camera_link").value):
-            ox, oy, oz = float(xyz[0]), float(xyz[1]), float(xyz[2])
-            nx, ny, nz = float(normal[0]), float(normal[1]), float(normal[2])
-
-            xyz = np.array([oz, -ox, -oy], dtype=np.float64)
-            normal = np.array([nz, -nx, -ny], dtype=np.float64)
-            n_norm = vec_norm(normal)
-            if n_norm is not None:
-                normal = n_norm
-        else:
-            output_frame = self.color_frame_id
-
-        obs = {
-            "source": "apriltag_shelf_bridge",
-            "family": str(self.get_parameter("tag_family").value),
-            "tag_id": int(tag_id),
-            "raw": raw,
-            "data": raw,
-            "display_code": raw,
-            "type": obs_type,
-            "obs_type": obs_type,
-            "qr_type": obs_type,
-            "face": str(info.get("face", "")),
-            "shelf_id": shelf_id,
-            "shelf_number": int(info.get("shelf_number", 0)),
-            "layer_id": layer_id,
-            "cell_id": cell_id,
-            "row": int(info.get("row", 0)),
-            "col": int(info.get("col", info.get("shelf_number", 0))),
-            "camera_frame": output_frame,
-            "camera_xyz": [float(xyz[0]), float(xyz[1]), float(xyz[2])],
-            "normal": [float(normal[0]), float(normal[1]), float(normal[2])],
-            "corners": [[float(p[0]), float(p[1])] for p in pts_2d],
-            "image_center": [float(np.mean(pts_2d[:, 0])), float(np.mean(pts_2d[:, 1]))],
-            "confidence": 0.95,
-            "stamp": self.get_clock().now().nanoseconds / 1e9,
-        }
-
-        return obs
-
-    def draw_debug(self, img, obs_list: List[Dict[str, Any]]):
-        out = img.copy()
-
-        for obs in obs_list:
-            pts = np.array(obs["corners"], dtype=np.int32).reshape(-1, 2)
-            color = (0, 255, 255)
-
-            cv2.polylines(out, [pts], True, color, 2)
-
-            cx = int(np.mean(pts[:, 0]))
-            cy = int(np.mean(pts[:, 1]))
-
-            label = (
-                f"{obs['raw']} id={obs['tag_id']} "
-                f"{obs['shelf_id']} {obs['layer_id']} {obs['obs_type']}"
-            )
-
-            cv2.drawMarker(out, (cx, cy), color, cv2.MARKER_CROSS, 18, 2)
-            cv2.rectangle(out, (cx + 5, cy - 25), (cx + 400, cy + 5), (0, 0, 0), -1)
-            cv2.putText(out, label, (cx + 8, cy - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
-
-        return out
+    def publish_debug(self, frame, header):
+        try:
+            out = self.bridge.cv2_to_imgmsg(frame, encoding="bgr8")
+            out.header = header
+            self.debug_pub.publish(out)
+        except Exception as e:
+            self.get_logger().warn(f"debug image publish failed: {e}")
 
     def on_image(self, msg: Image):
-        if self.camera_info is None:
+        if self.camera_params is None:
             return
 
         try:
-            img = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+            frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
         except Exception as e:
-            self.get_logger().warn(f"image convert failed: {repr(e)}")
+            self.get_logger().warn(f"cv_bridge image error: {e}")
             return
 
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        corners_list, ids = self.detect(gray)
+        try:
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        except Exception as e:
+            self.get_logger().warn(f"cv2.cvtColor failed: {e}")
+            return
 
-        obs_list = []
+        tag_size = float(self.get_parameter("tag_size_m").value)
 
-        if ids is not None:
-            for corners, tag_id in zip(corners_list, ids.flatten()):
-                pts = np.array(corners, dtype=np.float64).reshape(4, 2)
-                obs = self.build_obs(int(tag_id), pts)
-                if obs is None:
-                    continue
+        try:
+            detections = self.detector.detect(
+                gray,
+                estimate_tag_pose=True,
+                camera_params=self.camera_params,
+                tag_size=tag_size,
+            )
+        except Exception as e:
+            self.get_logger().warn(f"pupil_apriltags detect failed: {e}")
+            return
 
-                obs_list.append(obs)
+        decision_margin_min = float(self.get_parameter("decision_margin_min").value)
+        hamming_max = int(self.get_parameter("hamming_max").value)
 
-                # HOME 不给 semantic_registrar，只给 JSON 给 HOME validator。
-                if obs["obs_type"] != "home_tag":
-                    self.typed_pub.publish(self.build_semantic_msg(obs))
+        published = 0
 
-                smsg = String()
-                smsg.data = json.dumps(obs, ensure_ascii=False)
-                self.json_pub.publish(smsg)
+        for det in detections:
+            tag_id = int(det.tag_id)
+            hamming = int(getattr(det, "hamming", 0))
+            margin = float(getattr(det, "decision_margin", 999.0))
 
-                self.log_debug(
-                    f"AprilTag obs: tag_id={obs['tag_id']}, raw={obs['raw']}, "
-                    f"type={obs['obs_type']}, face={obs['face']}, "
-                    f"shelf={obs['shelf_id']}, layer={obs['layer_id']}, "
-                    f"camera_xyz=({obs['camera_xyz'][0]:.2f},{obs['camera_xyz'][1]:.2f},{obs['camera_xyz'][2]:.2f}), "
-                    f"normal=({obs['normal'][0]:.2f},{obs['normal'][1]:.2f},{obs['normal'][2]:.2f})"
+            if hamming > hamming_max:
+                continue
+
+            if margin < decision_margin_min:
+                continue
+
+            R_opt_tag = np.asarray(det.pose_R, dtype=np.float64)
+            t_opt = np.asarray(det.pose_t, dtype=np.float64).reshape(3)
+
+            if bool(self.get_parameter("convert_optical_to_base_link").value):
+                position, R_out_tag = optical_to_base_pose(t_opt, R_opt_tag)
+                frame_id = str(self.get_parameter("output_frame_id").value) or "camera_link"
+            else:
+                position = t_opt.reshape(3)
+                R_out_tag = R_opt_tag
+                frame_id = str(self.get_parameter("output_frame_id").value) or self.color_frame_id
+
+                if frame_id in ["camera_color_optical_frame", "camera_frame", "camera"]:
+                    frame_id = self.color_frame_id
+
+            R_out_shelf = self.apply_tag_to_shelf_yaw_offset(R_out_tag)
+            quat = rotation_matrix_to_quaternion(R_out_shelf)
+
+            info = self.tag_info_from_id(tag_id)
+
+            obs = dict(info)
+            obs.update({
+                "source": "apriltag_shelf_bridge_node",
+                "mode": "pupil_apriltags_direct_6d_pose",
+                "tag_id": tag_id,
+                "raw": str(info.get("display_code", str(tag_id))),
+                "type": str(info.get("obs_type", info.get("type", ""))),
+                "obs_type": str(info.get("obs_type", info.get("type", ""))),
+                "frame_id": frame_id,
+                "camera_frame": self.color_frame_id,
+                "position": [
+                    float(position[0]),
+                    float(position[1]),
+                    float(position[2]),
+                ],
+                "quaternion": [
+                    float(quat[0]),
+                    float(quat[1]),
+                    float(quat[2]),
+                    float(quat[3]),
+                ],
+                "tag_size_m": tag_size,
+                "decision_margin": margin,
+                "hamming": hamming,
+                "pose_err": float(getattr(det, "pose_err", 0.0)),
+                "confidence": 0.95,
+                "stamp": self.get_clock().now().nanoseconds / 1e9,
+            })
+
+            self.typed_pub.publish(self.build_semantic_msg(obs))
+            self.json_pub.publish(self.build_json_msg(obs))
+            self.draw_debug_tag(frame, det, obs)
+
+            published += 1
+
+            if bool(self.get_parameter("debug_log").value):
+                self.get_logger().info(
+                    f"AprilTag obs: mode=pupil_6d, tag_id={tag_id}, raw={obs.get('raw')}, "
+                    f"type={obs.get('obs_type')}, face={obs.get('face')}, "
+                    f"shelf={obs.get('shelf_id')}, layer={obs.get('layer_id','')}, "
+                    f"frame={frame_id}, xyz=({position[0]:.3f},{position[1]:.3f},{position[2]:.3f}), "
+                    f"quat=({quat[0]:.3f},{quat[1]:.3f},{quat[2]:.3f},{quat[3]:.3f}), "
+                    f"margin={margin:.1f}, pose_err={float(getattr(det, 'pose_err', 0.0)):.2e}"
                 )
 
         if bool(self.get_parameter("publish_debug_image").value):
-            try:
-                dbg = self.draw_debug(img, obs_list)
-                out = self.bridge.cv2_to_imgmsg(dbg, encoding="bgr8")
-                out.header = msg.header
-                self.debug_pub.publish(out)
-            except Exception as e:
-                self.get_logger().warn(f"debug publish failed: {repr(e)}")
+            self.publish_debug(frame, msg.header)
 
 
 def main(args=None):

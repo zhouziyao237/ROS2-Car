@@ -1,0 +1,535 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import json
+import math
+from pathlib import Path
+from typing import Any, Dict, Optional, Tuple
+
+import cv2
+import numpy as np
+
+import rclpy
+from rclpy.node import Node
+
+from cv_bridge import CvBridge
+from std_msgs.msg import String
+from sensor_msgs.msg import Image, CameraInfo
+
+from robot_logistics_interfaces.msg import SemanticObservation
+
+try:
+    from pupil_apriltags import Detector
+except Exception as e:
+    Detector = None
+    PUPIL_IMPORT_ERROR = e
+else:
+    PUPIL_IMPORT_ERROR = None
+
+
+def normalize_family_name(name: str) -> str:
+    s = str(name).strip()
+
+    mapping = {
+        "DICT_APRILTAG_16h5": "tag16h5",
+        "DICT_APRILTAG_25h9": "tag25h9",
+        "DICT_APRILTAG_36h10": "tag36h10",
+        "DICT_APRILTAG_36h11": "tag36h11",
+        "16h5": "tag16h5",
+        "25h9": "tag25h9",
+        "36h10": "tag36h10",
+        "36h11": "tag36h11",
+        "tag16h5": "tag16h5",
+        "tag25h9": "tag25h9",
+        "tag36h10": "tag36h10",
+        "tag36h11": "tag36h11",
+    }
+
+    return mapping.get(s, "tag36h11")
+
+
+def rotation_matrix_to_quaternion(R: np.ndarray) -> Tuple[float, float, float, float]:
+    R = np.asarray(R, dtype=np.float64)
+    tr = float(R[0, 0] + R[1, 1] + R[2, 2])
+
+    if tr > 0.0:
+        S = math.sqrt(tr + 1.0) * 2.0
+        qw = 0.25 * S
+        qx = (R[2, 1] - R[1, 2]) / S
+        qy = (R[0, 2] - R[2, 0]) / S
+        qz = (R[1, 0] - R[0, 1]) / S
+    elif R[0, 0] > R[1, 1] and R[0, 0] > R[2, 2]:
+        S = math.sqrt(max(1.0 + R[0, 0] - R[1, 1] - R[2, 2], 1e-12)) * 2.0
+        qw = (R[2, 1] - R[1, 2]) / S
+        qx = 0.25 * S
+        qy = (R[0, 1] + R[1, 0]) / S
+        qz = (R[0, 2] + R[2, 0]) / S
+    elif R[1, 1] > R[2, 2]:
+        S = math.sqrt(max(1.0 + R[1, 1] - R[0, 0] - R[2, 2], 1e-12)) * 2.0
+        qw = (R[0, 2] - R[2, 0]) / S
+        qx = (R[0, 1] + R[1, 0]) / S
+        qy = 0.25 * S
+        qz = (R[1, 2] + R[2, 1]) / S
+    else:
+        S = math.sqrt(max(1.0 + R[2, 2] - R[0, 0] - R[1, 1], 1e-12)) * 2.0
+        qw = (R[1, 0] - R[0, 1]) / S
+        qx = (R[0, 2] + R[2, 0]) / S
+        qy = (R[1, 2] + R[2, 1]) / S
+        qz = 0.25 * S
+
+    norm = math.sqrt(qx * qx + qy * qy + qz * qz + qw * qw)
+
+    if norm < 1e-12:
+        return 0.0, 0.0, 0.0, 1.0
+
+    return qx / norm, qy / norm, qz / norm, qw / norm
+
+
+def yaw_rotation_matrix(yaw_rad: float) -> np.ndarray:
+    c = math.cos(yaw_rad)
+    s = math.sin(yaw_rad)
+
+    return np.array([
+        [c, -s, 0.0],
+        [s,  c, 0.0],
+        [0.0, 0.0, 1.0],
+    ], dtype=np.float64)
+
+
+def optical_to_base_pose(t_opt: np.ndarray, R_opt_tag: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    只用于兼容旧测试模式。
+
+    D435 optical frame:
+      x right
+      y down
+      z forward
+
+    base-like frame:
+      x forward
+      y left
+      z up
+
+    正式语义库建议不要用这个硬转换。
+    正式模式应该直接发布 camera_color_optical_frame，让 semantic_registrar 通过 TF 转到 map。
+    """
+    C = np.array([
+        [0.0, 0.0, 1.0],
+        [-1.0, 0.0, 0.0],
+        [0.0, -1.0, 0.0],
+    ], dtype=np.float64)
+
+    t_base = C @ t_opt.reshape(3)
+    R_base_tag = C @ R_opt_tag
+
+    return t_base.reshape(3), R_base_tag
+
+
+class AprilTagShelfBridge(Node):
+    """
+    D435 + AprilTag shelf semantic bridge.
+
+    正式逻辑：
+      1. 不使用 OpenCV cv2.aruco，避免 Segmentation fault。
+      2. 使用 pupil_apriltags.Detector。
+      3. AprilTag 贴在货架中心。
+      4. pose_t 直接是 tag center translation。
+      5. pose_R 直接是 AprilTag 6D orientation。
+      6. 不用 normal 重建 yaw。
+      7. 不用 QR offset 反推货架中心。
+      8. 默认 frame_id = camera_color_optical_frame，让 semantic_registrar 使用 TF 转到 map。
+    """
+
+    def __init__(self):
+        super().__init__("apriltag_shelf_bridge_node")
+
+        if Detector is None:
+            raise RuntimeError(f"pupil_apriltags import failed: {PUPIL_IMPORT_ERROR}")
+
+        self.declare_parameter("image_topic", "/camera/camera/color/image_raw")
+        self.declare_parameter("camera_info_topic", "/camera/camera/color/camera_info")
+
+        self.declare_parameter("typed_observation_topic", "/vision/semantic_observation")
+        self.declare_parameter("json_observation_topic", "/vision/apriltag_semantic_observation")
+        self.declare_parameter("debug_image_topic", "/vision/apriltag_debug_image")
+
+        self.declare_parameter("tag_family", "tag36h11")
+        self.declare_parameter("tag_size_m", 0.10)
+        self.declare_parameter("database_path", "/host-home/maps/apriltag_shelf_database.json")
+
+        self.declare_parameter("quad_decimate", 1.0)
+        self.declare_parameter("decision_margin_min", 20.0)
+        self.declare_parameter("hamming_max", 0)
+
+        # 正式建议：输出 camera_color_optical_frame。
+        # semantic_registrar 会根据 TF 转到 map，这样 D435 安装角度由 URDF/TF 负责。
+        self.declare_parameter("output_frame_id", "camera_color_optical_frame")
+
+        # 兼容旧测试。正式建议 False。
+        self.declare_parameter("convert_optical_to_base_link", False)
+
+        # true 时 stamp=0，让 semantic_registrar 用 latest TF。
+        self.declare_parameter("use_latest_tf_stamp", True)
+
+        # AprilTag 图案坐标系与货架坐标系之间的固定安装偏移。
+        # 如果贴纸方向和货架方向一致，用 0。
+        # 如果贴纸旋转 90/180/-90，只改这个参数。
+        self.declare_parameter("tag_to_shelf_yaw_offset_deg", 0.0)
+
+        self.declare_parameter("publish_debug_image", True)
+        self.declare_parameter("debug_log", True)
+
+        self.bridge = CvBridge()
+
+        self.camera_info: Optional[CameraInfo] = None
+        self.camera_params: Optional[Tuple[float, float, float, float]] = None
+        self.color_frame_id = "camera_color_optical_frame"
+
+        self.database: Dict[str, Any] = self.load_database()
+
+        family = normalize_family_name(str(self.get_parameter("tag_family").value))
+
+        self.detector = Detector(
+            families=family,
+            nthreads=1,
+            quad_decimate=float(self.get_parameter("quad_decimate").value),
+            quad_sigma=0.0,
+            refine_edges=1,
+            decode_sharpening=0.25,
+            debug=0,
+        )
+
+        self.image_sub = self.create_subscription(
+            Image,
+            str(self.get_parameter("image_topic").value),
+            self.on_image,
+            10,
+        )
+
+        self.info_sub = self.create_subscription(
+            CameraInfo,
+            str(self.get_parameter("camera_info_topic").value),
+            self.on_camera_info,
+            10,
+        )
+
+        self.typed_pub = self.create_publisher(
+            SemanticObservation,
+            str(self.get_parameter("typed_observation_topic").value),
+            10,
+        )
+
+        self.json_pub = self.create_publisher(
+            String,
+            str(self.get_parameter("json_observation_topic").value),
+            10,
+        )
+
+        self.debug_pub = self.create_publisher(
+            Image,
+            str(self.get_parameter("debug_image_topic").value),
+            10,
+        )
+
+        self.get_logger().info("apriltag_shelf_bridge_node started: pupil_apriltags DIRECT 6D pose mode")
+        self.get_logger().info(f"family={family}, tag_size_m={float(self.get_parameter('tag_size_m').value)}")
+
+    def load_database(self) -> Dict[str, Any]:
+        path = Path(str(self.get_parameter("database_path").value))
+
+        if not path.exists():
+            self.get_logger().warn(f"database not found: {path}, fallback to tag id rule")
+            return {}
+
+        try:
+            data = json.loads(path.read_text())
+            if isinstance(data, dict):
+                return data
+        except Exception as e:
+            self.get_logger().warn(f"failed to read database {path}: {e}")
+
+        return {}
+
+    def on_camera_info(self, msg: CameraInfo):
+        self.camera_info = msg
+        self.color_frame_id = msg.header.frame_id or "camera_color_optical_frame"
+
+        k = msg.k
+        fx = float(k[0])
+        fy = float(k[4])
+        cx = float(k[2])
+        cy = float(k[5])
+
+        self.camera_params = (fx, fy, cx, cy)
+
+    def tag_info_from_id(self, tag_id: int) -> Dict[str, Any]:
+        tags = self.database.get("tags", {})
+
+        if str(tag_id) in tags and isinstance(tags[str(tag_id)], dict):
+            return dict(tags[str(tag_id)])
+
+        if tag_id == 0:
+            return {
+                "tag_id": 0,
+                "display_code": "HOME",
+                "type": "home_tag",
+                "obs_type": "home_tag",
+                "face": "home",
+                "shelf_id": "",
+                "shelf_number": 0,
+                "row": 0,
+                "col": 0,
+            }
+
+        shelf_number = int(tag_id) // 10
+        row = int(tag_id) % 10
+        shelf_id = f"S{shelf_number:02d}"
+
+        if row == 0:
+            return {
+                "tag_id": tag_id,
+                "display_code": f"{shelf_number:02d}00",
+                "type": "column_tag",
+                "obs_type": "column_qr",
+                "face": "side",
+                "shelf_id": shelf_id,
+                "shelf_number": shelf_number,
+                "row": 0,
+                "col": shelf_number,
+            }
+
+        return {
+            "tag_id": tag_id,
+            "display_code": f"{shelf_number:02d}{row:02d}",
+            "type": "row_tag",
+            "obs_type": "layer_qr",
+            "face": "front",
+            "shelf_id": shelf_id,
+            "shelf_number": shelf_number,
+            "row": row,
+            "col": shelf_number,
+            "layer_id": f"L{row}",
+        }
+
+    def apply_tag_to_shelf_yaw_offset(self, R: np.ndarray) -> np.ndarray:
+        offset_deg = float(self.get_parameter("tag_to_shelf_yaw_offset_deg").value)
+
+        if abs(offset_deg) < 1e-9:
+            return R
+
+        Rz = yaw_rotation_matrix(math.radians(offset_deg))
+        return R @ Rz
+
+    def make_stamp(self):
+        stamp = self.get_clock().now().to_msg()
+
+        if bool(self.get_parameter("use_latest_tf_stamp").value):
+            stamp.sec = 0
+            stamp.nanosec = 0
+
+        return stamp
+
+    def build_semantic_msg(self, obs: Dict[str, Any]) -> SemanticObservation:
+        msg = SemanticObservation()
+
+        stamp = self.make_stamp()
+        frame_id = str(obs.get("frame_id", self.color_frame_id))
+
+        msg.header.stamp = stamp
+        msg.header.frame_id = frame_id
+
+        msg.pose.header.stamp = stamp
+        msg.pose.header.frame_id = frame_id
+
+        msg.obs_type = str(obs.get("obs_type", obs.get("type", "")))
+        msg.shelf_id = str(obs.get("shelf_id", ""))
+        msg.face = str(obs.get("face", ""))
+        msg.layer_id = str(obs.get("layer_id", ""))
+
+        row = int(obs.get("row", 0))
+        col = int(obs.get("col", 0))
+
+        msg.row = row
+        msg.col = col
+        msg.column_id = str(obs.get("column_id", f"C{col}" if col > 0 else ""))
+        msg.package_code = str(obs.get("package_code", ""))
+        msg.confidence = float(obs.get("confidence", 1.0))
+        msg.has_pose = True
+
+        x, y, z = obs["position"]
+        qx, qy, qz, qw = obs["quaternion"]
+
+        msg.pose.pose.position.x = float(x)
+        msg.pose.pose.position.y = float(y)
+        msg.pose.pose.position.z = float(z)
+
+        msg.pose.pose.orientation.x = float(qx)
+        msg.pose.pose.orientation.y = float(qy)
+        msg.pose.pose.orientation.z = float(qz)
+        msg.pose.pose.orientation.w = float(qw)
+
+        return msg
+
+    def build_json_msg(self, obs: Dict[str, Any]) -> String:
+        msg = String()
+        msg.data = json.dumps(obs, ensure_ascii=False)
+        return msg
+
+    def draw_debug_tag(self, frame, det, obs):
+        corners = np.asarray(det.corners, dtype=np.int32)
+        cv2.polylines(frame, [corners], True, (0, 255, 255), 2)
+
+        c = np.asarray(det.center, dtype=np.int32)
+        label = f"{obs.get('raw')} id={obs.get('tag_id')} {obs.get('shelf_id','')} {obs.get('layer_id','')}"
+        cv2.putText(
+            frame,
+            label,
+            (int(c[0]) + 5, int(c[1]) - 5),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55,
+            (0, 255, 255),
+            2,
+            cv2.LINE_AA,
+        )
+
+    def publish_debug(self, frame, header):
+        try:
+            out = self.bridge.cv2_to_imgmsg(frame, encoding="bgr8")
+            out.header = header
+            self.debug_pub.publish(out)
+        except Exception as e:
+            self.get_logger().warn(f"debug image publish failed: {e}")
+
+    def on_image(self, msg: Image):
+        if self.camera_params is None:
+            return
+
+        try:
+            frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+        except Exception as e:
+            self.get_logger().warn(f"cv_bridge image error: {e}")
+            return
+
+        try:
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        except Exception as e:
+            self.get_logger().warn(f"cv2.cvtColor failed: {e}")
+            return
+
+        tag_size = float(self.get_parameter("tag_size_m").value)
+
+        try:
+            detections = self.detector.detect(
+                gray,
+                estimate_tag_pose=True,
+                camera_params=self.camera_params,
+                tag_size=tag_size,
+            )
+        except Exception as e:
+            self.get_logger().warn(f"pupil_apriltags detect failed: {e}")
+            return
+
+        decision_margin_min = float(self.get_parameter("decision_margin_min").value)
+        hamming_max = int(self.get_parameter("hamming_max").value)
+
+        published = 0
+
+        for det in detections:
+            tag_id = int(det.tag_id)
+            hamming = int(getattr(det, "hamming", 0))
+            margin = float(getattr(det, "decision_margin", 999.0))
+
+            if hamming > hamming_max:
+                continue
+
+            if margin < decision_margin_min:
+                continue
+
+            R_opt_tag = np.asarray(det.pose_R, dtype=np.float64)
+            t_opt = np.asarray(det.pose_t, dtype=np.float64).reshape(3)
+
+            if bool(self.get_parameter("convert_optical_to_base_link").value):
+                position, R_out_tag = optical_to_base_pose(t_opt, R_opt_tag)
+                frame_id = "base_link"
+            else:
+                position = t_opt.reshape(3)
+                R_out_tag = R_opt_tag
+                frame_id = str(self.get_parameter("output_frame_id").value) or self.color_frame_id
+
+                if frame_id in ["camera_color_optical_frame", "camera_frame", "camera"]:
+                    frame_id = self.color_frame_id
+
+            R_out_shelf = self.apply_tag_to_shelf_yaw_offset(R_out_tag)
+            quat = rotation_matrix_to_quaternion(R_out_shelf)
+
+            info = self.tag_info_from_id(tag_id)
+
+            obs = dict(info)
+            obs.update({
+                "source": "apriltag_shelf_bridge_node",
+                "mode": "pupil_apriltags_direct_6d_pose",
+                "tag_id": tag_id,
+                "raw": str(info.get("display_code", str(tag_id))),
+                "type": str(info.get("obs_type", info.get("type", ""))),
+                "obs_type": str(info.get("obs_type", info.get("type", ""))),
+                "frame_id": frame_id,
+                "camera_frame": self.color_frame_id,
+                "position": [
+                    float(position[0]),
+                    float(position[1]),
+                    float(position[2]),
+                ],
+                "quaternion": [
+                    float(quat[0]),
+                    float(quat[1]),
+                    float(quat[2]),
+                    float(quat[3]),
+                ],
+                "tag_size_m": tag_size,
+                "decision_margin": margin,
+                "hamming": hamming,
+                "pose_err": float(getattr(det, "pose_err", 0.0)),
+                "confidence": 0.95,
+                "stamp": self.get_clock().now().nanoseconds / 1e9,
+            })
+
+            self.typed_pub.publish(self.build_semantic_msg(obs))
+            self.json_pub.publish(self.build_json_msg(obs))
+            self.draw_debug_tag(frame, det, obs)
+
+            published += 1
+
+            if bool(self.get_parameter("debug_log").value):
+                self.get_logger().info(
+                    f"AprilTag obs: mode=pupil_6d, tag_id={tag_id}, raw={obs.get('raw')}, "
+                    f"type={obs.get('obs_type')}, face={obs.get('face')}, "
+                    f"shelf={obs.get('shelf_id')}, layer={obs.get('layer_id','')}, "
+                    f"frame={frame_id}, xyz=({position[0]:.3f},{position[1]:.3f},{position[2]:.3f}), "
+                    f"quat=({quat[0]:.3f},{quat[1]:.3f},{quat[2]:.3f},{quat[3]:.3f}), "
+                    f"margin={margin:.1f}, pose_err={float(getattr(det, 'pose_err', 0.0)):.2e}"
+                )
+
+        if bool(self.get_parameter("publish_debug_image").value):
+            self.publish_debug(frame, msg.header)
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = AprilTagShelfBridge()
+
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            node.destroy_node()
+        except Exception:
+            pass
+
+        if rclpy.ok():
+            rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()
