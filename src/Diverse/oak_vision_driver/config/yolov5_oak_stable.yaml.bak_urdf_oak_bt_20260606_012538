@@ -1,0 +1,84 @@
+model:
+  blob_path: /host-home/src/target_detection/oak_vision_driver/weights/best_fp16.blob
+  parser: NeuralNetwork
+  network_type: yolov5
+camera:
+  sensor_resolution: 1080p
+  rgb_output: video
+  preview_width: 640
+  preview_height: 640
+  video_width: 1920
+  video_height: 1080
+  color_order: RGB
+  keep_aspect_ratio: false
+input:
+  width: 640
+  height: 640
+  fps: 6.0
+classes:
+  num_classes: 1
+  names:
+  - target
+threshold:
+  confidence: 0.16
+  iou: 0.25
+yolo:
+  coordinate_size: 4
+  score_mode: obj_cls
+  output_value_mode: auto
+  anchors:
+  - 10
+  - 13
+  - 16
+  - 30
+  - 33
+  - 23
+  - 30
+  - 61
+  - 62
+  - 45
+  - 59
+  - 119
+  - 116
+  - 90
+  - 156
+  - 198
+  - 373
+  - 326
+  anchor_masks:
+    side80:
+    - 0
+    - 1
+    - 2
+    side40:
+    - 3
+    - 4
+    - 5
+    side20:
+    - 6
+    - 7
+    - 8
+ros:
+  frame_id: oak_camera_link
+  rgb_topic: /oak/rgb/image_raw
+  depth_topic: /oak/depth/image_raw
+  camera_info_topic: /oak/rgb/camera_info
+  detections_topic: /yolov5/detections
+  yolo_debug_topic: /oak/yolo_debug_text
+  annotated_image_topic: /oak/yolo_annotated_image
+  yolo_table_topic: /oak/yolo_table
+runtime:
+  enable_rgb: true
+  enable_depth: true
+  enable_yolo: true
+  draw_oak_detections_on_rgb: true
+  publish_annotated_image: true
+  publish_debug_text: true
+  publish_yolo_table: true
+  ros_image_encoding: bgr8
+  debug_scores: false
+  score_log_interval: 60
+  force_usb2: true
+  stop_on_xlink_error: true
+  queue_size: 1
+  timer_period: 0.02

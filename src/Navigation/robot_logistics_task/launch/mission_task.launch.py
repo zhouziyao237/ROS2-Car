@@ -8,7 +8,7 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument('bt_xml', default_value='/host-home/src/Navigation/robot_logistics_task/behavior_tree/pickup_task_full_groot1.xml'),
+        DeclareLaunchArgument('bt_xml', default_value='/host-home/src/Navigation/robot_logistics_task/behavior_tree/pickup_task_three_node_main.xml'),
         DeclareLaunchArgument('semantic_map_path', default_value='/host-home/maps/semantic_library.json'),
         DeclareLaunchArgument('semantic_session_path', default_value='/host-home/maps/semantic_session_pose.json'),
         DeclareLaunchArgument('enable_groot_monitoring', default_value='true'),

@@ -8,17 +8,17 @@
     name="base_link">
     <inertial>
       <origin
-        xyz="0.00501450642941745 0.0141870329533615 0.169954358739103"
+        xyz="0.00501450642877392 0.0141870329517633 0.169954358775484"
         rpy="0 0 0" />
       <mass
-        value="4.54700799044429" />
+        value="4.5470079909601" />
       <inertia
-        ixx="0.022511712176704"
-        ixy="4.82131863501197E-05"
-        ixz="-6.36292881846724E-05"
-        iyy="0.0211984045432129"
-        iyz="-0.00012988463719202"
-        izz="0.0102064160211003" />
+        ixx="0.0225117121767363"
+        ixy="4.82131864081254E-05"
+        ixz="-6.36292881846662E-05"
+        iyy="0.0211984045433496"
+        iyz="-0.00012988463719201"
+        izz="0.010206416021244" />
     </inertial>
     <visual>
       <origin
@@ -48,17 +48,17 @@
     name="FL-Link">
     <inertial>
       <origin
-        xyz="2.12877544172596E-05 -0.0420777331612522 -1.06560737202117E-05"
+        xyz="2.1288E-05 -0.042078 -1.0656E-05"
         rpy="0 0 0" />
       <mass
-        value="0.524127400675719" />
+        value="0.52413" />
       <inertia
-        ixx="0.000688668855999707"
-        ixy="7.83652173117818E-08"
-        ixz="-4.97790473505529E-08"
-        iyy="0.00122438502874928"
-        iyz="-2.36873659320035E-08"
-        izz="0.000688555436610188" />
+        ixx="0.00068867"
+        ixy="7.8365E-08"
+        ixz="-4.9779E-08"
+        iyy="0.0012244"
+        iyz="-2.3687E-08"
+        izz="0.00068856" />
     </inertial>
     <visual>
       <origin
@@ -71,7 +71,7 @@
       <material
         name="">
         <color
-          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+          rgba="0.79216 0.81961 0.93333 1" />
       </material>
     </visual>
     <collision>
@@ -101,16 +101,16 @@
     name="BL-Link">
     <inertial>
       <origin
-        xyz="-2.12105203041546E-05 -0.0420777344632694 -1.06650090253638E-05"
+        xyz="-2.12105203041268E-05 -0.0420777344632695 -1.06650090253638E-05"
         rpy="0 0 0" />
       <mass
         value="0.524125547602897" />
       <inertia
         ixx="0.000688667042112275"
-        ixy="-7.83730607115418E-08"
-        ixz="4.97310868216881E-08"
+        ixy="-7.83730607115521E-08"
+        ixz="4.97310868216872E-08"
         iyy="0.00122438157438991"
-        iyz="-2.36679760926969E-08"
+        iyz="-2.36679760926931E-08"
         izz="0.000688553484990788" />
     </inertial>
     <visual>
@@ -154,17 +154,17 @@
     name="FR-Link">
     <inertial>
       <origin
-        xyz="2.12105203040713E-05 0.0420777344632697 -1.06650090253221E-05"
+        xyz="2.1211E-05 0.042078 -1.0665E-05"
         rpy="0 0 0" />
       <mass
-        value="0.524125547602897" />
+        value="0.52413" />
       <inertia
-        ixx="0.000688667042112275"
-        ixy="-7.83730607115448E-08"
-        ixz="-4.9731086821688E-08"
-        iyy="0.00122438157438991"
-        iyz="2.36679760926991E-08"
-        izz="0.000688553484990788" />
+        ixx="0.00068867"
+        ixy="-7.8373E-08"
+        ixz="-4.9731E-08"
+        iyy="0.0012244"
+        iyz="2.3668E-08"
+        izz="0.00068855" />
     </inertial>
     <visual>
       <origin
@@ -177,7 +177,7 @@
       <material
         name="">
         <color
-          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+          rgba="0.79216 0.81961 0.93333 1" />
       </material>
     </visual>
     <collision>
@@ -207,17 +207,17 @@
     name="BR-Link">
     <inertial>
       <origin
-        xyz="-2.12877544041312E-05 0.0420777331612684 -1.06560737113404E-05"
+        xyz="-2.1288E-05 0.042078 -1.0656E-05"
         rpy="0 0 0" />
       <mass
-        value="0.524127400676241" />
+        value="0.52413" />
       <inertia
-        ixx="0.000688668855999801"
-        ixy="7.83652173187507E-08"
-        ixz="4.97790473494577E-08"
-        iyy="0.00122438502874928"
-        iyz="2.36873659417646E-08"
-        izz="0.000688555436610279" />
+        ixx="0.00068867"
+        ixy="7.8365E-08"
+        ixz="4.9779E-08"
+        iyy="0.0012244"
+        iyz="2.3687E-08"
+        izz="0.00068856" />
     </inertial>
     <visual>
       <origin
@@ -230,7 +230,7 @@
       <material
         name="">
         <color
-          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+          rgba="0.79216 0.81961 0.93333 1" />
       </material>
     </visual>
     <collision>
@@ -260,16 +260,16 @@
     name="SCAN-Link">
     <inertial>
       <origin
-        xyz="-0.0019143110751402 -0.0218929847512415 -0.00601867905992554"
+        xyz="-0.00191431107514053 -0.0218929847512415 -0.00601867905992623"
         rpy="0 0 0" />
       <mass
         value="0.112565886103765" />
       <inertia
-        ixx="0.000109263271879165"
-        ixy="-3.61060353900465E-06"
-        ixz="1.66170966506171E-06"
-        iyy="7.89601300372544E-05"
-        iyz="5.95832023294679E-06"
+        ixx="0.000109263271879032"
+        ixy="-3.61060353900467E-06"
+        ixz="1.66170966506182E-06"
+        iyy="7.89601300371222E-05"
+        iyz="5.95832023294784E-06"
         izz="0.00015436814625988" />
     </inertial>
     <visual>
@@ -310,19 +310,19 @@
       xyz="0 0 0" />
   </joint>
   <link
-    name="camera_link">
+    name="d435-cam-Link">
     <inertial>
       <origin
-        xyz="-0.0329788006191327 0.000463667830260528 8.0101235455099E-05"
+        xyz="-0.0329788006191327 0.000463667830260542 8.0101235455099E-05"
         rpy="0 0 0" />
       <mass
         value="0.107926872108232" />
       <inertia
         ixx="9.11004616397186E-05"
-        ixy="4.53770069667341E-07"
+        ixy="4.53770069667343E-07"
         ixz="1.83404609433609E-06"
         iyy="1.69770664364826E-05"
-        iyz="1.18800566059636E-08"
+        iyz="1.18800566059611E-08"
         izz="8.27476356794388E-05" />
     </inertial>
     <visual>
@@ -331,7 +331,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://robot2/meshes/camera_link.STL" />
+          filename="package://robot2/meshes/d435-cam-Link.STL" />
       </geometry>
       <material
         name="">
@@ -345,12 +345,12 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://robot2/meshes/camera_link.STL" />
+          filename="package://robot2/meshes/d435-cam-Link.STL" />
       </geometry>
     </collision>
   </link>
   <joint
-    name="cam1_Joint"
+    name="d435-cam-Joint"
     type="fixed">
     <origin
       xyz="0.286567199500283 0.0664321363029682 0.40695175281066"
@@ -358,7 +358,176 @@
     <parent
       link="base_link" />
     <child
-      link="camera_link" />
+      link="d435-cam-Link" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="Platfrom_Link">
+    <inertial>
+      <origin
+        xyz="0.015745 0.03205 0.021758"
+        rpy="0 0 0" />
+      <mass
+        value="0.71015" />
+      <inertia
+        ixx="0.0023708"
+        ixy="-1.9679E-07"
+        ixz="-1.2261E-06"
+        iyy="0.0017004"
+        iyz="-2.2477E-06"
+        izz="0.0038092" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://robot2/meshes/Platfrom_Link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.79216 0.81961 0.93333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://robot2/meshes/Platfrom_Link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Platfrom_Joint"
+    type="prismatic">
+    <origin
+      xyz="-0.000499492705473831 0.0494030997391482 0.14563170765098"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="Platfrom_Link" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="0"
+      upper="0"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="Rollout_Link">
+    <inertial>
+      <origin
+        xyz="5.2485E-05 -0.015648 -0.022541"
+        rpy="0 0 0" />
+      <mass
+        value="0.72568" />
+      <inertia
+        ixx="0.0054904"
+        ixy="2.1007E-07"
+        ixz="1.0925E-06"
+        iyy="0.0040802"
+        iyz="-1.0548E-06"
+        izz="0.0095221" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://robot2/meshes/Rollout_Link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.79216 0.81961 0.93333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://robot2/meshes/Rollout_Link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Rollout_Joint"
+    type="prismatic">
+    <origin
+      xyz="0 -0.102913366310849 0.0760000000001064"
+      rpy="0 0 0" />
+    <parent
+      link="Platfrom_Link" />
+    <child
+      link="Rollout_Link" />
+    <axis
+      xyz="0 -1 0" />
+    <limit
+      lower="0"
+      upper="0"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="oak-cam-Link">
+    <inertial>
+      <origin
+        xyz="-0.013913 0.00014468 -0.050461"
+        rpy="0 0 0" />
+      <mass
+        value="0.048473" />
+      <inertia
+        ixx="8.3205E-05"
+        ixy="7.2214E-09"
+        ixz="-7.2372E-09"
+        iyy="1.5697E-05"
+        iyz="1.5552E-08"
+        izz="6.8674E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://robot2/meshes/oak-cam-Link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.79216 0.81961 0.93333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://robot2/meshes/oak-cam-Link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="oak-cam-Joint"
+    type="fixed">
+    <origin
+      xyz="0 0.145219305523008 0.113498999999999"
+      rpy="0 0 -1.57079632679489" />
+    <parent
+      link="Rollout_Link" />
+    <child
+      link="oak-cam-Link" />
     <axis
       xyz="0 0 0" />
   </joint>

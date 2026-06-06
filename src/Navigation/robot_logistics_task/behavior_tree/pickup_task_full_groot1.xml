@@ -30,9 +30,8 @@
           <VerifyShelfQR/>
         </Sequence>
       </Fallback>
-
-      <AlignToCell/>
-      <SendPlatformTarget/>
+      <AlignOakToTargetShelfFront/>
+      <ScanTargetPackageOnShelf/><SendPlatformTarget/>
       <WaitPickupDone/>
       <PublishTaskDone/>
     </Sequence>

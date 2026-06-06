@@ -54,7 +54,7 @@ class PickupCodeInputNode(Node):
         self.running = True
 
         self.get_logger().info("pickup_code_input_node started")
-        self.get_logger().info("Input example: S03-L1-A")
+        self.get_logger().info("Input example: S03-L1-0301")
         self.get_logger().info("Cancel command: cancel / c / stop")
 
     def on_status(self, msg: String):
@@ -64,32 +64,54 @@ class PickupCodeInputNode(Node):
         print("> ", end="", flush=True)
 
     def parse_pickup_code(self, text: str):
-        code = text.strip().upper()
-        match = PICKUP_CODE_RE.match(code)
+        """
+        解析完整取件码。
+        格式：<货架编号>-<层号>-<4位取件码>
+        示例：S03-L1-0301
+        """
+        raw = str(text).strip().upper()
 
-        if not match:
-            return None
+        # 兼容空格、下划线、斜杠等输入
+        norm = raw.replace("_", "-").replace("/", "-")
+        norm = re.sub(r"\s+", "-", norm)
+        norm = re.sub(r"[^A-Z0-9-]+", "-", norm)
+        norm = re.sub(r"-+", "-", norm).strip("-")
 
-        shelf_id = match.group(1)
-        row = int(match.group(2))
-        col = match.group(3)
-        layer_id = f"L{row}"
+        m = re.search(r"([A-Z0-9]{1,4})-(L[0-9]{1,3})-([A-Z0-9]{4})", norm)
+        if not m:
+            raise ValueError(
+                f"取件码格式错误：{text}，应为类似 S03-L1-0301 的完整取件码"
+            )
+
+        shelf_id = m.group(1)
+        layer_id = m.group(2)
+        package_code = m.group(3)
+        pickup_code = f"{shelf_id}-{layer_id}-{package_code}"
+
+        try:
+            row = int(layer_id[1:])
+        except Exception:
+            row = 0
 
         return {
             "task_type": "pickup",
-            "pickup_code": code,
+            "pickup_code": pickup_code,
             "shelf_id": shelf_id,
-            "cell_id": code,
+            "cell_id": pickup_code,
             "layer_id": layer_id,
+            "package_code": package_code,
+
+            # 兼容旧字段：
+            # row 表示层号数字，col 暂时放 4 位包裹码
             "row": row,
-            "col": col,
+            "col": package_code,
         }
 
     def publish_pickup_task(self, text: str):
         task = self.parse_pickup_code(text)
 
         if task is None:
-            print("[ERROR] 取件码格式错误，请输入类似：S03-L1-A")
+            print("[ERROR] 取件码格式错误，请输入类似：S03-L1-0301")
             print("[提示] Backspace 删除；Ctrl+U 清空整行；c/cancel 中断任务。")
             return
 
@@ -120,10 +142,10 @@ class PickupCodeInputNode(Node):
 
     def print_help(self):
         print()
-        print("======== 取件码输入工具 ========")
+        print("======== 取件码输入工具 ========\n完整取件码格式：<货架编号>-<层号>-<4位取件码>，例如 S03-L1-0301")
         print("输入格式：")
-        print("  S03-L1-A      发布取件任务")
-        print("  S02-L2-B      发布取件任务")
+        print("  S03-L1-0301      发布取件任务")
+        print("  S03-L2-0311      发布取件任务")
         print()
         print("控制命令：")
         print("  cancel / c    中断当前任务")

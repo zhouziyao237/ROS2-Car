@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="4" main_tree_to_execute="MainTree">
+
+  <!-- ========================================================= -->
+  <!-- MainTree                                                  -->
+  <!-- 当前阶段主行为树保持三个高层块：                           -->
+  <!-- 1. GetPickupTask                                          -->
+  <!-- 2. RunSemanticShelfNavigation                             -->
+  <!-- 3. PublishTaskDone                                        -->
+  <!--                                                           -->
+  <!-- 注意：这里不用真正的子树标签，避免 BehaviorTree.CPP v3 下       -->
+  <!-- 子黑板拿不到 ctx，导致 Missing key [ctx]。                  -->
+  <!-- ========================================================= -->
+  <BehaviorTree ID="MainTree">
+    <Sequence name="MainTree">
+
+      <!-- 1. 开始：接收取件任务 -->
+      <Sequence name="GetPickupTask">
+        <ReceiveShelfGoal/>
+      </Sequence>
+
+
+      <!-- 2. 语义货架 + 自动探索 + 导航 + 到达后验证 -->
+      <Sequence name="RunSemanticShelfNavigation">
+
+        <!-- A. 查询目标货架位姿；没有则自动探索并更新语义 session -->
+        <Fallback name="ResolveShelfPoseOrExplore">
+
+          <QueryShelfPose/>
+
+          <Sequence name="ExploreAndResolveShelf">
+            <EnterExploreMode/>
+            <SearchShelfReference/>
+            <DetectShelfAnchor/>
+            <EstimateShelfPoseFromAnchor/>
+            <UpdateSemanticSessionPose/>
+            <QueryShelfPose/>
+          </Sequence>
+
+        </Fallback>
+
+
+        <!-- B. 导航到目标货架 approach pose -->
+        <NavigateToShelf/>
+        <WaitNavArrive/>
+
+
+        <!-- C. 到达后验证当前货架身份；失败则重新搜索并更新语义位姿 -->
+        <Fallback name="VerifyShelfOrSearchIdentity">
+
+          <VerifyShelfQR/>
+
+          <Sequence name="SearchAndVerifyShelfIdentity">
+            <SearchShelfQR/>
+            <DetectShelfAnchor/>
+            <EstimateShelfPoseFromAnchor/>
+            <UpdateSemanticSessionPose/>
+            <VerifyShelfQR/>
+          </Sequence>
+
+        </Fallback>
+
+      </Sequence>
+
+
+      <!-- 3. 当前阶段临时结束：先不进入找包 / 取件 -->
+      <PublishTaskDone/>
+
+    </Sequence>
+  </BehaviorTree>
+
+</root>
