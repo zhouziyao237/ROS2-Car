@@ -1,0 +1,23 @@
+# D435 / RealSense frame override
+# Mechanical mount link is defined in robot2.urdf:
+#   base_link -> d435-cam-Link
+#
+# RealSense should attach its internal camera frames under d435-cam-Link.
+# Do not use camera_link as a detached root frame.
+
+realsense2_camera:
+  ros__parameters:
+    publish_tf: true
+    tf_publish_rate: 0.0
+
+    base_frame_id: d435-cam-Link
+
+    depth_frame_id: camera_depth_frame
+    color_frame_id: camera_color_frame
+    depth_optical_frame_id: camera_depth_optical_frame
+    color_optical_frame_id: camera_color_optical_frame
+
+    infra1_frame_id: camera_infra1_frame
+    infra1_optical_frame_id: camera_infra1_optical_frame
+    infra2_frame_id: camera_infra2_frame
+    infra2_optical_frame_id: camera_infra2_optical_frame

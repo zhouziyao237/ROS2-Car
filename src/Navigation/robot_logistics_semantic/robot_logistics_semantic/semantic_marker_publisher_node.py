@@ -60,6 +60,9 @@ class SemanticMarkerPublisherNode(Node):
             body.pose.position.z = height / 2.0
             body.pose.orientation = self.yaw_to_quat(yaw)
             # yaw = shelf front normal direction. x axis should be depth.
+            # current_map_pose.yaw is shelf front outward normal.
+            # Marker X axis = shelf depth direction.
+            # Marker Y axis = shelf front long-face width direction.
             body.scale.x = depth
             body.scale.y = width
             body.scale.z = height

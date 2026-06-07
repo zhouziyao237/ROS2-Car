@@ -70,7 +70,7 @@ modules:
     - laser_scan_topic: /scan
       odom_topic: /odom_laser
       publish_tf: false
-      base_frame_id: base_link
+      base_frame_id: d435-cam-Link
       odom_frame_id: odom
       init_pose_from_topic: ''
       freq: 12.0
@@ -93,7 +93,7 @@ modules:
       odom_frame: odom
       base_frame: base_link
       odom_frame_id: odom
-      base_frame_id: base_link
+      base_frame_id: d435-cam-Link
       publish_odom_topic: true
       publish_tf: true
       zero_z: true
@@ -428,7 +428,7 @@ modules:
       use_latest_tf_stamp: true
       normal_direction_sign: -1.0
       convert_optical_to_base_link: true
-      tag_to_shelf_yaw_offset_deg: 0.0
+      tag_to_shelf_yaw_offset_deg: 90.0
       decision_margin_min: 20.0
       hamming_max: 0
   home_anchor_validator:

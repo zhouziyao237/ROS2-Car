@@ -35,7 +35,7 @@ def generate_launch_description():
         ]),
 
         TimerAction(period=5.0, actions=[
-            Node(package='robot_logistics_semantic', executable='sim_model_state_odom_node', name='rf2o_laser_odometry', output='screen', parameters=[{'use_sim_time': True, 'laser_scan_topic': '/scan', 'odom_topic': '/odom_laser', 'publish_tf': False, 'base_frame_id': 'base_link', 'odom_frame_id': 'odom', 'init_pose_from_topic': '', 'freq': 12.0}]),
+            Node(package='robot_logistics_semantic', executable='sim_model_state_odom_node', name='rf2o_laser_odometry', output='screen', parameters=[{'use_sim_time': True, 'laser_scan_topic': '/scan', 'odom_topic': '/odom_laser', 'publish_tf': False, 'base_frame_id': 'd435-cam-Link', 'odom_frame_id': 'odom', 'init_pose_from_topic': '', 'freq': 12.0}]),
             Node(package='slam_toolbox', executable='async_slam_toolbox_node', name='slam_toolbox', output='screen', parameters=[slam_params]),
         ]),
 
@@ -72,6 +72,8 @@ def generate_launch_description():
                 parameters=[{
                     'use_sim_time': True,
                     'map_frame': 'map',
-                }]
+                                'front_qr_yaw_offset_deg': 0.0,
+                'use_single_qr_normal_yaw': False,
+}]
             ),
 ])

@@ -209,7 +209,7 @@ def generate_launch_description():
             'laser_scan_topic': raw_scan_topic,
             'odom_topic': '/odom_laser',
             'publish_tf': False,
-            'base_frame_id': 'base_link',
+            'base_frame_id': 'd435-cam-Link',
             'odom_frame_id': 'odom',
             'init_pose_from_topic': '',
             'freq': 12.0,

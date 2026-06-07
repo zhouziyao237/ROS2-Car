@@ -83,7 +83,9 @@ def generate_launch_description():
                 'infer_yaw_from_robot': False,
                 'single_anchor_relocalize': True,
                 'tf_timeout_sec': 0.5,
-            }]
+                            'front_qr_yaw_offset_deg': 0.0,
+                'use_single_qr_normal_yaw': False,
+}]
         ),
 
         Node(
