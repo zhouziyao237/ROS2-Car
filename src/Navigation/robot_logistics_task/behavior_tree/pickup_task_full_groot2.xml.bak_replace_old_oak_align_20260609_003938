@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="4" main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="PickupTaskFull">
+      <ReceiveShelfGoal/>
+
+      <Fallback name="ResolveShelfPoseOrExplore">
+        <QueryShelfPose/>
+
+        <Sequence name="ExploreAndRelocalizeShelf">
+          <EnterExploreMode/>
+          <SearchShelfReference/>
+          <DetectShelfAnchor/>
+          <EstimateShelfPoseFromAnchor/>
+          <UpdateSemanticSessionPose/>
+          <QueryShelfPose/>
+        </Sequence>
+      </Fallback>
+
+      <NavigateToShelf/>
+      <WaitNavArrive/>
+
+      <Fallback name="VerifyShelfOrSearchQR">
+        <VerifyShelfQR/>
+        <Sequence name="SearchAndVerifyQR">
+          <SearchShelfQR/>
+          <DetectShelfAnchor/>
+          <EstimateShelfPoseFromAnchor/>
+          <UpdateSemanticSessionPose/>
+          <VerifyShelfQR/>
+        </Sequence>
+      </Fallback>
+      <AlignOakToTargetShelfFront/>
+      <ScanTargetPackageOnShelf/><SendPlatformTarget/>
+      <WaitPickupDone/>
+      <PublishTaskDone/>
+    </Sequence>
+  </BehaviorTree>
+</root>

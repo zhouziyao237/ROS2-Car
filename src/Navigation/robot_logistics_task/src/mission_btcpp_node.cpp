@@ -154,7 +154,7 @@ static ParsedPickupFullCode parse_pickup_full_code_anywhere(const std::string& t
 struct Pose2D{bool valid=false;double x=0,y=0,yaw=0,confidence=0,stamp=0;std::string source;};
 struct TaskData{bool active=false;std::string raw,task_type="pickup",shelf_id,cell_id,col,pickup_code,layer_id,package_code;int row=0;bool command_has_pose=false;Pose2D target_pose;};
 struct AnchorData{bool valid=false;std::string raw,shelf_id,anchor_type="front_qr";double x=0,y=0,yaw=0,confidence=0.8,stamp=0;};
-struct SharedContext{rclcpp::Node::SharedPtr node;std::mutex mutex;TaskData task;Pose2D resolved_pose;AnchorData latest_anchor;std::string latest_current_shelf,latest_platform_status,latest_datamatrix_json,latest_package_json,state="IDLE";double latest_datamatrix_stamp=0.0;std::string semantic_map_path,semantic_session_path,map_session_id,map_frame="map",base_frame="base_link",oak_frame="oak_camera_link",oak_forward_axis="z",cmd_vel_topic="/cmd_vel",package_scan_direction="left_to_right";double session_pose_max_age_sec=600,min_session_confidence=0.5;double oak_align_yaw_tolerance_deg=3.0,oak_align_timeout_sec=8.0,oak_align_kp=1.0,oak_align_max_wz=0.35,oak_align_min_wz=0.08;double package_scan_range_deg=25.0,package_scan_step_deg=3.0,package_scan_wait_sec=0.25,package_scan_timeout_sec=25.0;bool allow_demo_anchor_if_missing=true,cancel_requested=false;rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_pub,state_pub,goal_json_pub,trace_pub,bt_xml_pub,platform_pub,explore_pub,control_mode_pub;rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr goal_pose_pub;rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub;std::shared_ptr<tf2_ros::Buffer> tf_buffer;std::shared_ptr<tf2_ros::TransformListener> tf_listener;void set_state(const std::string&s){state=s;state_pub->publish(std_msgs::msg::String().set__data(s));}void status(const std::string&st,const std::string&msg){std_msgs::msg::String m;std::stringstream ss;ss<<"{\"state\":\""<<state<<"\",\"status\":\""<<st<<"\",\"message\":\""<<msg<<"\"}";m.data=ss.str();status_pub->publish(m);}void trace(const std::string&node,const std::string&res){trace_pub->publish(std_msgs::msg::String().set__data("{\"node\":\""+node+"\",\"result\":\""+res+"\"}"));}};
+struct SharedContext{rclcpp::Node::SharedPtr node;std::mutex mutex;TaskData task;Pose2D resolved_pose;AnchorData latest_anchor;std::string latest_current_shelf,latest_current_shelf_json,latest_platform_status,latest_datamatrix_json,latest_package_json,latest_package_search_json,latest_package_search_status,state="IDLE";double latest_datamatrix_stamp=0.0;std::string semantic_map_path,semantic_session_path,map_session_id,map_frame="map",base_frame="base_link",oak_frame="oak_camera_link",oak_forward_axis="z",cmd_vel_topic="/cmd_vel",package_scan_direction="left_to_right",package_search_request_topic="/target_detection/package_search/request",package_search_status_topic="/target_detection/package_search/status";double session_pose_max_age_sec=600,min_session_confidence=0.5;double oak_align_yaw_tolerance_deg=3.0,oak_align_timeout_sec=8.0,oak_align_kp=1.0,oak_align_max_wz=0.35,oak_align_min_wz=0.08;double package_scan_range_deg=25.0,package_scan_step_deg=3.0,package_scan_wait_sec=0.25,package_scan_timeout_sec=25.0,package_search_timeout_sec=20.0;bool allow_demo_anchor_if_missing=true,cancel_requested=false;rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_pub,state_pub,goal_json_pub,trace_pub,bt_xml_pub,platform_pub,explore_pub,control_mode_pub,package_search_request_pub;rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr goal_pose_pub;rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub;std::shared_ptr<tf2_ros::Buffer> tf_buffer;std::shared_ptr<tf2_ros::TransformListener> tf_listener;void set_state(const std::string&s){state=s;state_pub->publish(std_msgs::msg::String().set__data(s));}void status(const std::string&st,const std::string&msg){std_msgs::msg::String m;std::stringstream ss;ss<<"{\"state\":\""<<state<<"\",\"status\":\""<<st<<"\",\"message\":\""<<msg<<"\"}";m.data=ss.str();status_pub->publish(m);}void trace(const std::string&node,const std::string&res){trace_pub->publish(std_msgs::msg::String().set__data("{\"node\":\""+node+"\",\"result\":\""+res+"\"}"));}};
 static std::shared_ptr<SharedContext> get_ctx(const BT::TreeNode& node){return node.config().blackboard->get<std::shared_ptr<SharedContext>>("ctx");}
 
 static double norm_angle(double a){return std::atan2(std::sin(a),std::cos(a));}
@@ -362,7 +362,91 @@ class EstimateShelfPoseFromAnchor:public BT::SyncActionNode{public:EstimateShelf
 class UpdateSemanticSessionPose:public BT::SyncActionNode{public:UpdateSemanticSessionPose(const std::string&n,const BT::NodeConfiguration&c):BT::SyncActionNode(n,c){}SIMPLE_PORTS BT::NodeStatus tick()override{auto ctx=get_ctx(*this);ctx->set_state("UpdateSemanticSessionPose");std::lock_guard<std::mutex>l(ctx->mutex);if(!ctx->task.active||!ctx->resolved_pose.valid){ctx->status("FAILURE","no pose to update");ctx->trace(name(),"FAILURE");return BT::NodeStatus::FAILURE;}write_session_pose(ctx->semantic_session_path,ctx->map_session_id,ctx->task.shelf_id,ctx->resolved_pose);ctx->status("SUCCESS","semantic session pose updated");ctx->trace(name(),"SUCCESS");return BT::NodeStatus::SUCCESS;}};
 class NavigateToShelf:public BT::SyncActionNode{public:NavigateToShelf(const std::string&n,const BT::NodeConfiguration&c):BT::SyncActionNode(n,c){}SIMPLE_PORTS BT::NodeStatus tick()override{auto ctx=get_ctx(*this);ctx->set_state("NavigateToShelf");std::lock_guard<std::mutex>l(ctx->mutex);if(ctx->cancel_requested){ctx->status("CANCELED","cancel requested, skip /goal_pose");ctx->trace(name(),"CANCELED");return BT::NodeStatus::FAILURE;}if(!ctx->task.active||!ctx->resolved_pose.valid){ctx->status("FAILURE","no resolved target pose");ctx->trace(name(),"FAILURE");return BT::NodeStatus::FAILURE;}geometry_msgs::msg::PoseStamped goal;goal.header.stamp=ctx->node->now();goal.header.frame_id=ctx->map_frame;goal.pose.position.x=ctx->resolved_pose.x;goal.pose.position.y=ctx->resolved_pose.y;goal.pose.orientation.z=std::sin(ctx->resolved_pose.yaw*0.5);goal.pose.orientation.w=std::cos(ctx->resolved_pose.yaw*0.5);ctx->goal_pose_pub->publish(goal);ctx->goal_json_pub->publish(std_msgs::msg::String().set__data(ctx->task.raw));ctx->status("RUNNING","published /goal_pose");ctx->trace(name(),"SUCCESS");return BT::NodeStatus::SUCCESS;}};
 class TimedAction:public BT::StatefulActionNode{std::string state_;double seconds_,start_=0;public:TimedAction(const std::string&n,const BT::NodeConfiguration&c,std::string s,double sec):BT::StatefulActionNode(n,c),state_(std::move(s)),seconds_(sec){}SIMPLE_PORTS BT::NodeStatus onStart()override{start_=steady_seconds();auto ctx=get_ctx(*this);ctx->set_state(state_);ctx->status("RUNNING",name()+" running");ctx->trace(name(),"RUNNING");return BT::NodeStatus::RUNNING;}BT::NodeStatus onRunning()override{if(steady_seconds()-start_>=seconds_){auto ctx=get_ctx(*this);ctx->status("SUCCESS",name()+" success");ctx->trace(name(),"SUCCESS");return BT::NodeStatus::SUCCESS;}return BT::NodeStatus::RUNNING;}void onHalted()override{get_ctx(*this)->trace(name(),"HALTED");}};
-class WaitNavArrive:public TimedAction{public:WaitNavArrive(const std::string&n,const BT::NodeConfiguration&c):TimedAction(n,c,"WaitNavArrive",2.0){}SIMPLE_PORTS};
+
+class WaitNavArrive:public BT::StatefulActionNode{
+    double start_=0.0;
+    double stable_start_=0.0;
+public:
+    WaitNavArrive(const std::string&n,const BT::NodeConfiguration&c):BT::StatefulActionNode(n,c){}
+    SIMPLE_PORTS
+
+    BT::NodeStatus onStart()override{
+        auto ctx=get_ctx(*this);
+        ctx->set_state("WaitNavArrive");
+        start_=steady_seconds();
+        stable_start_=0.0;
+        ctx->status("RUNNING","waiting real nav arrival by TF distance to goal");
+        ctx->trace(name(),"RUNNING");
+        return BT::NodeStatus::RUNNING;
+    }
+
+    BT::NodeStatus onRunning()override{
+        auto ctx=get_ctx(*this);
+
+        Pose2D goal;
+        {
+            std::lock_guard<std::mutex> l(ctx->mutex);
+            goal = ctx->resolved_pose;
+        }
+
+        if(!goal.valid){
+            ctx->status("FAILURE","WaitNavArrive has no resolved goal pose");
+            ctx->trace(name(),"FAILURE");
+            return BT::NodeStatus::FAILURE;
+        }
+
+        if(steady_seconds() - start_ > 40.0){
+            ctx->status("FAILURE","WaitNavArrive timeout before reaching goal");
+            ctx->trace(name(),"FAILURE");
+            return BT::NodeStatus::FAILURE;
+        }
+
+        try{
+            auto tf = ctx->tf_buffer->lookupTransform(
+                ctx->map_frame,
+                ctx->base_frame,
+                tf2::TimePointZero,
+                tf2::durationFromSec(0.20)
+            );
+
+            double bx = tf.transform.translation.x;
+            double by = tf.transform.translation.y;
+            double dist = std::hypot(goal.x - bx, goal.y - by);
+
+            std::stringstream ss;
+            ss << "WaitNavArrive dist=" << dist
+               << " goal=(" << goal.x << "," << goal.y << ")"
+               << " base=(" << bx << "," << by << ")";
+
+            if(dist < 0.18){
+                if(stable_start_ <= 0.0){
+                    stable_start_ = steady_seconds();
+                }
+
+                if(steady_seconds() - stable_start_ >= 1.0){
+                    ctx->status("SUCCESS", ss.str());
+                    ctx->trace(name(),"SUCCESS");
+                    return BT::NodeStatus::SUCCESS;
+                }
+            }else{
+                stable_start_ = 0.0;
+            }
+
+            ctx->status("RUNNING", ss.str());
+            return BT::NodeStatus::RUNNING;
+        }catch(const std::exception& e){
+            ctx->status("RUNNING", std::string("WaitNavArrive TF waiting: ") + e.what());
+            return BT::NodeStatus::RUNNING;
+        }
+    }
+
+    void onHalted()override{
+        get_ctx(*this)->trace(name(),"HALTED");
+    }
+};
+
+class WaitNavSettle:public TimedAction{public:WaitNavSettle(const std::string&n,const BT::NodeConfiguration&c):TimedAction(n,c,"WaitNavSettle",3.0){}SIMPLE_PORTS};
+class WaitAfterOakAlign:public TimedAction{public:WaitAfterOakAlign(const std::string&n,const BT::NodeConfiguration&c):TimedAction(n,c,"WaitAfterOakAlign",1.5){}SIMPLE_PORTS};
 class SearchShelfQR:public TimedAction{public:SearchShelfQR(const std::string&n,const BT::NodeConfiguration&c):TimedAction(n,c,"SearchShelfQR",1.0){}SIMPLE_PORTS};
 class AlignToCell:public TimedAction{public:AlignToCell(const std::string&n,const BT::NodeConfiguration&c):TimedAction(n,c,"AlignToCell",1.0){}SIMPLE_PORTS};
 
@@ -528,20 +612,139 @@ public:
     void onHalted()override{auto ctx=get_ctx(*this);publish_stop(ctx);ctx->trace(name(),"HALTED");}
 };
 
+
+
+class RequestOakPackageSearchAlign:public BT::StatefulActionNode{
+    double start_=0.0;
+public:
+    RequestOakPackageSearchAlign(const std::string&n,const BT::NodeConfiguration&c):BT::StatefulActionNode(n,c){}
+    SIMPLE_PORTS
+
+    BT::NodeStatus onStart()override{
+        auto ctx=get_ctx(*this);
+        ctx->set_state("RequestOakPackageSearchAlign");
+        start_=steady_seconds();
+
+        std::string req;
+        {
+            std::lock_guard<std::mutex> l(ctx->mutex);
+
+            if(!ctx->task.active || ctx->task.shelf_id.empty()){
+                ctx->status("FAILURE","cannot request OAK package search: no active task or shelf_id");
+                ctx->trace(name(),"FAILURE");
+                return BT::NodeStatus::FAILURE;
+            }
+
+            ctx->latest_package_search_status.clear();
+            ctx->latest_package_search_json.clear();
+
+            const std::string pickup = ctx->task.pickup_code.empty() ? ctx->task.cell_id : ctx->task.pickup_code;
+
+            std::string shelf_pose_extra;
+            {
+                double sx=0.0, sy=0.0, syaw=0.0;
+                bool has_x = get_number_json(ctx->latest_current_shelf_json, "x", sx);
+                bool has_y = get_number_json(ctx->latest_current_shelf_json, "y", sy);
+                bool has_yaw = get_number_json(ctx->latest_current_shelf_json, "shelf_front_yaw", syaw);
+                if(!has_yaw) has_yaw = get_number_json(ctx->latest_current_shelf_json, "yaw", syaw);
+                if(has_x && has_y){
+                    std::stringstream ps;
+                    ps << ",\"x\":" << sx << ",\"y\":" << sy;
+                    if(has_yaw){
+                        ps << ",\"yaw\":" << syaw << ",\"shelf_front_yaw\":" << syaw;
+                    }
+                    shelf_pose_extra = ps.str();
+                }
+            }
+
+            req = "{\"task_type\":\"package_search\""
+                  ",\"pickup_code\":\"" + pickup + "\""
+                  ",\"shelf_id\":\"" + ctx->task.shelf_id + "\""
+                  ",\"layer_id\":\"" + ctx->task.layer_id + "\""
+                  ",\"package_code\":\"" + ctx->task.package_code + "\""
+                  + shelf_pose_extra +
+                  ",\"source\":\"mission_btcpp_node\"}";
+        }
+
+        
+        // Before handing control to oak_package_search_node, publish zero once.
+        // This reduces residual cmd_vel from previous navigation / BT action.
+        publish_stop(ctx);
+        ctx->control_mode_pub->publish(std_msgs::msg::String().set__data("auto"));
+
+if(!ctx->package_search_request_pub){
+            ctx->status("FAILURE","package_search_request_pub is null");
+            ctx->trace(name(),"FAILURE");
+            return BT::NodeStatus::FAILURE;
+        }
+
+        std_msgs::msg::String msg;
+        msg.data=req;
+        ctx->package_search_request_pub->publish(msg);
+
+        ctx->status("RUNNING","published /target_detection/package_search/request; waiting for aligned/found");
+        ctx->trace(name(),"RUNNING");
+
+        RCLCPP_INFO(
+            ctx->node->get_logger(),
+            "[RequestOakPackageSearchAlign] request=%s",
+            req.c_str()
+        );
+
+        return BT::NodeStatus::RUNNING;
+    }
+
+    BT::NodeStatus onRunning()override{
+        auto ctx=get_ctx(*this);
+
+        std::string st;
+        std::string json;
+        {
+            std::lock_guard<std::mutex> l(ctx->mutex);
+            st=ctx->latest_package_search_status;
+            json=ctx->latest_package_search_json;
+        }
+
+        if(st=="aligned" || st=="found"){
+            ctx->status("SUCCESS","OAK package search alignment completed: "+st);
+            ctx->trace(name(),"SUCCESS");
+            return BT::NodeStatus::SUCCESS;
+        }
+
+        if(st=="failed" || st=="failure" || st=="timeout"){
+            ctx->status("FAILURE","OAK package search failed: "+json);
+            ctx->trace(name(),"FAILURE");
+            return BT::NodeStatus::FAILURE;
+        }
+
+        if(steady_seconds()-start_ > ctx->package_search_timeout_sec){
+            ctx->status("FAILURE","OAK package search align timeout");
+            ctx->trace(name(),"FAILURE");
+            return BT::NodeStatus::FAILURE;
+        }
+
+        return BT::NodeStatus::RUNNING;
+    }
+
+    void onHalted()override{
+        auto ctx=get_ctx(*this);
+        ctx->trace(name(),"HALTED");
+    }
+};
 class VerifyShelfQR:public BT::StatefulActionNode{double start_=0;public:VerifyShelfQR(const std::string&n,const BT::NodeConfiguration&c):BT::StatefulActionNode(n,c){}SIMPLE_PORTS BT::NodeStatus onStart()override{start_=steady_seconds();auto ctx=get_ctx(*this);ctx->set_state("VerifyShelfQR");ctx->status("RUNNING","verifying shelf identity");ctx->trace(name(),"RUNNING");return BT::NodeStatus::RUNNING;}BT::NodeStatus onRunning()override{auto ctx=get_ctx(*this);std::lock_guard<std::mutex>l(ctx->mutex);if(!ctx->latest_current_shelf.empty()&&ctx->latest_current_shelf==ctx->task.shelf_id){ctx->status("SUCCESS","current shelf matches target");ctx->trace(name(),"SUCCESS");return BT::NodeStatus::SUCCESS;}if(ctx->allow_demo_anchor_if_missing&&steady_seconds()-start_>1.5){ctx->status("SUCCESS","demo shelf verification passed");ctx->trace(name(),"SUCCESS");return BT::NodeStatus::SUCCESS;}return BT::NodeStatus::RUNNING;}void onHalted()override{get_ctx(*this)->trace(name(),"HALTED");}};
 class SendPlatformTarget:public BT::SyncActionNode{public:SendPlatformTarget(const std::string&n,const BT::NodeConfiguration&c):BT::SyncActionNode(n,c){}SIMPLE_PORTS BT::NodeStatus tick()override{auto ctx=get_ctx(*this);ctx->set_state("SendPlatformTarget");std::lock_guard<std::mutex>l(ctx->mutex);std::stringstream ss;ss<<"{\"action\":\"pickup\",\"shelf_id\":\""<<ctx->task.shelf_id<<"\",\"row\":"<<ctx->task.row<<",\"col\":\""<<ctx->task.col<<"\",\"cell_id\":\""<<ctx->task.cell_id<<"\"}";ctx->platform_pub->publish(std_msgs::msg::String().set__data(ss.str()));ctx->status("RUNNING","published /platform/target");ctx->trace(name(),"SUCCESS");return BT::NodeStatus::SUCCESS;}};
 class WaitPickupDone:public BT::StatefulActionNode{double start_=0;public:WaitPickupDone(const std::string&n,const BT::NodeConfiguration&c):BT::StatefulActionNode(n,c){}SIMPLE_PORTS BT::NodeStatus onStart()override{start_=steady_seconds();auto ctx=get_ctx(*this);ctx->set_state("WaitPickupDone");ctx->status("RUNNING","waiting pickup completion");ctx->trace(name(),"RUNNING");return BT::NodeStatus::RUNNING;}BT::NodeStatus onRunning()override{auto ctx=get_ctx(*this);std::lock_guard<std::mutex>l(ctx->mutex);if(ctx->latest_platform_status.find("done")!=std::string::npos||ctx->latest_platform_status.find("DONE")!=std::string::npos){ctx->status("SUCCESS","platform reports done");ctx->trace(name(),"SUCCESS");return BT::NodeStatus::SUCCESS;}if(ctx->allow_demo_anchor_if_missing&&steady_seconds()-start_>1.0){ctx->status("SUCCESS","demo pickup done");ctx->trace(name(),"SUCCESS");return BT::NodeStatus::SUCCESS;}return BT::NodeStatus::RUNNING;}void onHalted()override{get_ctx(*this)->trace(name(),"HALTED");}};
 class PublishTaskDone:public BT::SyncActionNode{public:PublishTaskDone(const std::string&n,const BT::NodeConfiguration&c):BT::SyncActionNode(n,c){}SIMPLE_PORTS BT::NodeStatus tick()override{auto ctx=get_ctx(*this);ctx->set_state("PublishTaskDone");ctx->status("DONE","pickup task completed");ctx->trace(name(),"SUCCESS");{std::lock_guard<std::mutex>l(ctx->mutex);ctx->task=TaskData();ctx->resolved_pose=Pose2D();}return BT::NodeStatus::SUCCESS;}};
-class MissionNode:public rclcpp::Node{std::shared_ptr<SharedContext>ctx_;BT::BehaviorTreeFactory factory_;BT::Blackboard::Ptr blackboard_;std::unique_ptr<BT::Tree>tree_;std::unique_ptr<BT::PublisherZMQ>groot_pub_;rclcpp::Subscription<std_msgs::msg::String>::SharedPtr goal_sub_,cancel_sub_,anchor_sub_,current_shelf_sub_,platform_status_sub_,datamatrix_sub_;rclcpp::TimerBase::SharedPtr timer_;public:MissionNode():Node("mission_btcpp_node"){}void init(){declare_parameter<std::string>("bt_xml","/host-home/src/Navigation/robot_logistics_task/behavior_tree/pickup_task_full_groot1.xml");declare_parameter<std::string>("semantic_map_path","/host-home/maps/semantic_library.json");declare_parameter<std::string>("semantic_session_path","/host-home/maps/semantic_session_pose.json");declare_parameter<std::string>("map_session_id","current_slam_session");declare_parameter<std::string>("shelf_goal_topic","/task/shelf_goal");declare_parameter<std::string>("cancel_topic","/task/cancel");declare_parameter<std::string>("task_status_topic","/task/status");declare_parameter<std::string>("current_state_topic","/task/current_state");declare_parameter<std::string>("current_goal_topic","/task/current_goal");declare_parameter<std::string>("bt_trace_topic","/task/bt_trace");declare_parameter<std::string>("bt_xml_topic","/task/bt_tree_xml");declare_parameter<std::string>("goal_pose_topic","/goal_pose");declare_parameter<std::string>("platform_target_topic","/platform/target");declare_parameter<std::string>("platform_status_topic","/platform/status");declare_parameter<std::string>("explore_cmd_topic","/task/explore_cmd");declare_parameter<std::string>("control_mode_topic","/control_mode");declare_parameter<std::string>("anchor_detection_topic","/semantic/anchor_detection");declare_parameter<std::string>("current_shelf_topic","/semantic/current_shelf");declare_parameter<std::string>("map_frame","map");declare_parameter<std::string>("base_frame","base_link");declare_parameter<std::string>("cmd_vel_topic","/cmd_vel");declare_parameter<std::string>("datamatrix_result_json_topic","/oak/datamatrix_3d_result_json");declare_parameter<std::string>("oak_frame","oak_camera_link");declare_parameter<std::string>("oak_forward_axis","z");declare_parameter<std::string>("package_scan_direction","left_to_right");declare_parameter<double>("oak_align_yaw_tolerance_deg",3.0);declare_parameter<double>("oak_align_timeout_sec",8.0);declare_parameter<double>("oak_align_kp",1.0);declare_parameter<double>("oak_align_max_wz",0.35);declare_parameter<double>("oak_align_min_wz",0.08);declare_parameter<double>("package_scan_range_deg",25.0);declare_parameter<double>("package_scan_step_deg",3.0);declare_parameter<double>("package_scan_wait_sec",0.25);declare_parameter<double>("package_scan_timeout_sec",25.0);declare_parameter<double>("tick_hz",10.0);declare_parameter<double>("session_pose_max_age_sec",600.0);declare_parameter<double>("min_session_confidence",0.5);declare_parameter<bool>("allow_demo_anchor_if_missing",true);declare_parameter<bool>("enable_groot_monitoring",true);declare_parameter<int>("groot_publisher_port",1666);declare_parameter<int>("groot_server_port",1667);declare_parameter<int>("groot_max_msg_per_second",25);ctx_=std::make_shared<SharedContext>();ctx_->node=shared_from_this();ctx_->semantic_map_path=get_parameter("semantic_map_path").as_string();ctx_->semantic_session_path=get_parameter("semantic_session_path").as_string();ctx_->map_session_id=get_parameter("map_session_id").as_string();ctx_->map_frame=get_parameter("map_frame").as_string();ctx_->base_frame=get_parameter("base_frame").as_string();ctx_->cmd_vel_topic=get_parameter("cmd_vel_topic").as_string();ctx_->oak_frame=get_parameter("oak_frame").as_string();ctx_->oak_forward_axis=get_parameter("oak_forward_axis").as_string();ctx_->package_scan_direction=get_parameter("package_scan_direction").as_string();ctx_->oak_align_yaw_tolerance_deg=get_parameter("oak_align_yaw_tolerance_deg").as_double();ctx_->oak_align_timeout_sec=get_parameter("oak_align_timeout_sec").as_double();ctx_->oak_align_kp=get_parameter("oak_align_kp").as_double();ctx_->oak_align_max_wz=get_parameter("oak_align_max_wz").as_double();ctx_->oak_align_min_wz=get_parameter("oak_align_min_wz").as_double();ctx_->package_scan_range_deg=get_parameter("package_scan_range_deg").as_double();ctx_->package_scan_step_deg=get_parameter("package_scan_step_deg").as_double();ctx_->package_scan_wait_sec=get_parameter("package_scan_wait_sec").as_double();ctx_->package_scan_timeout_sec=get_parameter("package_scan_timeout_sec").as_double();ctx_->session_pose_max_age_sec=get_parameter("session_pose_max_age_sec").as_double();ctx_->min_session_confidence=get_parameter("min_session_confidence").as_double();ctx_->allow_demo_anchor_if_missing=get_parameter("allow_demo_anchor_if_missing").as_bool();ctx_->status_pub=create_publisher<std_msgs::msg::String>(get_parameter("task_status_topic").as_string(),10);ctx_->state_pub=create_publisher<std_msgs::msg::String>(get_parameter("current_state_topic").as_string(),10);ctx_->goal_json_pub=create_publisher<std_msgs::msg::String>(get_parameter("current_goal_topic").as_string(),10);ctx_->trace_pub=create_publisher<std_msgs::msg::String>(get_parameter("bt_trace_topic").as_string(),10);ctx_->bt_xml_pub=create_publisher<std_msgs::msg::String>(get_parameter("bt_xml_topic").as_string(),1);ctx_->goal_pose_pub=create_publisher<geometry_msgs::msg::PoseStamped>(get_parameter("goal_pose_topic").as_string(),10);ctx_->platform_pub=create_publisher<std_msgs::msg::String>(get_parameter("platform_target_topic").as_string(),10);ctx_->explore_pub=create_publisher<std_msgs::msg::String>(get_parameter("explore_cmd_topic").as_string(),10);ctx_->control_mode_pub=create_publisher<std_msgs::msg::String>(get_parameter("control_mode_topic").as_string(),10);ctx_->cmd_vel_pub=create_publisher<geometry_msgs::msg::Twist>(ctx_->cmd_vel_topic,10);ctx_->tf_buffer=std::make_shared<tf2_ros::Buffer>(get_clock());ctx_->tf_listener=std::make_shared<tf2_ros::TransformListener>(*ctx_->tf_buffer);goal_sub_=create_subscription<std_msgs::msg::String>(get_parameter("shelf_goal_topic").as_string(),10,[this](std_msgs::msg::String::SharedPtr m){on_goal(m);});cancel_sub_=create_subscription<std_msgs::msg::String>(get_parameter("cancel_topic").as_string(),10,[this](std_msgs::msg::String::SharedPtr){std::lock_guard<std::mutex>l(ctx_->mutex);ctx_->cancel_requested=true;ctx_->task=TaskData();ctx_->resolved_pose=Pose2D();ctx_->set_state("IDLE");ctx_->status("CANCELED","task cancelled from /task/cancel");if(tree_)tree_->haltTree();});anchor_sub_=create_subscription<std_msgs::msg::String>(get_parameter("anchor_detection_topic").as_string(),10,[this](std_msgs::msg::String::SharedPtr m){on_anchor(m);});current_shelf_sub_=create_subscription<std_msgs::msg::String>(get_parameter("current_shelf_topic").as_string(),10,[this](std_msgs::msg::String::SharedPtr m){std::lock_guard<std::mutex>l(ctx_->mutex);std::string shelf;if(get_string_json(m->data,"shelf_id",shelf))ctx_->latest_current_shelf=shelf;else ctx_->latest_current_shelf=m->data;});platform_status_sub_=create_subscription<std_msgs::msg::String>(get_parameter("platform_status_topic").as_string(),10,[this](std_msgs::msg::String::SharedPtr m){std::lock_guard<std::mutex>l(ctx_->mutex);ctx_->latest_platform_status=m->data;});datamatrix_sub_=create_subscription<std_msgs::msg::String>(get_parameter("datamatrix_result_json_topic").as_string(),10,[this](std_msgs::msg::String::SharedPtr m){std::lock_guard<std::mutex>l(ctx_->mutex);ctx_->latest_datamatrix_json=m->data;ctx_->latest_datamatrix_stamp=wall_seconds(*this);});factory_.registerNodeType<ReceiveShelfGoal>("ReceiveShelfGoal");
+class MissionNode:public rclcpp::Node{std::shared_ptr<SharedContext>ctx_;BT::BehaviorTreeFactory factory_;BT::Blackboard::Ptr blackboard_;std::unique_ptr<BT::Tree>tree_;std::unique_ptr<BT::PublisherZMQ>groot_pub_;rclcpp::Subscription<std_msgs::msg::String>::SharedPtr goal_sub_,cancel_sub_,anchor_sub_,current_shelf_sub_,platform_status_sub_,datamatrix_sub_,package_search_status_sub_;rclcpp::TimerBase::SharedPtr timer_;public:MissionNode():Node("mission_btcpp_node"){}void init(){declare_parameter<std::string>("bt_xml","/host-home/src/Navigation/robot_logistics_task/behavior_tree/pickup_task_full_groot1.xml");declare_parameter<std::string>("semantic_map_path","/host-home/maps/semantic_library.json");declare_parameter<std::string>("semantic_session_path","/host-home/maps/semantic_session_pose.json");declare_parameter<std::string>("map_session_id","current_slam_session");declare_parameter<std::string>("shelf_goal_topic","/task/shelf_goal");declare_parameter<std::string>("cancel_topic","/task/cancel");declare_parameter<std::string>("task_status_topic","/task/status");declare_parameter<std::string>("current_state_topic","/task/current_state");declare_parameter<std::string>("current_goal_topic","/task/current_goal");declare_parameter<std::string>("bt_trace_topic","/task/bt_trace");declare_parameter<std::string>("bt_xml_topic","/task/bt_tree_xml");declare_parameter<std::string>("goal_pose_topic","/goal_pose");declare_parameter<std::string>("platform_target_topic","/platform/target");declare_parameter<std::string>("platform_status_topic","/platform/status");declare_parameter<std::string>("explore_cmd_topic","/task/explore_cmd");declare_parameter<std::string>("control_mode_topic","/control_mode");declare_parameter<std::string>("anchor_detection_topic","/semantic/anchor_detection");declare_parameter<std::string>("current_shelf_topic","/semantic/current_shelf");declare_parameter<std::string>("map_frame","map");declare_parameter<std::string>("base_frame","base_link");declare_parameter<std::string>("cmd_vel_topic","/cmd_vel");declare_parameter<std::string>("datamatrix_result_json_topic","/oak/datamatrix_3d_result_json");declare_parameter<std::string>("package_search_request_topic","/target_detection/package_search/request");declare_parameter<std::string>("package_search_status_topic","/target_detection/package_search/status");declare_parameter<double>("package_search_timeout_sec",20.0);declare_parameter<std::string>("oak_frame","oak_camera_link");declare_parameter<std::string>("oak_forward_axis","z");declare_parameter<std::string>("package_scan_direction","left_to_right");declare_parameter<double>("oak_align_yaw_tolerance_deg",3.0);declare_parameter<double>("oak_align_timeout_sec",8.0);declare_parameter<double>("oak_align_kp",1.0);declare_parameter<double>("oak_align_max_wz",0.35);declare_parameter<double>("oak_align_min_wz",0.08);declare_parameter<double>("package_scan_range_deg",25.0);declare_parameter<double>("package_scan_step_deg",3.0);declare_parameter<double>("package_scan_wait_sec",0.25);declare_parameter<double>("package_scan_timeout_sec",25.0);declare_parameter<double>("tick_hz",10.0);declare_parameter<double>("session_pose_max_age_sec",600.0);declare_parameter<double>("min_session_confidence",0.5);declare_parameter<bool>("allow_demo_anchor_if_missing",true);declare_parameter<bool>("enable_groot_monitoring",true);declare_parameter<int>("groot_publisher_port",1666);declare_parameter<int>("groot_server_port",1667);declare_parameter<int>("groot_max_msg_per_second",25);ctx_=std::make_shared<SharedContext>();ctx_->node=shared_from_this();ctx_->semantic_map_path=get_parameter("semantic_map_path").as_string();ctx_->semantic_session_path=get_parameter("semantic_session_path").as_string();ctx_->map_session_id=get_parameter("map_session_id").as_string();ctx_->map_frame=get_parameter("map_frame").as_string();ctx_->base_frame=get_parameter("base_frame").as_string();ctx_->cmd_vel_topic=get_parameter("cmd_vel_topic").as_string();ctx_->oak_frame=get_parameter("oak_frame").as_string();ctx_->oak_forward_axis=get_parameter("oak_forward_axis").as_string();ctx_->package_scan_direction=get_parameter("package_scan_direction").as_string();ctx_->package_search_request_topic=get_parameter("package_search_request_topic").as_string();ctx_->package_search_status_topic=get_parameter("package_search_status_topic").as_string();ctx_->oak_align_yaw_tolerance_deg=get_parameter("oak_align_yaw_tolerance_deg").as_double();ctx_->oak_align_timeout_sec=get_parameter("oak_align_timeout_sec").as_double();ctx_->oak_align_kp=get_parameter("oak_align_kp").as_double();ctx_->oak_align_max_wz=get_parameter("oak_align_max_wz").as_double();ctx_->oak_align_min_wz=get_parameter("oak_align_min_wz").as_double();ctx_->package_scan_range_deg=get_parameter("package_scan_range_deg").as_double();ctx_->package_scan_step_deg=get_parameter("package_scan_step_deg").as_double();ctx_->package_scan_wait_sec=get_parameter("package_scan_wait_sec").as_double();ctx_->package_scan_timeout_sec=get_parameter("package_scan_timeout_sec").as_double();ctx_->package_search_timeout_sec=get_parameter("package_search_timeout_sec").as_double();ctx_->session_pose_max_age_sec=get_parameter("session_pose_max_age_sec").as_double();ctx_->min_session_confidence=get_parameter("min_session_confidence").as_double();ctx_->allow_demo_anchor_if_missing=get_parameter("allow_demo_anchor_if_missing").as_bool();ctx_->status_pub=create_publisher<std_msgs::msg::String>(get_parameter("task_status_topic").as_string(),10);ctx_->state_pub=create_publisher<std_msgs::msg::String>(get_parameter("current_state_topic").as_string(),10);ctx_->goal_json_pub=create_publisher<std_msgs::msg::String>(get_parameter("current_goal_topic").as_string(),10);ctx_->trace_pub=create_publisher<std_msgs::msg::String>(get_parameter("bt_trace_topic").as_string(),10);ctx_->bt_xml_pub=create_publisher<std_msgs::msg::String>(get_parameter("bt_xml_topic").as_string(),1);ctx_->goal_pose_pub=create_publisher<geometry_msgs::msg::PoseStamped>(get_parameter("goal_pose_topic").as_string(),10);ctx_->platform_pub=create_publisher<std_msgs::msg::String>(get_parameter("platform_target_topic").as_string(),10);ctx_->explore_pub=create_publisher<std_msgs::msg::String>(get_parameter("explore_cmd_topic").as_string(),10);ctx_->control_mode_pub=create_publisher<std_msgs::msg::String>(get_parameter("control_mode_topic").as_string(),10);ctx_->cmd_vel_pub=create_publisher<geometry_msgs::msg::Twist>(ctx_->cmd_vel_topic,10);ctx_->package_search_request_pub=create_publisher<std_msgs::msg::String>(ctx_->package_search_request_topic,10);ctx_->tf_buffer=std::make_shared<tf2_ros::Buffer>(get_clock());ctx_->tf_listener=std::make_shared<tf2_ros::TransformListener>(*ctx_->tf_buffer);goal_sub_=create_subscription<std_msgs::msg::String>(get_parameter("shelf_goal_topic").as_string(),10,[this](std_msgs::msg::String::SharedPtr m){on_goal(m);});cancel_sub_=create_subscription<std_msgs::msg::String>(get_parameter("cancel_topic").as_string(),10,[this](std_msgs::msg::String::SharedPtr){std::lock_guard<std::mutex>l(ctx_->mutex);ctx_->cancel_requested=true;ctx_->task=TaskData();ctx_->resolved_pose=Pose2D();ctx_->set_state("IDLE");ctx_->status("CANCELED","task cancelled from /task/cancel");if(tree_)tree_->haltTree();});anchor_sub_=create_subscription<std_msgs::msg::String>(get_parameter("anchor_detection_topic").as_string(),10,[this](std_msgs::msg::String::SharedPtr m){on_anchor(m);});current_shelf_sub_=create_subscription<std_msgs::msg::String>(get_parameter("current_shelf_topic").as_string(),10,[this](std_msgs::msg::String::SharedPtr m){std::lock_guard<std::mutex>l(ctx_->mutex);ctx_->latest_current_shelf_json=m->data;std::string shelf;if(get_string_json(m->data,"shelf_id",shelf))ctx_->latest_current_shelf=shelf;else if(get_string_json(m->data,"id",shelf))ctx_->latest_current_shelf=shelf;else ctx_->latest_current_shelf=m->data;});platform_status_sub_=create_subscription<std_msgs::msg::String>(get_parameter("platform_status_topic").as_string(),10,[this](std_msgs::msg::String::SharedPtr m){std::lock_guard<std::mutex>l(ctx_->mutex);ctx_->latest_platform_status=m->data;});datamatrix_sub_=create_subscription<std_msgs::msg::String>(get_parameter("datamatrix_result_json_topic").as_string(),10,[this](std_msgs::msg::String::SharedPtr m){std::lock_guard<std::mutex>l(ctx_->mutex);ctx_->latest_datamatrix_json=m->data;ctx_->latest_datamatrix_stamp=wall_seconds(*this);});package_search_status_sub_=create_subscription<std_msgs::msg::String>(ctx_->package_search_status_topic,10,[this](std_msgs::msg::String::SharedPtr m){std::lock_guard<std::mutex>l(ctx_->mutex);ctx_->latest_package_search_json=m->data;std::string st;if(get_string_json(m->data,"status",st))ctx_->latest_package_search_status=st;});factory_.registerNodeType<ReceiveShelfGoal>("ReceiveShelfGoal");
   factory_.registerNodeType<ReceiveShelfGoal>("ReceivePickupTask");factory_.registerNodeType<CheckShelfSessionPoseValid>("CheckShelfSessionPoseValid");factory_.registerNodeType<QueryShelfPose>("QueryShelfPose");
   factory_.registerNodeType<QueryShelfPose>("QueryTargetShelfPose");factory_.registerNodeType<EnterExploreMode>("EnterExploreMode");
   factory_.registerNodeType<EnterExploreMode>("EnterShelfExplorationMode");factory_.registerNodeType<SearchShelfReference>("SearchShelfReference");factory_.registerNodeType<DetectShelfAnchor>("DetectShelfAnchor");factory_.registerNodeType<EstimateShelfPoseFromAnchor>("EstimateShelfPoseFromAnchor");
   factory_.registerNodeType<EstimateShelfPoseFromAnchor>("EstimateShelfPoseFromShelfAnchor");factory_.registerNodeType<UpdateSemanticSessionPose>("UpdateSemanticSessionPose");
   factory_.registerNodeType<UpdateSemanticSessionPose>("UpdateSemanticShelfPose");factory_.registerNodeType<NavigateToShelf>("NavigateToShelf");
-  factory_.registerNodeType<NavigateToShelf>("NavigateToTargetShelf");factory_.registerNodeType<WaitNavArrive>("WaitNavArrive");
+  factory_.registerNodeType<NavigateToShelf>("NavigateToTargetShelf");factory_.registerNodeType<WaitNavArrive>("WaitNavArrive");factory_.registerNodeType<WaitNavSettle>("WaitNavSettle");factory_.registerNodeType<WaitAfterOakAlign>("WaitAfterOakAlign");
   factory_.registerNodeType<WaitNavArrive>("WaitShelfNavigationArrive");factory_.registerNodeType<VerifyShelfQR>("VerifyShelfQR");
   factory_.registerNodeType<VerifyShelfQR>("VerifyTargetShelfIdentity");factory_.registerNodeType<SearchShelfQR>("SearchShelfQR");
-  factory_.registerNodeType<SearchShelfQR>("SearchTargetShelfIdentity");factory_.registerNodeType<AlignToCell>("AlignToCell");factory_.registerNodeType<AlignOakToTargetShelfFront>("AlignOakToTargetShelfFront");factory_.registerNodeType<ScanTargetPackageOnShelf>("ScanTargetPackageOnShelf");factory_.registerNodeType<SendPlatformTarget>("SendPlatformTarget");factory_.registerNodeType<WaitPickupDone>("WaitPickupDone");factory_.registerNodeType<PublishTaskDone>("PublishTaskDone");
+  factory_.registerNodeType<SearchShelfQR>("SearchTargetShelfIdentity");factory_.registerNodeType<AlignToCell>("AlignToCell");factory_.registerNodeType<AlignOakToTargetShelfFront>("AlignOakToTargetShelfFront");factory_.registerNodeType<ScanTargetPackageOnShelf>("ScanTargetPackageOnShelf");factory_.registerNodeType<RequestOakPackageSearchAlign>("RequestOakPackageSearchAlign");factory_.registerNodeType<SendPlatformTarget>("SendPlatformTarget");factory_.registerNodeType<WaitPickupDone>("WaitPickupDone");factory_.registerNodeType<PublishTaskDone>("PublishTaskDone");
   factory_.registerNodeType<PublishTaskDone>("FinishCurrentMission");blackboard_=BT::Blackboard::create();blackboard_->set("ctx",ctx_);auto xml=get_parameter("bt_xml").as_string();ctx_->bt_xml_pub->publish(std_msgs::msg::String().set__data(read_file_required(xml)));tree_=std::make_unique<BT::Tree>(factory_.createTreeFromFile(xml,blackboard_));if(get_parameter("enable_groot_monitoring").as_bool()){int pub_port=get_parameter("groot_publisher_port").as_int();int srv_port=get_parameter("groot_server_port").as_int();int max_msg=get_parameter("groot_max_msg_per_second").as_int();groot_pub_=std::make_unique<BT::PublisherZMQ>(*tree_,max_msg,pub_port,srv_port);RCLCPP_INFO(get_logger(),"Groot v1 PublisherZMQ enabled. publisher_port=%d server_port=%d",pub_port,srv_port);}double hz=get_parameter("tick_hz").as_double();timer_=create_wall_timer(std::chrono::milliseconds((int)(1000.0/hz)),[this](){bool skip=false;{std::lock_guard<std::mutex>l(ctx_->mutex);skip=ctx_->cancel_requested||!ctx_->task.active;}if(skip)return;tick();});RCLCPP_INFO(get_logger(),"Full semantic relocalization mission BT started.");}private:void on_goal(const std_msgs::msg::String::SharedPtr m){
     std::string cancel_task_type,cancel_command,cancel_status;
     bool is_cancel_msg=false;

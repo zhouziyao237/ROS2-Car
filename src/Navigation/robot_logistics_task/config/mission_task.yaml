@@ -22,9 +22,12 @@ mission_btcpp_node:
     base_frame: base_link
     tick_hz: 10.0
     session_pose_max_age_sec: 600.0
-    min_session_confidence: 0.50
+    min_session_confidence: 0.5
     allow_demo_anchor_if_missing: true
     enable_groot_monitoring: true
     groot_publisher_port: 1666
     groot_server_port: 1667
     groot_max_msg_per_second: 25
+    package_search_request_topic: /target_detection/package_search/request
+    package_search_status_topic: /target_detection/package_search/status
+    package_search_timeout_sec: 60.0
