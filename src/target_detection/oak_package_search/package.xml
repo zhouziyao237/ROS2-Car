@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>oak_package_search</name>
+  <version>0.3.0</version>
+  <description>Active OAK package search state machine: align OAK to shelf front, sweep left-right, and match target DataMatrix pickup code.</description>
+  <maintainer email="user@example.com">robot logistics team</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>tf2_ros</depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

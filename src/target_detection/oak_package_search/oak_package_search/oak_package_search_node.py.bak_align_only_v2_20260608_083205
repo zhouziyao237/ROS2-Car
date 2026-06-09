@@ -1,0 +1,690 @@
+#!/usr/bin/env python3
+"""
+Active OAK package search state machine.
+
+Responsibilities:
+  1. Receive package search request, e.g. S03-L2-0317.
+  2. Resolve target OAK yaw:
+       - target_oak_yaw: use directly.
+       - approach_yaw: use directly.
+       - shelf_front_yaw: target_oak_yaw = shelf_front_yaw + pi.
+  3. Compute current OAK yaw from TF:
+       current_oak_yaw = atan2(
+           oak_camera_forward_link.y - oak_camera_link.y,
+           oak_camera_forward_link.x - oak_camera_link.x
+       )
+  4. Rotate chassis through /cmd_vel so OAK faces the shelf front.
+  5. Move to scan start and sweep left-right.
+  6. Match DataMatrix result from /oak/datamatrix_3d_result_json.
+
+Important definition:
+  shelf_front_yaw = shelf front outward normal in fixed_frame/map.
+  target_oak_yaw = shelf_front_yaw + pi, because OAK must look back toward the shelf.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import re
+from typing import Any, Dict, List, Optional, Tuple
+
+import rclpy
+from rclpy.node import Node
+from rclpy.duration import Duration
+from rclpy.time import Time
+from std_msgs.msg import String
+from geometry_msgs.msg import Twist
+from tf2_ros import Buffer, TransformListener
+
+PICKUP_RE = re.compile(r"\b([A-Z0-9]{1,4}-L[0-9]{1,3}-[A-Z0-9]{4})\b", re.I)
+SHORT_PACKAGE_RE = re.compile(r"^[A-Z0-9]{4}$", re.I)
+
+
+def normalize_angle(a: float) -> float:
+    return math.atan2(math.sin(a), math.cos(a))
+
+
+def clamp(x: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, x))
+
+
+def normalize_pickup_code(s: str) -> str:
+    raw = str(s).strip().upper()
+    raw = raw.replace('_', '-').replace('/', '-')
+    raw = re.sub(r"\s+", "-", raw)
+    raw = re.sub(r"[^A-Z0-9-]+", "-", raw)
+    raw = re.sub(r"-+", "-", raw).strip('-')
+    m = PICKUP_RE.search(raw)
+    if m:
+        return m.group(1).upper()
+    return raw
+
+
+def parse_pickup_code(code: str) -> Tuple[str, str, str, str]:
+    norm = normalize_pickup_code(code)
+    m = re.fullmatch(r"([A-Z0-9]{1,4})-(L[0-9]{1,3})-([A-Z0-9]{4})", norm)
+    if not m:
+        raise ValueError(f"invalid pickup_code: {code!r}; expected S03-L2-0317")
+    shelf_id = m.group(1)
+    layer_id = m.group(2)
+    package_code = m.group(3)
+    return norm, shelf_id, layer_id, package_code
+
+
+def extract_pickup_codes(text: str) -> List[str]:
+    if text is None:
+        return []
+    s = str(text).upper()
+    return [normalize_pickup_code(x) for x in PICKUP_RE.findall(s)]
+
+
+def recursively_collect_strings(obj: Any, out: List[str]) -> None:
+    if obj is None:
+        return
+    if isinstance(obj, str):
+        out.append(obj)
+        return
+    if isinstance(obj, (int, float, bool)):
+        out.append(str(obj))
+        return
+    if isinstance(obj, dict):
+        # Prioritize common fields.
+        for key in [
+            'pickup_code', 'code', 'text', 'data', 'raw', 'value',
+            'decoded', 'contents', 'content', 'result', 'label'
+        ]:
+            if key in obj:
+                recursively_collect_strings(obj[key], out)
+        for k, v in obj.items():
+            if k not in [
+                'pickup_code', 'code', 'text', 'data', 'raw', 'value',
+                'decoded', 'contents', 'content', 'result', 'label'
+            ]:
+                recursively_collect_strings(v, out)
+        return
+    if isinstance(obj, (list, tuple)):
+        for item in obj:
+            recursively_collect_strings(item, out)
+        return
+
+
+class OakPackageSearchNode(Node):
+    IDLE = 'IDLE'
+    ALIGN = 'ALIGN_OAK_TO_SHELF_FRONT'
+    MOVE_TO_SCAN_START = 'MOVE_TO_SCAN_START'
+    SCAN = 'SWEEP_SEARCH_PACKAGE'
+
+    def __init__(self):
+        super().__init__('oak_package_search_node')
+
+        # Topics
+        self.declare_parameter('request_topic', '/target_detection/package_search/request')
+        self.declare_parameter('status_topic', '/target_detection/package_search/status')
+        self.declare_parameter('datamatrix_topic', '/oak/datamatrix_3d_result_json')
+        self.declare_parameter('cmd_vel_topic', '/cmd_vel')
+
+        # TF frames
+        self.declare_parameter('fixed_frame', 'map')
+        self.declare_parameter('oak_camera_frame', 'oak_camera_link')
+        self.declare_parameter('oak_forward_frame', 'oak_camera_forward_link')
+
+        # Motion / TF
+        self.declare_parameter('enable_motion', False)
+        self.declare_parameter('allow_no_tf_in_dry_run', True)
+        self.declare_parameter('require_tf_for_alignment', True)
+        self.declare_parameter('tf_failure_timeout_sec', 8.0)
+
+        # Controller
+        self.declare_parameter('align_yaw_tolerance_deg', 3.0)
+        self.declare_parameter('scan_start_yaw_tolerance_deg', 3.0)
+        self.declare_parameter('kp_wz', 1.0)
+        self.declare_parameter('min_wz', 0.06)
+        self.declare_parameter('max_wz', 0.30)
+
+        # Direction and PID control.
+        # If yaw_error has the correct sign but chassis rotates the wrong way,
+        # set yaw_control_sign to -1.0.
+        self.declare_parameter('yaw_control_sign', -1.0)
+        self.declare_parameter('ki_wz', 0.0)
+        self.declare_parameter('kd_wz', 0.06)
+        self.declare_parameter('pid_integral_limit', 0.5)
+        self.declare_parameter('yaw_settle_count_required', 4)
+        self.declare_parameter('stop_publish_repeat', 3)
+
+        # Scan
+        self.declare_parameter('scan_range_deg', 25.0)
+        self.declare_parameter('scan_speed_wz', 0.10)
+        self.declare_parameter('scan_timeout_sec', 25.0)
+        self.declare_parameter('max_scan_passes', 2)
+
+        # Match policy
+        self.declare_parameter('match_only_in_scan', True)
+        self.declare_parameter('ignore_detection_before_request', True)
+        self.declare_parameter('min_search_time_before_match_sec', 0.5)
+        self.declare_parameter('min_confirm_matches', 2)
+        self.declare_parameter('datamatrix_fresh_timeout_sec', 1.2)
+
+        # Loop
+        self.declare_parameter('tick_hz', 20.0)
+
+        self.fixed_frame = str(self.get_parameter('fixed_frame').value)
+        self.oak_camera_frame = str(self.get_parameter('oak_camera_frame').value)
+        self.oak_forward_frame = str(self.get_parameter('oak_forward_frame').value)
+        self.datamatrix_fresh_timeout = float(self.get_parameter('datamatrix_fresh_timeout_sec').value)
+
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
+
+        self.req_sub = self.create_subscription(
+            String,
+            str(self.get_parameter('request_topic').value),
+            self.request_cb,
+            10,
+        )
+        self.dm_sub = self.create_subscription(
+            String,
+            str(self.get_parameter('datamatrix_topic').value),
+            self.datamatrix_cb,
+            30,
+        )
+        self.status_pub = self.create_publisher(
+            String,
+            str(self.get_parameter('status_topic').value),
+            10,
+        )
+        self.cmd_pub = self.create_publisher(
+            Twist,
+            str(self.get_parameter('cmd_vel_topic').value),
+            10,
+        )
+
+        # Request state
+        self.state = self.IDLE
+        self.state_start = self.now_sec()
+        self.request_start_time = 0.0
+        self.pickup_code = ''
+        self.shelf_id = ''
+        self.layer_id = ''
+        self.package_code = ''
+        self.target_oak_yaw: Optional[float] = None
+        self.shelf_front_yaw: Optional[float] = None
+        self.approach_yaw: Optional[float] = None
+
+        # Scan state
+        self.scan_start_yaw = 0.0
+        self.scan_end_yaw = 0.0
+        self.scan_pass = 0
+
+        # DataMatrix latest state
+        self.latest_dm_raw = ''
+        self.latest_dm_obj: Any = None
+        self.latest_dm_time = 0.0
+        self.match_confirm_count = 0
+        self.found_code = ''
+        self.found_result: Any = None
+
+        # Yaw PID state.
+        self._yaw_pid_i = 0.0
+        self._yaw_pid_prev_error = None
+        self._yaw_pid_prev_time = None
+        self._yaw_settle_count = 0
+
+        tick_hz = float(self.get_parameter('tick_hz').value)
+        self.timer = self.create_timer(1.0 / max(1.0, tick_hz), self.tick)
+
+        self.get_logger().info('oak_package_search_node started')
+        self.get_logger().info(f"request_topic={self.get_parameter('request_topic').value}")
+        self.get_logger().info(f"status_topic={self.get_parameter('status_topic').value}")
+        self.get_logger().info(f"datamatrix_topic={self.get_parameter('datamatrix_topic').value}")
+        self.get_logger().info(f"enable_motion={self.get_parameter('enable_motion').value}")
+        self.get_logger().info(f'OAK yaw from TF: {self.oak_camera_frame} -> {self.oak_forward_frame}')
+
+    def now_sec(self) -> float:
+        return self.get_clock().now().nanoseconds / 1e9
+
+    def make_status(self, status: str, message: str, extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        data: Dict[str, Any] = {
+            'status': status,
+            'state': self.state,
+            'message': message,
+            'pickup_code': self.pickup_code,
+            'shelf_id': self.shelf_id,
+            'layer_id': self.layer_id,
+            'package_code': self.package_code,
+            'target_oak_yaw': self.target_oak_yaw,
+            'stamp': self.now_sec(),
+        }
+        if extra:
+            data.update(extra)
+        return data
+
+    def publish_status(self, status: str, message: str, extra: Optional[Dict[str, Any]] = None) -> None:
+        msg = String()
+        msg.data = json.dumps(self.make_status(status, message, extra), ensure_ascii=False)
+        self.status_pub.publish(msg)
+
+    def set_state(self, new_state: str, reason: str) -> None:
+        old = self.state
+        self.state = new_state
+        self.state_start = self.now_sec()
+        self.reset_yaw_controller()
+        self.publish_stop()
+        self.get_logger().info(f'state: {old} -> {new_state}, {reason}')
+        self.publish_status(new_state.lower(), reason)
+
+    def request_cb(self, msg: String) -> None:
+        raw = msg.data.strip()
+        try:
+            obj = json.loads(raw)
+        except Exception:
+            obj = {'pickup_code': raw}
+
+        if not isinstance(obj, dict):
+            obj = {'pickup_code': str(obj)}
+
+        if str(obj.get('task_type', 'package_search')).lower() in ['cancel', 'stop']:
+            self.cancel('cancel request received')
+            return
+
+        pickup_raw = obj.get('pickup_code') or obj.get('code') or obj.get('target') or raw
+        try:
+            self.pickup_code, self.shelf_id, self.layer_id, self.package_code = parse_pickup_code(str(pickup_raw))
+        except Exception as e:
+            self.get_logger().error(str(e))
+            self.publish_status('failed', str(e))
+            return
+
+        # Resolve yaw input.
+        self.target_oak_yaw = None
+        self.shelf_front_yaw = None
+        self.approach_yaw = None
+
+        if 'target_oak_yaw' in obj:
+            self.target_oak_yaw = normalize_angle(float(obj['target_oak_yaw']))
+        elif 'target_yaw' in obj:
+            # Backward compatible alias.
+            self.target_oak_yaw = normalize_angle(float(obj['target_yaw']))
+        elif 'approach_yaw' in obj:
+            self.approach_yaw = normalize_angle(float(obj['approach_yaw']))
+            self.target_oak_yaw = self.approach_yaw
+        elif 'shelf_front_yaw' in obj:
+            self.shelf_front_yaw = normalize_angle(float(obj['shelf_front_yaw']))
+            self.target_oak_yaw = normalize_angle(self.shelf_front_yaw + math.pi)
+        else:
+            self.publish_status('failed', 'request missing target_oak_yaw / approach_yaw / shelf_front_yaw')
+            self.get_logger().error('request missing target_oak_yaw / approach_yaw / shelf_front_yaw')
+            return
+
+        self.request_start_time = self.now_sec()
+        self.match_confirm_count = 0
+        self.found_code = ''
+        self.found_result = None
+        self.scan_pass = 0
+
+        # Clear stale detections so a request cannot consume old data instantly.
+        self.latest_dm_raw = ''
+        self.latest_dm_obj = None
+        self.latest_dm_time = 0.0
+
+        self.publish_status('accepted', 'request accepted')
+        self.set_state(self.ALIGN, 'new package search request')
+
+    def cancel(self, reason: str) -> None:
+        self.publish_stop()
+        self.set_state(self.IDLE, reason)
+        self.publish_status('canceled', reason)
+
+    def datamatrix_cb(self, msg: String) -> None:
+        self.latest_dm_raw = msg.data
+        self.latest_dm_time = self.now_sec()
+        try:
+            self.latest_dm_obj = json.loads(msg.data)
+        except Exception:
+            self.latest_dm_obj = None
+
+    def get_oak_yaw_from_tf(self) -> Tuple[bool, float, str]:
+        try:
+            tf_oak = self.tf_buffer.lookup_transform(
+                self.fixed_frame,
+                self.oak_camera_frame,
+                Time(),
+                timeout=Duration(seconds=0.10),
+            )
+            tf_fwd = self.tf_buffer.lookup_transform(
+                self.fixed_frame,
+                self.oak_forward_frame,
+                Time(),
+                timeout=Duration(seconds=0.10),
+            )
+        except Exception as e:
+            return False, 0.0, str(e)
+
+        ox = float(tf_oak.transform.translation.x)
+        oy = float(tf_oak.transform.translation.y)
+        fx = float(tf_fwd.transform.translation.x)
+        fy = float(tf_fwd.transform.translation.y)
+        yaw = math.atan2(fy - oy, fx - ox)
+        return True, normalize_angle(yaw), ''
+
+
+    def reset_yaw_controller(self) -> None:
+        self._yaw_pid_i = 0.0
+        self._yaw_pid_prev_error = None
+        self._yaw_pid_prev_time = None
+        self._yaw_settle_count = 0
+
+    def publish_stop(self) -> None:
+        if not bool(self.get_parameter('enable_motion').value):
+            return
+        repeat = int(self.get_parameter('stop_publish_repeat').value) if self.has_parameter('stop_publish_repeat') else 3
+        repeat = max(1, repeat)
+        for _ in range(repeat):
+            self.cmd_pub.publish(Twist())
+
+    def publish_wz(self, wz: float) -> None:
+        if not bool(self.get_parameter('enable_motion').value):
+            return
+        cmd = Twist()
+        cmd.angular.z = float(wz)
+        self.cmd_pub.publish(cmd)
+
+    def yaw_control_to_target(self, target_yaw: float, tolerance_deg: float) -> Tuple[bool, Optional[str], Optional[float], Optional[float]]:
+        ok, current_yaw, err_msg = self.get_oak_yaw_from_tf()
+        if not ok:
+            self.publish_stop()
+            return False, err_msg, None, None
+
+        yaw_error = normalize_angle(target_yaw - current_yaw)
+        tol = math.radians(float(tolerance_deg))
+
+        # Stop first. This must be before min_wz, otherwise the robot may keep
+        # rotating near the target because min_wz forces a non-zero command.
+        if abs(yaw_error) <= tol:
+            self._yaw_settle_count += 1
+            self.publish_stop()
+
+            required = int(self.get_parameter('yaw_settle_count_required').value)
+            required = max(1, required)
+
+            if self._yaw_settle_count >= required:
+                self.reset_yaw_controller()
+                return True, None, current_yaw, yaw_error
+
+            return False, None, current_yaw, yaw_error
+
+        self._yaw_settle_count = 0
+
+        now = self.now_sec()
+        if self._yaw_pid_prev_time is None:
+            dt = 1.0 / max(1.0, float(self.get_parameter('tick_hz').value))
+        else:
+            dt = max(1e-3, now - float(self._yaw_pid_prev_time))
+
+        kp = float(self.get_parameter('kp_wz').value)
+        ki = float(self.get_parameter('ki_wz').value)
+        kd = float(self.get_parameter('kd_wz').value)
+        min_wz = abs(float(self.get_parameter('min_wz').value))
+        max_wz = abs(float(self.get_parameter('max_wz').value))
+        control_sign = float(self.get_parameter('yaw_control_sign').value)
+
+        integral_limit = abs(float(self.get_parameter('pid_integral_limit').value))
+        self._yaw_pid_i += yaw_error * dt
+        self._yaw_pid_i = clamp(self._yaw_pid_i, -integral_limit, integral_limit)
+
+        if self._yaw_pid_prev_error is None:
+            derivative = 0.0
+        else:
+            derivative = normalize_angle(yaw_error - float(self._yaw_pid_prev_error)) / dt
+
+        raw = kp * yaw_error + ki * self._yaw_pid_i + kd * derivative
+        wz = control_sign * raw
+        wz = clamp(wz, -max_wz, max_wz)
+
+        # Apply min_wz only after the stop-zone check.
+        if abs(wz) < min_wz:
+            if abs(wz) > 1e-6:
+                wz = math.copysign(min_wz, wz)
+            else:
+                wz = control_sign * math.copysign(min_wz, yaw_error)
+
+        self._yaw_pid_prev_error = yaw_error
+        self._yaw_pid_prev_time = now
+
+        self.publish_wz(wz)
+        return False, None, current_yaw, yaw_error
+
+    def detection_matches(self) -> bool:
+        if not self.pickup_code or not self.latest_dm_raw:
+            self.match_confirm_count = 0
+            return False
+
+        if bool(self.get_parameter('ignore_detection_before_request').value):
+            if self.latest_dm_time < self.request_start_time:
+                self.match_confirm_count = 0
+                return False
+
+        min_search_time = float(self.get_parameter('min_search_time_before_match_sec').value)
+        if self.now_sec() - self.request_start_time < min_search_time:
+            self.match_confirm_count = 0
+            return False
+
+        if bool(self.get_parameter('match_only_in_scan').value) and self.state != self.SCAN:
+            self.match_confirm_count = 0
+            return False
+
+        if self.now_sec() - self.latest_dm_time > float(self.get_parameter('datamatrix_fresh_timeout_sec').value):
+            self.match_confirm_count = 0
+            return False
+
+        strings: List[str] = []
+        if self.latest_dm_obj is not None:
+            recursively_collect_strings(self.latest_dm_obj, strings)
+        strings.append(self.latest_dm_raw)
+
+        matched = False
+        matched_code = ''
+        matched_result: Any = None
+
+        for text in strings:
+            for code in extract_pickup_codes(text):
+                if normalize_pickup_code(code) == self.pickup_code:
+                    matched = True
+                    matched_code = self.pickup_code
+                    matched_result = self.latest_dm_obj if self.latest_dm_obj is not None else self.latest_dm_raw
+                    break
+            if matched:
+                break
+
+            # Fallback: detector returns only 4-char package code, e.g. 0317.
+            norm = normalize_pickup_code(text)
+            if SHORT_PACKAGE_RE.match(norm) and norm == self.package_code:
+                full = f'{self.shelf_id}-{self.layer_id}-{norm}'
+                if full == self.pickup_code:
+                    matched = True
+                    matched_code = full
+                    matched_result = self.latest_dm_obj if self.latest_dm_obj is not None else self.latest_dm_raw
+                    break
+
+        if not matched:
+            self.match_confirm_count = 0
+            return False
+
+        self.match_confirm_count += 1
+        min_confirm = int(self.get_parameter('min_confirm_matches').value)
+        self.get_logger().info(
+            f'candidate package match {matched_code}, confirm={self.match_confirm_count}/{min_confirm}',
+            throttle_duration_sec=0.5,
+        )
+
+        if self.match_confirm_count < max(1, min_confirm):
+            return False
+
+        self.found_code = matched_code
+        self.found_result = matched_result
+        return True
+
+    def fail(self, reason: str) -> None:
+        self.publish_stop()
+        self.get_logger().warn(f'package search failed: {reason}')
+        self.publish_status('failed', reason)
+        self.state = self.IDLE
+        self.state_start = self.now_sec()
+
+    def found(self) -> None:
+        self.publish_stop()
+        extra = {
+            'matched_code': self.found_code,
+            'result': self.found_result,
+        }
+        self.get_logger().info(f'target package found: {self.found_code}')
+        self.publish_status('found', 'target package found', extra)
+        self.state = self.IDLE
+        self.state_start = self.now_sec()
+
+    def prepare_scan(self) -> None:
+        assert self.target_oak_yaw is not None
+        rng = math.radians(float(self.get_parameter('scan_range_deg').value))
+        self.scan_start_yaw = normalize_angle(self.target_oak_yaw - rng)
+        self.scan_end_yaw = normalize_angle(self.target_oak_yaw + rng)
+        self.scan_pass = 0
+
+    def handle_tf_error_or_dry_run(self, err_msg: str, next_state: Optional[str] = None) -> None:
+        enable_motion = bool(self.get_parameter('enable_motion').value)
+        allow_dry = bool(self.get_parameter('allow_no_tf_in_dry_run').value)
+        timeout = float(self.get_parameter('tf_failure_timeout_sec').value)
+
+        if (not enable_motion) and allow_dry:
+            self.get_logger().warn(f'dry-run without TF: {err_msg}', throttle_duration_sec=1.0)
+            if self.now_sec() - self.state_start > 0.5 and next_state is not None:
+                self.set_state(next_state, 'dry-run: skip TF-controlled rotation')
+            return
+
+        self.get_logger().warn(f'runtime/tf error: {err_msg}', throttle_duration_sec=1.0)
+        if self.now_sec() - self.state_start > timeout:
+            self.fail(f'runtime/tf error: {err_msg}')
+
+    def tick(self) -> None:
+        if self.state == self.IDLE:
+            return
+
+        if self.target_oak_yaw is None:
+            self.fail('target_oak_yaw is not set')
+            return
+
+        if self.state == self.ALIGN:
+            aligned, err_msg, current_yaw, yaw_error = self.yaw_control_to_target(
+                self.target_oak_yaw,
+                float(self.get_parameter('align_yaw_tolerance_deg').value),
+            )
+            if err_msg:
+                self.handle_tf_error_or_dry_run(err_msg, self.MOVE_TO_SCAN_START)
+                return
+
+            self.publish_status(
+                'aligning',
+                'aligning OAK to shelf front',
+                {'current_oak_yaw': current_yaw, 'yaw_error': yaw_error},
+            )
+
+            if aligned:
+                self.prepare_scan()
+                self.set_state(self.MOVE_TO_SCAN_START, 'OAK aligned to shelf front')
+            return
+
+        if self.state == self.MOVE_TO_SCAN_START:
+            arrived, err_msg, current_yaw, yaw_error = self.yaw_control_to_target(
+                self.scan_start_yaw,
+                float(self.get_parameter('scan_start_yaw_tolerance_deg').value),
+            )
+            if err_msg:
+                self.handle_tf_error_or_dry_run(err_msg, self.SCAN)
+                return
+
+            self.publish_status(
+                'move_to_scan_start',
+                'moving OAK to scan start yaw',
+                {'current_oak_yaw': current_yaw, 'yaw_error': yaw_error},
+            )
+
+            if arrived:
+                self.set_state(self.SCAN, 'scan start reached')
+            return
+
+        if self.state == self.SCAN:
+            if self.detection_matches():
+                self.found()
+                return
+
+            if self.now_sec() - self.state_start > float(self.get_parameter('scan_timeout_sec').value):
+                if self.scan_pass + 1 < int(self.get_parameter('max_scan_passes').value):
+                    self.scan_pass += 1
+                    self.scan_start_yaw, self.scan_end_yaw = self.scan_end_yaw, self.scan_start_yaw
+                    self.set_state(self.SCAN, f'reverse scan pass {self.scan_pass + 1}')
+                    return
+                self.fail('scan timeout: target package not found')
+                return
+
+            ok, current_yaw, err_msg = self.get_oak_yaw_from_tf()
+            if not ok:
+                # In dry-run, simply wait for DataMatrix matches during scan timeout.
+                if not bool(self.get_parameter('enable_motion').value) and bool(self.get_parameter('allow_no_tf_in_dry_run').value):
+                    self.publish_status('scanning', 'dry-run scanning without TF')
+                    return
+                self.handle_tf_error_or_dry_run(err_msg, None)
+                return
+
+            end_error = normalize_angle(self.scan_end_yaw - current_yaw)
+            tol = math.radians(float(self.get_parameter('scan_start_yaw_tolerance_deg').value))
+            if abs(end_error) <= tol:
+                if self.scan_pass + 1 < int(self.get_parameter('max_scan_passes').value):
+                    self.scan_pass += 1
+                    self.scan_start_yaw, self.scan_end_yaw = self.scan_end_yaw, self.scan_start_yaw
+                    self.set_state(self.SCAN, f'reverse scan pass {self.scan_pass + 1}')
+                    return
+                self.fail('scan finished: target package not found')
+                return
+
+            # Constant slow sweep toward scan_end_yaw.
+            scan_speed = abs(float(self.get_parameter('scan_speed_wz').value))
+            control_sign = float(self.get_parameter('yaw_control_sign').value)
+            wz = control_sign * math.copysign(scan_speed, end_error)
+            self.publish_wz(wz)
+            self.publish_status(
+                'scanning',
+                'sweeping OAK left-right',
+                {
+                    'current_oak_yaw': current_yaw,
+                    'scan_end_yaw': self.scan_end_yaw,
+                    'yaw_error_to_scan_end': end_error,
+                    'scan_pass': self.scan_pass + 1,
+                },
+            )
+            return
+
+
+def main():
+    rclpy.init()
+    node = OakPackageSearchNode()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            node.publish_stop()
+        except Exception:
+            pass
+        try:
+            node.destroy_node()
+        except Exception:
+            pass
+        try:
+            if rclpy.ok():
+                rclpy.shutdown()
+        except Exception:
+            pass
+
+
+if __name__ == '__main__':
+    main()

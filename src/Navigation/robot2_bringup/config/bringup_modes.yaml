@@ -309,6 +309,8 @@ modules:
       camera_mount_pitch_down_deg: 0.0
       camera_mount_roll_deg: 0.0
       camera_mount_yaw_deg: 0.0
+      current_shelf_topic: /semantic/current_shelf
+      current_shelf_republish_period_sec: 0.5
   rviz:
     type: node
     package: rviz2
@@ -510,6 +512,80 @@ modules:
       zero_vel_hz: 20.0
       clear_path_repeat_sec: 3.0
       clear_path_hz: 20.0
+  oak_vision_driver:
+    type: include
+    package: oak_vision_driver
+    launch: oak_vision_driver.launch.py
+    delay: 13.0
+    arguments:
+      enable_rgb: 'true'
+      enable_depth: 'true'
+      enable_yolo: 'false'
+      enable_stereo_fusion: 'false'
+      sensor_resolution: 1080p
+      rgb_output: video
+      video_width: '1920'
+      video_height: '1080'
+      fps: '10.0'
+      force_usb2: 'true'
+  oak_parcel_pose:
+    type: include
+    package: oak_parcel_pose
+    launch: oak_parcel_pose.launch.py
+    delay: 16.0
+  oak_package_search:
+    type: node
+    package: oak_package_search
+    executable: oak_package_search_node
+    name: oak_package_search_node
+    output: screen
+    delay: 17.0
+    respawn: true
+    respawn_delay: 2.0
+    parameters:
+    - /host-home/src/target_detection/oak_package_search/config/oak_package_search.yaml
+    - request_topic: /target_detection/package_search/request
+      status_topic: /target_detection/package_search/status
+      datamatrix_topic: /oak/datamatrix_3d_result_json
+      cmd_vel_topic: /cmd_vel
+      fixed_frame: map
+      oak_camera_frame: oak-cam-Link
+      oak_forward_frame: ''
+      enable_motion: true
+      match_only_in_scan: true
+      ignore_detection_before_request: true
+      min_confirm_matches: 2
+      min_search_time_before_match_sec: 0.5
+      datamatrix_fresh_timeout_sec: 1.2
+      scan_range_deg: 25.0
+      scan_speed_wz: 0.1
+      scan_timeout_sec: 30.0
+      max_scan_passes: 2
+      align_yaw_tolerance_deg: 5.0
+      scan_start_yaw_tolerance_deg: 5.0
+      kp_wz: 0.6
+      min_wz: 0.0
+      max_wz: 0.16
+      require_tf_for_alignment: true
+      allow_no_tf_in_dry_run: false
+      tf_failure_timeout_sec: 8.0
+      yaw_control_sign: 1.0
+      yaw_settle_count_required: 3
+      stop_publish_repeat: 5
+      align_only: false
+      yaw_deadband_deg: 2.0
+      global_frame: map
+      oak_forward_axis: x
+      oak_yaw_offset_deg: 0.0
+      tick_hz: 10.0
+      semantic_shelf_topic: /semantic/current_shelf
+      base_frame: base_link
+      oak_forward_vector_x: 1.0
+      oak_forward_vector_y: 0.0
+      oak_forward_vector_z: 0.0
+      target_mode: point_or_front_yaw
+      use_semantic_shelf_topic: true
+      shelf_target_offset_m: 0.0
 modes:
   hardware:
     enable:
@@ -563,6 +639,9 @@ modes:
     - mission_bt
     - task_cancel_guard
     - bt_osd_overlay
+    - oak_vision_driver
+    - oak_parcel_pose
+    - oak_package_search
   nav_d435:
     enable:
     - robot_description

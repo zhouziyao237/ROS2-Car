@@ -13,6 +13,7 @@ from geometry_msgs.msg import PoseStamped
 from robot_logistics_interfaces.msg import SemanticObservation
 
 import tf2_ros
+from std_msgs.msg import String
 
 
 class SemanticRegistrarNode(Node):
@@ -155,6 +156,22 @@ class SemanticRegistrarNode(Node):
         self.declare_parameter('front_layer_qr_to_normal_offset_deg', 0.0)
         self.declare_parameter('right_side_qr_yaw_offset_deg', 90.0)
         self.declare_parameter('left_side_qr_yaw_offset_deg', -90.0)
+
+        self.declare_parameter('current_shelf_topic', '/semantic/current_shelf')
+        self.declare_parameter('current_shelf_republish_period_sec', 0.5)
+
+        # Publisher for the latest semantic shelf pose.
+        # This fills /semantic/current_shelf for BT / OSD / OAK package search.
+        self._last_current_shelf_msg = None
+        self.current_shelf_pub = self.create_publisher(
+            String,
+            str(self.get_parameter('current_shelf_topic').value),
+            10,
+        )
+        self.current_shelf_timer = self.create_timer(
+            max(0.1, float(self.get_parameter('current_shelf_republish_period_sec').value)),
+            self.republish_current_shelf,
+        )
 
         self.semantic_map_path = Path(self.get_parameter('semantic_map_path').value)
         self.input_topic = str(self.get_parameter('input_topic').value)
@@ -709,6 +726,110 @@ class SemanticRegistrarNode(Node):
 
         return cx, cy
 
+
+    def _extract_shelf_id_for_current_shelf(self, shelf):
+        try:
+            return str(
+                shelf.get('shelf_id')
+                or shelf.get('id')
+                or shelf.get('name')
+                or shelf.get('label')
+                or ''
+            )
+        except Exception:
+            return ''
+
+    def publish_current_shelf(self, shelf, stamp=None, source='semantic_registrar'):
+        """
+        Publish the latest recognized shelf pose to /semantic/current_shelf.
+
+        Expected shelf structure already exists in semantic_registrar:
+          shelf['current_map_pose'] = {'x': ..., 'y': ..., 'yaw': ..., 'valid': True}
+          shelf['approach_pose']    = {'x': ..., 'y': ..., 'yaw': ..., 'valid': True}
+        """
+        try:
+            if shelf is None:
+                return
+
+            pose = shelf.get('current_map_pose', {})
+            approach = shelf.get('approach_pose', {})
+
+            if not isinstance(pose, dict):
+                return
+
+            if not bool(pose.get('valid', False)):
+                return
+
+            shelf_id = self._extract_shelf_id_for_current_shelf(shelf)
+
+            now_stamp = self.get_clock().now().nanoseconds / 1e9
+            if stamp is None:
+                stamp = now_stamp
+
+            x = float(pose.get('x', 0.0))
+            y = float(pose.get('y', 0.0))
+            yaw = float(pose.get('yaw', 0.0))
+
+            msg_data = {
+                'shelf_id': shelf_id,
+                'id': shelf_id,
+                'x': x,
+                'y': y,
+                'yaw': yaw,
+                'shelf_front_yaw': yaw,
+                'stamp': float(stamp),
+                'publish_stamp': float(now_stamp),
+                'source': str(source),
+
+                # Compatibility for nodes that expect nested pose format.
+                'pose': {
+                    'position': {
+                        'x': x,
+                        'y': y,
+                        'z': float(pose.get('z', 0.0)),
+                    },
+                    'yaw': yaw,
+                },
+
+                'current_map_pose': {
+                    'x': x,
+                    'y': y,
+                    'yaw': yaw,
+                    'valid': bool(pose.get('valid', True)),
+                },
+
+                'approach_pose': {
+                    'x': float(approach.get('x', 0.0)) if isinstance(approach, dict) else 0.0,
+                    'y': float(approach.get('y', 0.0)) if isinstance(approach, dict) else 0.0,
+                    'yaw': float(approach.get('yaw', 0.0)) if isinstance(approach, dict) else 0.0,
+                    'valid': bool(approach.get('valid', False)) if isinstance(approach, dict) else False,
+                },
+
+                'status': str(shelf.get('status', '')),
+                'confidence': float(shelf.get('confidence', 1.0)),
+                'last_seen': float(shelf.get('last_seen', stamp)),
+            }
+
+            msg = String()
+            msg.data = json.dumps(msg_data, ensure_ascii=False)
+
+            self._last_current_shelf_msg = msg
+            self.current_shelf_pub.publish(msg)
+
+        except Exception as e:
+            self.get_logger().warn(f'publish_current_shelf failed: {e}')
+
+    def republish_current_shelf(self):
+        """
+        Periodically republish the last shelf pose so late subscribers and
+        ros2 topic echo --once can receive it even with VOLATILE QoS.
+        """
+        try:
+            if self._last_current_shelf_msg is not None:
+                self.current_shelf_pub.publish(self._last_current_shelf_msg)
+        except Exception as e:
+            self.get_logger().warn(f'republish_current_shelf failed: {e}')
+
     def write_shelf_pose(self, shelf, cx, cy, front_yaw, stamp, source, confidence, status):
         nx = math.cos(front_yaw)
         ny = math.sin(front_yaw)
@@ -753,6 +874,13 @@ class SemanticRegistrarNode(Node):
         shelf['confidence'] = max(float(confidence), float(shelf.get('confidence', 0.0)))
         shelf['status'] = status
         shelf['last_seen'] = stamp
+
+        # Publish latest current shelf for BT / OSD / OAK package search.
+        self.publish_current_shelf(
+            shelf,
+            stamp,
+            locals().get('source', 'semantic_registrar'),
+        )
 
     # ------------------------------------------------------------------
     # Query helpers

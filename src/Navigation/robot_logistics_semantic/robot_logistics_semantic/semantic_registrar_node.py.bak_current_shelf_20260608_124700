@@ -1,0 +1,1369 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import json
+import math
+from pathlib import Path
+
+import rclpy
+from rclpy.node import Node
+from rclpy.time import Time
+
+from geometry_msgs.msg import PoseStamped
+from robot_logistics_interfaces.msg import SemanticObservation
+
+import tf2_ros
+
+
+class SemanticRegistrarNode(Node):
+    """
+    Register shelf semantic observations into semantic_library.json.
+
+    Semantic rule:
+      - layer_qr / L tag:
+          On shelf FRONT face.
+          Provides front plane point and front normal.
+          It can create/update full shelf mask and approach pose.
+
+      - column_qr / C tag:
+          On shelf SIDE face.
+          Provides side plane point and side normal.
+          It can create a candidate shelf pose when alone.
+          When front anchor exists, it combines with front anchor to solve shelf center.
+
+    Fusion priority:
+      1. front_anchor + side_column_anchor:
+           solve 2D intersection of front plane and side plane constraints.
+           source = front_side_qr_intersection
+
+      2. front_anchor only:
+           estimate shelf center from front QR and face_to_center_offset.
+           source = front_layer_qr
+
+      3. side_column_anchor only:
+           estimate candidate shelf center from side QR and side offsets.
+           source = side_column_qr_candidate
+
+    Coordinate convention in map:
+      - shelf_yaw = shelf FRONT outward normal direction.
+      - approach_pose = shelf_center + front_normal * approach_distance.
+      - approach yaw = shelf_yaw + pi, so robot faces shelf.
+    """
+
+    def __init__(self):
+        super().__init__('semantic_registrar_node')
+
+        self.declare_parameter('semantic_map_path', '/host-home/maps/semantic_library.json')
+        self.declare_parameter('input_topic', '/vision/semantic_observation')
+
+        self.declare_parameter('map_frame', 'map')
+        self.declare_parameter('robot_frame', 'base_link')
+        self.declare_parameter('tf_timeout_sec', 0.5)
+
+        # Freeze semantic shelf pose update while robot is moving.
+        # This uses TF pose change, so it also works when the robot is pushed by hand.
+        self.declare_parameter('freeze_update_when_robot_tf_moving', True)
+        self.declare_parameter('motion_tf_reference_frames', ['odom', 'map'])
+        self.declare_parameter('motion_tf_base_frame_candidates', ['base_link', 'base_footprint'])
+        self.declare_parameter('motion_tf_linear_delta_threshold_m', 0.015)
+        self.declare_parameter('motion_tf_yaw_delta_threshold_deg', 0.8)
+        self.declare_parameter('motion_tf_linear_speed_threshold_mps', 0.015)
+        self.declare_parameter('motion_tf_angular_speed_threshold_radps', 0.025)
+        self.declare_parameter('motion_tf_settle_time_sec', 2.0)
+        self.declare_parameter('motion_tf_lookup_timeout_sec', 0.05)
+        # Anti-drift filter for RF2O / map TF small jitter.
+        # Do not treat tiny pose noise as real robot motion.
+        self.declare_parameter('motion_tf_sample_min_dt_sec', 0.25)
+        self.declare_parameter('motion_tf_position_deadband_m', 0.004)
+        self.declare_parameter('motion_tf_yaw_deadband_deg', 0.2)
+        self.declare_parameter('motion_tf_confirm_count', 1)
+        self.declare_parameter('motion_tf_release_count', 5)
+        self.declare_parameter('motion_tf_baseline_reset_sec', 3.0)
+
+        # Sliding-window motion detection.
+        # Use recent TF motion only; do not accumulate odom/map drift forever.
+        self.declare_parameter('motion_tf_window_sec', 1.2)
+
+        # Nominal shelf geometry.
+        self.declare_parameter('shelf_width', 1.85)
+        self.declare_parameter('shelf_depth', 0.35)
+        self.declare_parameter('shelf_height', 1.50)
+        self.declare_parameter('default_cols', 3)
+
+        # Front QR plane -> shelf center offset.
+        # If mask is in front of real shelf, increase this.
+        self.declare_parameter('face_to_center_offset', 0.175)
+        self.declare_parameter('front_qr_lateral_offset_m', 0.0)
+        self.declare_parameter('side_qr_front_offset_m', 0.175)
+        self.declare_parameter('side_qr_width_offset_m', 0.925)
+        self.declare_parameter('column_qr_front_offset_m', 0.175)
+        self.declare_parameter('column_qr_width_offset_m', 0.925)
+        self.declare_parameter('front_qr_side_offset_m', 0.0)
+        self.declare_parameter('front_qr_back_offset_m', 0.175)
+
+        # If front layer QR is not at shelf center line, tune this.
+        self.declare_parameter('front_label_lateral_offset', 0.0)
+
+        # Side QR plane -> shelf center offsets.
+        # side_label_width_offset normally = shelf_width / 2.
+        # side_label_front_offset normally = shelf_depth / 2 if side tag is near front edge.
+        self.declare_parameter('side_label_width_offset', 0.925)
+        self.declare_parameter('side_label_front_offset', 0.175)
+
+        # Candidate front yaw from side QR:
+        # side normal rotated ±90 deg gives front normal candidate.
+        self.declare_parameter('column_side_yaw_offset_deg', 90.0)
+        self.declare_parameter('allow_side_qr_create_candidate_pose', False)
+
+        # Nav approach point.
+        self.declare_parameter('approach_distance', 1.10)
+
+        # Observation quality and yaw stability.
+        self.declare_parameter('min_confidence', 0.20)
+        self.declare_parameter('max_yaw_jump_deg', 180.0)
+        self.declare_parameter('yaw_smooth_alpha', 1.0)
+        # Moving shelf mode:
+        # In real tests, shelf can move/rotate. A newly observed front/layer QR
+        # should immediately re-align shelf pose. Old side/column QR must not
+        # pull the shelf to a stale intersection.
+        self.declare_parameter('moving_shelf_realign_mode', True)
+        self.declare_parameter('prefer_latest_front_qr', True)
+        self.declare_parameter('enable_front_side_intersection', False)
+        self.declare_parameter('max_front_side_pair_age_sec', 1.0)
+        # Fast single QR yaw update.
+        # Camera installation assumption:
+        #   camera x+ = depth/front direction, roughly robot x+.
+        #   camera is upside-down / reverse mounted: roll ~= 180 deg.
+        #   camera looks down about 20 deg.
+        self.declare_parameter('use_single_qr_normal_yaw', False)
+        self.declare_parameter('camera_mount_yaw_deg', 0.0)
+        self.declare_parameter('camera_mount_pitch_down_deg', 20.0)
+        self.declare_parameter('camera_mount_roll_deg', 180.0)
+
+        # Which local axis of QR pose orientation represents QR plane normal.
+        # If yaw direction is wrong, try '-x', 'z', or '-z'.
+        self.declare_parameter('qr_pose_normal_axis', 'x')
+
+        # QR normal often points toward camera; invert to get shelf front outward normal.
+        self.declare_parameter('normal_points_to_camera', True)
+
+        # Front QR is on shelf front face. If yaw is reversed 180 deg, change to 0.
+        self.declare_parameter('front_qr_yaw_offset_deg', 180.0)
+        # front layer QR / row label is mounted on the long front face.
+        # Its observed yaw may follow the label/long-face direction.
+        # Convert it to shelf front outward normal used internally.
+        self.declare_parameter('front_layer_qr_to_normal_offset_deg', 0.0)
+        self.declare_parameter('right_side_qr_yaw_offset_deg', 90.0)
+        self.declare_parameter('left_side_qr_yaw_offset_deg', -90.0)
+
+        self.semantic_map_path = Path(self.get_parameter('semantic_map_path').value)
+        self.input_topic = str(self.get_parameter('input_topic').value)
+
+        self.map_frame = str(self.get_parameter('map_frame').value)
+        self.robot_frame = str(self.get_parameter('robot_frame').value)
+        self.tf_timeout_sec = float(self.get_parameter('tf_timeout_sec').value)
+
+        self.shelf_width = float(self.get_parameter('shelf_width').value)
+        self.shelf_depth = float(self.get_parameter('shelf_depth').value)
+        self.shelf_height = float(self.get_parameter('shelf_height').value)
+        self.default_cols = int(self.get_parameter('default_cols').value)
+
+        self.face_to_center_offset = float(self.get_parameter('face_to_center_offset').value)
+        self.front_label_lateral_offset = float(self.get_parameter('front_label_lateral_offset').value)
+
+        self.side_label_width_offset = float(self.get_parameter('side_label_width_offset').value)
+        self.side_label_front_offset = float(self.get_parameter('side_label_front_offset').value)
+
+        self.column_side_yaw_offset = math.radians(
+            float(self.get_parameter('column_side_yaw_offset_deg').value)
+        )
+        self.allow_side_qr_create_candidate_pose = bool(
+            self.get_parameter('allow_side_qr_create_candidate_pose').value
+        )
+
+        self.approach_distance = float(self.get_parameter('approach_distance').value)
+
+        self.min_confidence = float(self.get_parameter('min_confidence').value)
+        self.max_yaw_jump = math.radians(float(self.get_parameter('max_yaw_jump_deg').value))
+        self.yaw_smooth_alpha = float(self.get_parameter('yaw_smooth_alpha').value)
+        self.moving_shelf_realign_mode = bool(self.get_parameter('moving_shelf_realign_mode').value)
+        self.prefer_latest_front_qr = bool(self.get_parameter('prefer_latest_front_qr').value)
+        self.enable_front_side_intersection = bool(self.get_parameter('enable_front_side_intersection').value)
+        self.max_front_side_pair_age_sec = float(self.get_parameter('max_front_side_pair_age_sec').value)
+
+        self.semantic_map_path.parent.mkdir(parents=True, exist_ok=True)
+
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+
+        self.motion_tf_last_poses = {}
+        self.motion_tf_pose_windows = {}
+        self.motion_tf_baseline_poses = {}
+        self.motion_tf_moving_votes = {}
+        self.motion_tf_still_votes = {}
+        self.motion_tf_current_moving = False
+        self.motion_tf_last_motion_time = 0.0
+
+        self.sub = self.create_subscription(
+            SemanticObservation,
+            self.input_topic,
+            self.obs_cb,
+            20
+        )
+
+        self.get_logger().info('semantic_registrar_node started: front-side dual QR fusion mode')
+        self.get_logger().info(f'input_topic={self.input_topic}')
+        self.get_logger().info(f'semantic_map_path={self.semantic_map_path}')
+        self.get_logger().info(f'map_frame={self.map_frame}, robot_frame={self.robot_frame}')
+        self.get_logger().info(
+            'rule: L/front + C/side can jointly solve shelf center; C and L do not need same plane'
+        )
+
+    # ------------------------------------------------------------------
+    # Main callback
+    # ------------------------------------------------------------------
+
+    def obs_cb(self, obs: SemanticObservation):
+        if obs.obs_type not in ['column_qr', 'layer_qr']:
+            return
+
+        if not obs.shelf_id:
+            return
+
+        if not obs.has_pose:
+            self.get_logger().warn(f'ignore {obs.obs_type}: has_pose=false')
+            return
+
+        if float(obs.confidence) < self.min_confidence:
+            self.get_logger().warn(
+                f'ignore {obs.obs_type}: confidence={float(obs.confidence):.2f} too low'
+            )
+            return
+
+        if self.is_robot_moving_by_tf_for_semantic_update():
+            self.get_logger().info(
+                f'skip semantic shelf update while robot moving by TF: '
+                f'obs={obs.obs_type} shelf={obs.shelf_id} face={obs.face}',
+                throttle_duration_sec=1.0
+            )
+            return
+
+        pose_map = self.transform_pose_to_map(obs.pose)
+        if pose_map is None:
+            return
+
+        qr_x = float(pose_map.pose.position.x)
+        qr_y = float(pose_map.pose.position.y)
+
+        # Prefer fast single-QR normal based yaw.
+        # It compensates camera reverse mounting and pitch-down,
+        # then combines QR direction with current robot yaw in map.
+        obs_yaw = None
+        if bool(self.get_parameter('use_single_qr_normal_yaw').value):
+            obs_yaw = self.estimate_shelf_yaw_from_single_qr_normal(obs)
+
+        # Fallback to old pose quaternion yaw if normal-based yaw is unavailable.
+        if obs_yaw is None:
+            raw_yaw = self.quat_to_yaw(
+                pose_map.pose.orientation.x,
+                pose_map.pose.orientation.y,
+                pose_map.pose.orientation.z,
+                pose_map.pose.orientation.w,
+            )
+
+            nx = math.cos(raw_yaw)
+            ny = math.sin(raw_yaw)
+
+            # Make the observed QR plane normal face robot side.
+            nx, ny = self.ensure_normal_faces_robot(qr_x, qr_y, nx, ny)
+            obs_yaw = math.atan2(ny, nx)
+
+        stamp = self.stamp_to_float(obs.header.stamp)
+        if stamp <= 0.0:
+            stamp = self.get_clock().now().nanoseconds / 1e9
+
+        data = self.load_semantic_map()
+        shelf = self.ensure_shelf(data, obs.shelf_id)
+
+        if obs.obs_type == 'layer_qr':
+            self.update_layer_anchor(shelf, obs, qr_x, qr_y, obs_yaw, stamp)
+            self.recompute_best_shelf_pose(
+                shelf=shelf,
+                new_obs_type='layer_qr',
+                new_obs_yaw=obs_yaw,
+                stamp=stamp,
+                confidence=float(obs.confidence)
+            )
+            self.save_semantic_map(data)
+
+            cur = shelf.get('current_map_pose', {})
+            self.get_logger().info(
+                f'updated shelf semantic shelf={obs.shelf_id} '
+                f'obs=layer_qr face={obs.face} layer={obs.layer_id} '
+                f'qr=({qr_x:.2f},{qr_y:.2f}) '
+                f'pose=({cur.get("x", 0.0):.2f},{cur.get("y", 0.0):.2f},'
+                f'{cur.get("yaw", 0.0):.2f}) '
+                f'source={cur.get("source", "")}'
+            )
+            return
+
+        if obs.obs_type == 'column_qr':
+            self.update_column_anchor(shelf, obs, qr_x, qr_y, obs_yaw, stamp)
+            self.recompute_best_shelf_pose(
+                shelf=shelf,
+                new_obs_type='column_qr',
+                new_obs_yaw=obs_yaw,
+                stamp=stamp,
+                confidence=float(obs.confidence)
+            )
+            self.save_semantic_map(data)
+
+            cur = shelf.get('current_map_pose', {})
+            if cur.get('valid', False):
+                self.get_logger().info(
+                    f'updated shelf semantic shelf={obs.shelf_id} '
+                    f'obs=column_qr face={obs.face} column={obs.column_id} '
+                    f'qr=({qr_x:.2f},{qr_y:.2f}) '
+                    f'pose=({cur.get("x", 0.0):.2f},{cur.get("y", 0.0):.2f},'
+                    f'{cur.get("yaw", 0.0):.2f}) '
+                    f'source={cur.get("source", "")}'
+                )
+            else:
+                self.get_logger().info(
+                    f'updated side column anchor only shelf={obs.shelf_id} '
+                    f'column={obs.column_id} qr=({qr_x:.2f},{qr_y:.2f}) '
+                    f'source=column_qr_side_anchor_only'
+                )
+            return
+
+    # ------------------------------------------------------------------
+    # Semantic map IO
+    # ------------------------------------------------------------------
+
+    def load_semantic_map(self):
+        if not self.semantic_map_path.exists():
+            return {
+                'version': 4,
+                'semantic_mode': 'front_side_dual_qr_fusion',
+                'shelves': {}
+            }
+
+        try:
+            return json.loads(self.semantic_map_path.read_text())
+        except Exception as exc:
+            self.get_logger().warn(f'failed to read semantic map, recreate: {repr(exc)}')
+            return {
+                'version': 4,
+                'semantic_mode': 'front_side_dual_qr_fusion',
+                'shelves': {}
+            }
+
+    def save_semantic_map(self, data):
+        data['version'] = 4
+        data['semantic_mode'] = 'front_side_dual_qr_fusion'
+
+        tmp = self.semantic_map_path.with_suffix('.tmp')
+        tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+        tmp.replace(self.semantic_map_path)
+
+    def ensure_shelf(self, data, shelf_id):
+        shelves = data.setdefault('shelves', {})
+
+        if shelf_id not in shelves:
+            shelves[shelf_id] = {
+                'shelf_id': shelf_id,
+
+                'front_anchor': {
+                    'seen': False
+                },
+
+                'column_anchor': {
+                    'seen': False
+                },
+
+                'side_column_anchors': {},
+
+                'layers': {},
+
+                'column_id': '',
+                'col': 0,
+
+                'current_map_pose': {
+                    'valid': False
+                },
+
+                'approach_pose': {
+                    'valid': False
+                },
+
+                'geometry': {
+                    'width': self.shelf_width,
+                    'depth': self.shelf_depth,
+                    'height': self.shelf_height,
+                    'source': 'nominal_size'
+                },
+
+                'calibration': self.get_calibration_dict(),
+
+                'confidence': 0.0,
+                'status': 'new',
+                'last_seen': 0.0
+            }
+
+        return shelves[shelf_id]
+
+    def get_calibration_dict(self):
+        return {
+            'shelf_width': self.shelf_width,
+            'shelf_depth': self.shelf_depth,
+            'face_to_center_offset': self.face_to_center_offset,
+            'front_label_lateral_offset': self.front_label_lateral_offset,
+            'side_label_width_offset': self.side_label_width_offset,
+            'side_label_front_offset': self.side_label_front_offset,
+            'column_side_yaw_offset_deg': math.degrees(self.column_side_yaw_offset),
+            'approach_distance': self.approach_distance,
+            'allow_side_qr_create_candidate_pose': self.allow_side_qr_create_candidate_pose
+        }
+
+    # ------------------------------------------------------------------
+    # Anchor updates
+    # ------------------------------------------------------------------
+
+    def update_layer_anchor(self, shelf, obs, x, y, yaw, stamp):
+        row = int(obs.row) if int(obs.row) > 0 else self.parse_layer_id(obs.layer_id)
+
+        layer_anchor = {
+            'seen': True,
+            'layer_id': obs.layer_id,
+            'row': row,
+            'x': x,
+            'y': y,
+            'normal_x': math.cos(yaw),
+            'normal_y': math.sin(yaw),
+            'yaw': yaw,
+            'stamp': stamp,
+            'confidence': float(obs.confidence),
+            'face': 'front',
+            'source': 'layer_qr_front_face'
+        }
+
+        shelf.setdefault('layers', {})[obs.layer_id] = layer_anchor
+
+        # Latest front layer anchor is authoritative for shelf front normal.
+        shelf['front_anchor'] = {
+            'seen': True,
+            'layer_id': obs.layer_id,
+            'row': row,
+            'x': x,
+            'y': y,
+            'normal_x': math.cos(yaw),
+            'normal_y': math.sin(yaw),
+            'yaw': yaw,
+            'stamp': stamp,
+            'confidence': float(obs.confidence),
+            'source': 'layer_qr_front_face'
+        }
+
+        shelf['last_seen'] = stamp
+
+    def update_column_anchor(self, shelf, obs, x, y, yaw, stamp):
+        col = int(obs.col) if int(obs.col) > 0 else self.parse_col_id(obs.column_id)
+
+        side_anchor = {
+            'seen': True,
+            'column_id': obs.column_id,
+            'col': col,
+            'x': x,
+            'y': y,
+
+            # Side face outward normal.
+            'side_normal_x': math.cos(yaw),
+            'side_normal_y': math.sin(yaw),
+            'side_yaw': yaw,
+
+            # Candidate front normal from side normal.
+            'front_yaw_candidate': self.side_yaw_to_front_candidate(yaw),
+
+            'stamp': stamp,
+            'confidence': float(obs.confidence),
+            'face': 'side',
+            'source': 'column_qr_side_face'
+        }
+
+        shelf['column_id'] = obs.column_id
+        shelf['col'] = col
+        shelf['column_anchor'] = side_anchor
+        shelf.setdefault('side_column_anchors', {})[obs.column_id] = side_anchor
+        shelf['last_seen'] = stamp
+
+    # ------------------------------------------------------------------
+    # Fusion
+    # ------------------------------------------------------------------
+
+    def is_front_observation(self, obs_type, face):
+        """
+        Decide whether the current QR observation belongs to the shelf front face.
+
+        Rules:
+          - layer_qr / row_qr are front-face anchors by definition.
+          - face == front is front-face anchor.
+          - column_qr is NOT front unless face is explicitly front.
+        """
+        obs_type = str(obs_type or '').strip().lower()
+        face = str(face or '').strip().lower()
+
+        if face == 'front':
+            return True
+
+        if obs_type in ['layer_qr', 'row_qr', 'front_qr']:
+            return True
+
+        return False
+
+    def is_side_observation(self, obs_type, face):
+        """
+        Decide whether the current QR observation belongs to shelf side/column face.
+        """
+        obs_type = str(obs_type or '').strip().lower()
+        face = str(face or '').strip().lower()
+
+        if face in ['left', 'right', 'side', 'column']:
+            return True
+
+        if obs_type in ['column_qr', 'side_qr', 'left_side_qr', 'right_side_qr', 'side_qr_left', 'side_qr_right']:
+            return True
+
+        return False
+
+    def face_type_to_front_yaw(self, obs_yaw, obs_type, face):
+        """
+        Convert observed QR face yaw to shelf front yaw.
+
+        obs_yaw is the yaw of the observed QR face normal in map.
+        For front QR, front yaw is obs_yaw.
+        For side QR, rotate ±90 deg according to side face.
+        """
+        obs_type = str(obs_type or '').strip().lower()
+        face = str(face or '').strip().lower()
+
+        front_offset = math.radians(float(self.get_parameter('front_qr_yaw_offset_deg').value))
+        front_layer_to_normal_offset = math.radians(
+            float(self.get_parameter('front_layer_qr_to_normal_offset_deg').value)
+        )
+        right_offset = math.radians(float(self.get_parameter('right_side_qr_yaw_offset_deg').value))
+        left_offset = math.radians(float(self.get_parameter('left_side_qr_yaw_offset_deg').value))
+
+        if self.is_front_observation(obs_type, face):
+            # Front layer QR is mounted on the shelf front face.
+            # The bridge already reports obs_yaw as the shelf front outward normal.
+            # Do not rotate it by +/-90 here, otherwise front becomes side.
+            return self.normalize_angle(obs_yaw + front_offset)
+
+        if face == 'right' or obs_type in ['right_side_qr', 'side_qr_right']:
+            return self.normalize_angle(obs_yaw + right_offset)
+
+        if face == 'left' or obs_type in ['left_side_qr', 'side_qr_left']:
+            return self.normalize_angle(obs_yaw + left_offset)
+
+        # Generic column QR: default side-to-front conversion.
+        # If this is wrong in your physical setup, tune right_side_qr_yaw_offset_deg.
+        if self.is_side_observation(obs_type, face):
+            return self.normalize_angle(obs_yaw + right_offset)
+
+        return self.normalize_angle(obs_yaw + front_offset)
+
+
+    def recompute_best_shelf_pose(self, shelf, new_obs_type, new_obs_yaw, stamp, confidence):
+        old_pose = shelf.get('current_map_pose', {})
+        old_valid = bool(old_pose.get('valid', False))
+        old_yaw = float(old_pose.get('yaw', new_obs_yaw)) if old_valid else new_obs_yaw
+
+        # Front/layer QR is authoritative for current moving shelf pose.
+        if self.has_front_anchor(shelf):
+            front_yaw_meas = float(shelf['front_anchor'].get('yaw', new_obs_yaw))
+            front_yaw = self.guard_and_smooth_yaw(old_yaw, front_yaw_meas, old_valid)
+
+            cx, cy = self.estimate_shelf_center_from_front_anchor(shelf, front_yaw)
+
+            self.write_shelf_pose(
+                shelf=shelf,
+                cx=cx,
+                cy=cy,
+                front_yaw=front_yaw,
+                stamp=stamp,
+                source='front_layer_qr_realign',
+                confidence=confidence,
+                status='active_front_realign'
+            )
+            return
+
+        # Side/column QR should not create a final shelf pose by itself in moving-shelf mode.
+        # It is only stored as an auxiliary anchor. This prevents C3 from drawing a vertical shelf.
+        if self.has_side_anchor(shelf):
+            shelf['status'] = 'side_anchor_only_no_pose'
+            shelf['last_seen'] = stamp
+            self.get_logger().warn(
+                f'side/column anchor observed but no front anchor yet; '
+                f'not creating shelf pose from side alone. obs_type={new_obs_type}'
+            )
+            return
+
+        shelf['status'] = 'partial_anchor_only'
+        shelf['last_seen'] = stamp
+
+
+    def estimate_shelf_center_from_front_anchor(self, shelf, front_yaw):
+        front = shelf.get('front_anchor', {})
+        qx = float(front.get('x', 0.0))
+        qy = float(front.get('y', 0.0))
+
+        back_offset = float(self.get_parameter('front_qr_back_offset_m').value)
+        lateral_offset = float(self.get_parameter('front_qr_lateral_offset_m').value)
+
+        # front_yaw is shelf front outward normal.
+        # Back into shelf is front_yaw + pi.
+        bx = math.cos(front_yaw + math.pi)
+        by = math.sin(front_yaw + math.pi)
+
+        # Tangent along shelf face.
+        tx = -math.sin(front_yaw)
+        ty = math.cos(front_yaw)
+
+        cx = qx + back_offset * bx + lateral_offset * tx
+        cy = qy + back_offset * by + lateral_offset * ty
+
+        return cx, cy
+
+
+    def estimate_shelf_center_from_side_anchor(self, shelf, side_yaw, front_yaw):
+        side = shelf.get('column_anchor', {})
+        sx = float(side.get('x', 0.0))
+        sy = float(side.get('y', 0.0))
+
+        snx = math.cos(side_yaw)
+        sny = math.sin(side_yaw)
+
+        fnx = math.cos(front_yaw)
+        fny = math.sin(front_yaw)
+
+        # Side QR is on side face.
+        # Move inward from side face to center, and from front-side tag position to body center.
+        cx = sx - snx * self.side_label_width_offset - fnx * self.side_label_front_offset
+        cy = sy - sny * self.side_label_width_offset - fny * self.side_label_front_offset
+
+        return cx, cy
+
+    def estimate_shelf_center_from_front_and_side(self, shelf, front_yaw):
+        """
+        Use both front layer QR and side column QR.
+
+        We solve two line constraints in 2D:
+
+          n_front · O = n_front · P_front - face_to_center_offset
+          n_side  · O = n_side  · P_side  - side_label_width_offset
+
+        This works even when L QR and C QR are on different planes.
+        """
+
+        if not self.has_front_anchor(shelf):
+            return None
+
+        if not self.has_side_anchor(shelf):
+            return None
+
+        front = shelf.get('front_anchor', {})
+        side = shelf.get('column_anchor', {})
+
+        fx = float(front.get('x', 0.0))
+        fy = float(front.get('y', 0.0))
+
+        sx = float(side.get('x', 0.0))
+        sy = float(side.get('y', 0.0))
+
+        nf_x = math.cos(front_yaw)
+        nf_y = math.sin(front_yaw)
+
+        ns_x = float(side.get('side_normal_x', 0.0))
+        ns_y = float(side.get('side_normal_y', 0.0))
+
+        ns_len = math.hypot(ns_x, ns_y)
+        if ns_len < 1e-6:
+            return None
+
+        ns_x /= ns_len
+        ns_y /= ns_len
+
+        b1 = nf_x * fx + nf_y * fy - self.face_to_center_offset
+        b2 = ns_x * sx + ns_y * sy - self.side_label_width_offset
+
+        det = nf_x * ns_y - nf_y * ns_x
+
+        if abs(det) < 1e-4:
+            self.get_logger().warn(
+                'front/side QR normals nearly parallel; fallback to front-only pose'
+            )
+            return None
+
+        cx = (b1 * ns_y - nf_y * b2) / det
+        cy = (nf_x * b2 - b1 * ns_x) / det
+
+        return cx, cy
+
+    def write_shelf_pose(self, shelf, cx, cy, front_yaw, stamp, source, confidence, status):
+        nx = math.cos(front_yaw)
+        ny = math.sin(front_yaw)
+
+        approach_x = cx + self.approach_distance * nx
+        approach_y = cy + self.approach_distance * ny
+        approach_yaw = self.normalize_angle(front_yaw + math.pi)
+
+        shelf['current_map_pose'] = {
+            'valid': True,
+            'x': cx,
+            'y': cy,
+            'yaw': front_yaw,
+            'stamp': stamp,
+            'source': source,
+            'fusion': {
+                'has_front_anchor': self.has_front_anchor(shelf),
+                'has_side_column_anchor': self.has_side_anchor(shelf),
+                'dual_qr_intersection': source == 'front_side_qr_intersection',
+                'created_from_side_column_qr': source == 'side_column_qr_candidate',
+                'yaw_guarded': True
+            }
+        }
+
+        shelf['approach_pose'] = {
+            'valid': True,
+            'x': approach_x,
+            'y': approach_y,
+            'yaw': approach_yaw,
+            'distance': self.approach_distance,
+            'source': source
+        }
+
+        shelf['geometry'] = {
+            'width': self.shelf_width,
+            'depth': self.shelf_depth,
+            'height': self.shelf_height,
+            'source': 'nominal_size'
+        }
+
+        shelf['calibration'] = self.get_calibration_dict()
+        shelf['confidence'] = max(float(confidence), float(shelf.get('confidence', 0.0)))
+        shelf['status'] = status
+        shelf['last_seen'] = stamp
+
+    # ------------------------------------------------------------------
+    # Query helpers
+    # ------------------------------------------------------------------
+
+    def has_front_anchor(self, shelf):
+        return bool(shelf.get('front_anchor', {}).get('seen', False))
+
+    def has_side_anchor(self, shelf):
+        return bool(shelf.get('column_anchor', {}).get('seen', False))
+
+    def side_yaw_to_front_candidate(self, side_yaw):
+        return self.normalize_angle(side_yaw + self.column_side_yaw_offset)
+
+    # ------------------------------------------------------------------
+    # Yaw guard
+    # ------------------------------------------------------------------
+
+    def guard_and_smooth_yaw(self, old_yaw, new_yaw, old_valid):
+        if not old_valid:
+            return self.normalize_angle(new_yaw)
+
+        diff = self.yaw_diff_abs(old_yaw, new_yaw)
+
+        if diff > self.max_yaw_jump:
+            self.get_logger().warn(
+                f'reject yaw jump old={old_yaw:.3f}, '
+                f'new={new_yaw:.3f}, diff_deg={math.degrees(diff):.1f}'
+            )
+            return self.normalize_angle(old_yaw)
+
+        alpha = self.yaw_smooth_alpha
+
+        ox = math.cos(old_yaw)
+        oy = math.sin(old_yaw)
+        nx = math.cos(new_yaw)
+        ny = math.sin(new_yaw)
+
+        sx = (1.0 - alpha) * ox + alpha * nx
+        sy = (1.0 - alpha) * oy + alpha * ny
+
+        if abs(sx) < 1e-9 and abs(sy) < 1e-9:
+            return self.normalize_angle(new_yaw)
+
+        return math.atan2(sy, sx)
+
+    # ------------------------------------------------------------------
+    # TF
+    # ------------------------------------------------------------------
+
+    def now_sec(self):
+        return self.get_clock().now().nanoseconds / 1e9
+
+    def get_string_list_parameter(self, name, fallback):
+        try:
+            value = self.get_parameter(name).value
+            if value is None:
+                return list(fallback)
+            if isinstance(value, (list, tuple)):
+                return [str(x) for x in value]
+            if isinstance(value, str):
+                return [x.strip() for x in value.split(',') if x.strip()]
+            return list(fallback)
+        except Exception:
+            return list(fallback)
+
+    def lookup_robot_motion_pose(self, reference_frame):
+        base_candidates = self.get_string_list_parameter(
+            'motion_tf_base_frame_candidates',
+            ['base_link', 'base_footprint']
+        )
+
+        robot_frame = str(self.robot_frame)
+        if robot_frame and robot_frame not in base_candidates:
+            base_candidates = [robot_frame] + base_candidates
+
+        timeout = float(self.get_parameter('motion_tf_lookup_timeout_sec').value)
+
+        for base_frame in base_candidates:
+            try:
+                tf = self.tf_buffer.lookup_transform(
+                    str(reference_frame),
+                    str(base_frame),
+                    Time(),
+                    timeout=rclpy.duration.Duration(seconds=timeout),
+                )
+
+                q = tf.transform.rotation
+                yaw = self.quat_to_yaw(q.x, q.y, q.z, q.w)
+
+                return {
+                    'reference_frame': str(reference_frame),
+                    'base_frame': str(base_frame),
+                    'x': float(tf.transform.translation.x),
+                    'y': float(tf.transform.translation.y),
+                    'yaw': float(yaw),
+                    't': self.now_sec(),
+                }
+            except Exception:
+                continue
+
+        return None
+
+    def tf_pose_delta(self, a, b):
+        dx = float(a['x']) - float(b['x'])
+        dy = float(a['y']) - float(b['y'])
+        dyaw = self.normalize_angle(float(a['yaw']) - float(b['yaw']))
+        return math.hypot(dx, dy), abs(dyaw)
+
+    def apply_tf_deadband(self, dist, yaw_abs):
+        pos_deadband = float(self.get_parameter('motion_tf_position_deadband_m').value)
+        yaw_deadband = math.radians(
+            float(self.get_parameter('motion_tf_yaw_deadband_deg').value)
+        )
+
+        eff_dist = max(0.0, float(dist) - pos_deadband)
+        eff_yaw = max(0.0, float(yaw_abs) - yaw_deadband)
+        return eff_dist, eff_yaw
+
+    def update_motion_from_tf_reference(self, reference_frame):
+        """
+        Sliding-window TF motion detector.
+
+        Important:
+          - It does NOT use infinite accumulated odom/map drift.
+          - It only checks recent movement inside motion_tf_window_sec.
+          - This avoids false freezing when the robot is static but odom slowly drifts.
+          - It still detects slow pushing because recent window delta / speed changes.
+        """
+        pose = self.lookup_robot_motion_pose(reference_frame)
+        if pose is None:
+            return False
+
+        key = f"{pose['reference_frame']}->{pose['base_frame']}"
+        now = float(pose['t'])
+
+        sample_min_dt = float(self.get_parameter('motion_tf_sample_min_dt_sec').value)
+
+        last = self.motion_tf_last_poses.get(key)
+        if last is not None:
+            dt_last = now - float(last.get('t', now))
+            if dt_last < sample_min_dt:
+                return bool(self.motion_tf_current_moving)
+
+        self.motion_tf_last_poses[key] = pose
+
+        if not hasattr(self, 'motion_tf_pose_windows'):
+            self.motion_tf_pose_windows = {}
+
+        window = self.motion_tf_pose_windows.get(key, [])
+        window.append(pose)
+
+        window_sec = float(self.get_parameter('motion_tf_window_sec').value)
+        window = [x for x in window if now - float(x.get('t', now)) <= window_sec]
+
+        # Keep at least one pose.
+        if not window:
+            window = [pose]
+
+        self.motion_tf_pose_windows[key] = window
+
+        if len(window) < 2:
+            self.motion_tf_moving_votes[key] = 0
+            self.motion_tf_still_votes[key] = int(self.motion_tf_still_votes.get(key, 0)) + 1
+            return bool(self.motion_tf_current_moving)
+
+        oldest = window[0]
+
+        # Recent window delta.
+        win_dist, win_yaw = self.tf_pose_delta(pose, oldest)
+        eff_win_dist, eff_win_yaw = self.apply_tf_deadband(win_dist, win_yaw)
+
+        win_dt = max(now - float(oldest.get('t', now)), 1e-3)
+        win_linear_speed = eff_win_dist / win_dt
+        win_angular_speed = eff_win_yaw / win_dt
+
+        # Step delta from previous accepted sample.
+        step_dist = 0.0
+        step_yaw = 0.0
+        step_linear_speed = 0.0
+        step_angular_speed = 0.0
+
+        if len(window) >= 2:
+            prev = window[-2]
+            dt = max(now - float(prev.get('t', now)), 1e-3)
+            step_dist, step_yaw = self.tf_pose_delta(pose, prev)
+            eff_step_dist, eff_step_yaw = self.apply_tf_deadband(step_dist, step_yaw)
+            step_linear_speed = eff_step_dist / dt
+            step_angular_speed = eff_step_yaw / dt
+
+        delta_th = float(self.get_parameter('motion_tf_linear_delta_threshold_m').value)
+        yaw_delta_th = math.radians(
+            float(self.get_parameter('motion_tf_yaw_delta_threshold_deg').value)
+        )
+        linear_speed_th = float(self.get_parameter('motion_tf_linear_speed_threshold_mps').value)
+        angular_speed_th = float(self.get_parameter('motion_tf_angular_speed_threshold_radps').value)
+
+        candidate_moving = (
+            eff_win_dist > delta_th or
+            eff_win_yaw > yaw_delta_th or
+            win_linear_speed > linear_speed_th or
+            win_angular_speed > angular_speed_th or
+            step_linear_speed > linear_speed_th or
+            step_angular_speed > angular_speed_th
+        )
+
+        confirm_count = int(self.get_parameter('motion_tf_confirm_count').value)
+        release_count = int(self.get_parameter('motion_tf_release_count').value)
+
+        if candidate_moving:
+            self.motion_tf_moving_votes[key] = int(self.motion_tf_moving_votes.get(key, 0)) + 1
+            self.motion_tf_still_votes[key] = 0
+
+            if self.motion_tf_moving_votes[key] >= max(1, confirm_count):
+                self.motion_tf_current_moving = True
+                self.motion_tf_last_motion_time = now
+                self.get_logger().info(
+                    f'TF window motion confirmed ref={pose["reference_frame"]}, base={pose["base_frame"]}, '
+                    f'win_dist={win_dist:.3f}m, win_yaw={math.degrees(win_yaw):.1f}deg, '
+                    f'eff_win_dist={eff_win_dist:.3f}m, eff_win_yaw={math.degrees(eff_win_yaw):.1f}deg, '
+                    f'win_v={win_linear_speed:.3f}m/s, win_wz={win_angular_speed:.3f}rad/s, '
+                    f'step_v={step_linear_speed:.3f}m/s, step_wz={step_angular_speed:.3f}rad/s',
+                    throttle_duration_sec=1.0
+                )
+                return True
+
+            return bool(self.motion_tf_current_moving)
+
+        # No movement candidate in recent window.
+        self.motion_tf_moving_votes[key] = 0
+        self.motion_tf_still_votes[key] = int(self.motion_tf_still_votes.get(key, 0)) + 1
+
+        if self.motion_tf_current_moving:
+            settle_time = float(self.get_parameter('motion_tf_settle_time_sec').value)
+            enough_still_samples = self.motion_tf_still_votes[key] >= max(1, release_count)
+            enough_settle_time = (now - float(self.motion_tf_last_motion_time)) >= settle_time
+
+            if enough_still_samples and enough_settle_time:
+                self.motion_tf_current_moving = False
+                # Reset windows so old motion cannot keep freezing.
+                self.motion_tf_pose_windows = {}
+                self.motion_tf_last_poses = {}
+                self.motion_tf_moving_votes = {}
+                self.motion_tf_still_votes = {}
+                self.get_logger().info(
+                    'TF motion freeze released; sliding windows reset',
+                    throttle_duration_sec=1.0
+                )
+                return False
+
+        return bool(self.motion_tf_current_moving)
+
+    def is_robot_moving_by_tf_for_semantic_update(self):
+        if not bool(self.get_parameter('freeze_update_when_robot_tf_moving').value):
+            return False
+
+        reference_frames = self.get_string_list_parameter(
+            'motion_tf_reference_frames',
+            ['odom', 'map']
+        )
+
+        moving = False
+        for ref in reference_frames:
+            if self.update_motion_from_tf_reference(ref):
+                moving = True
+
+        return moving
+
+    def transform_pose_to_map(self, pose_stamped):
+        if not pose_stamped.header.frame_id:
+            self.get_logger().warn('pose header.frame_id empty')
+            return None
+
+        if pose_stamped.header.frame_id == self.map_frame:
+            return pose_stamped
+
+        try:
+            tf = self.tf_buffer.lookup_transform(
+                self.map_frame,
+                pose_stamped.header.frame_id,
+                Time(),
+                timeout=rclpy.duration.Duration(seconds=self.tf_timeout_sec),
+            )
+
+            return self.manual_transform_pose_stamped(pose_stamped, tf)
+
+        except Exception as exc:
+            self.get_logger().warn(
+                f'failed TF {pose_stamped.header.frame_id}->{self.map_frame}: {repr(exc)}'
+            )
+            return None
+
+    def manual_transform_pose_stamped(self, pose_stamped, tf):
+        out = PoseStamped()
+        out.header.stamp = self.get_clock().now().to_msg()
+        out.header.frame_id = tf.header.frame_id
+
+        tq = tf.transform.rotation
+        q_tf = (tq.x, tq.y, tq.z, tq.w)
+
+        px = pose_stamped.pose.position.x
+        py = pose_stamped.pose.position.y
+        pz = pose_stamped.pose.position.z
+
+        rx, ry, rz = self.rotate_vector_by_quat((px, py, pz), q_tf)
+
+        out.pose.position.x = tf.transform.translation.x + rx
+        out.pose.position.y = tf.transform.translation.y + ry
+        out.pose.position.z = tf.transform.translation.z + rz
+
+        pq = pose_stamped.pose.orientation
+        q_pose = (pq.x, pq.y, pq.z, pq.w)
+        q_out = self.quat_multiply(q_tf, q_pose)
+
+        out.pose.orientation.x = q_out[0]
+        out.pose.orientation.y = q_out[1]
+        out.pose.orientation.z = q_out[2]
+        out.pose.orientation.w = q_out[3]
+
+        return out
+
+    def lookup_robot_pose(self):
+        try:
+            tf = self.tf_buffer.lookup_transform(
+                self.map_frame,
+                self.robot_frame,
+                Time(),
+                timeout=rclpy.duration.Duration(seconds=0.2),
+            )
+
+            q = tf.transform.rotation
+            yaw = self.quat_to_yaw(q.x, q.y, q.z, q.w)
+
+            return float(tf.transform.translation.x), float(tf.transform.translation.y), yaw
+
+        except Exception:
+            return None
+
+    def ensure_normal_faces_robot(self, x, y, nx, ny):
+        robot_pose = self.lookup_robot_pose()
+        if robot_pose is None:
+            return nx, ny
+
+        rx, ry, _ = robot_pose
+
+        vx = rx - x
+        vy = ry - y
+
+        if nx * vx + ny * vy < 0.0:
+            nx = -nx
+            ny = -ny
+
+        return nx, ny
+
+
+    # ------------------------------------------------------------------
+    # Fast single QR normal yaw estimation
+    # ------------------------------------------------------------------
+
+    def rotate_x(self, x, y, z, roll):
+        c = math.cos(roll)
+        ss = math.sin(roll)
+        return x, c * y - ss * z, ss * y + c * z
+
+    def rotate_y(self, x, y, z, pitch):
+        c = math.cos(pitch)
+        ss = math.sin(pitch)
+        return c * x + ss * z, y, -ss * x + c * z
+
+    def rotate_z(self, x, y, z, yaw):
+        c = math.cos(yaw)
+        ss = math.sin(yaw)
+        return c * x - ss * y, ss * x + c * y, z
+
+    def get_pose_normal_axis_vector(self):
+        axis = str(self.get_parameter('qr_pose_normal_axis').value).strip().lower()
+
+        if axis == 'x':
+            return 1.0, 0.0, 0.0
+        if axis == '-x':
+            return -1.0, 0.0, 0.0
+        if axis == 'y':
+            return 0.0, 1.0, 0.0
+        if axis == '-y':
+            return 0.0, -1.0, 0.0
+        if axis == 'z':
+            return 0.0, 0.0, 1.0
+        if axis == '-z':
+            return 0.0, 0.0, -1.0
+
+        self.get_logger().warn(f'unknown qr_pose_normal_axis="{axis}", fallback to x')
+        return 1.0, 0.0, 0.0
+
+    def get_qr_normal_from_observation(self, obs):
+        """
+        Return QR plane normal in observation/camera frame.
+
+        Priority:
+          1. obs.normal.x/y/z if message provides it
+          2. obs.normal_x/y/z if message provides it
+          3. derive from obs.pose.pose.orientation and qr_pose_normal_axis
+        """
+
+        if hasattr(obs, 'normal'):
+            n = getattr(obs, 'normal')
+            if all(hasattr(n, k) for k in ('x', 'y', 'z')):
+                return float(n.x), float(n.y), float(n.z)
+
+        if all(hasattr(obs, k) for k in ('normal_x', 'normal_y', 'normal_z')):
+            return float(obs.normal_x), float(obs.normal_y), float(obs.normal_z)
+
+        try:
+            q = obs.pose.pose.orientation
+            local_axis = self.get_pose_normal_axis_vector()
+            nx, ny, nz = self.rotate_vector_by_quat(
+                local_axis,
+                (q.x, q.y, q.z, q.w)
+            )
+            return float(nx), float(ny), float(nz)
+        except Exception as e:
+            self.get_logger().warn(
+                f'failed to derive QR normal from observation pose: {repr(e)}'
+            )
+            return None
+
+    def estimate_shelf_yaw_from_single_qr_normal(self, obs):
+        """
+        Fast estimate shelf front yaw from ONE observed QR.
+
+        Your robot convention:
+          base_link:
+            x+ = robot forward / forward-backward motion axis
+            y+ = lateral axis
+            z+ = up
+
+          camera observation frame:
+            x+ = depth/front direction, roughly aligned with robot x+
+            y+ = lateral axis
+            z+ = vertical axis
+
+        Mount compensation:
+          camera_mount_roll_deg       : 180 deg for upside-down / reverse mounted camera
+          camera_mount_pitch_down_deg : 20 deg if camera looks downward
+          camera_mount_yaw_deg        : 0 if camera depth x+ points robot x+
+        """
+
+        normal = self.get_qr_normal_from_observation(obs)
+        if normal is None:
+            return None
+
+        nx, ny, nz = normal
+
+        yaw_mount = math.radians(float(self.get_parameter('camera_mount_yaw_deg').value))
+        pitch_down = math.radians(float(self.get_parameter('camera_mount_pitch_down_deg').value))
+        roll_mount = math.radians(float(self.get_parameter('camera_mount_roll_deg').value))
+
+        # Apply camera reverse mount / pitch / yaw compensation.
+        # Order: roll for upside-down mounting, pitch for downward view, yaw for front/back installation.
+        nx, ny, nz = self.rotate_x(nx, ny, nz, roll_mount)
+        nx, ny, nz = self.rotate_y(nx, ny, nz, pitch_down)
+        nx, ny, nz = self.rotate_z(nx, ny, nz, yaw_mount)
+
+        # If the observed plane normal points toward camera, invert it
+        # so that it represents shelf front outward normal.
+        if bool(self.get_parameter('normal_points_to_camera').value):
+            nx, ny, nz = -nx, -ny, -nz
+
+        horizontal_len = math.hypot(nx, ny)
+        if horizontal_len < 1e-6:
+            self.get_logger().warn(
+                'QR normal horizontal length too small after mount compensation: '
+                f'normal=({nx:.3f},{ny:.3f},{nz:.3f})'
+            )
+            return None
+
+        nx /= horizontal_len
+        ny /= horizontal_len
+
+        qr_yaw_base = math.atan2(ny, nx)
+
+        robot_pose = self.lookup_robot_pose()
+        if robot_pose is None:
+            self.get_logger().warn('failed to get robot pose for single QR yaw update')
+            return None
+
+        _, _, base_yaw = robot_pose
+        qr_yaw_map = base_yaw + qr_yaw_base
+
+        obs_type = str(getattr(obs, 'obs_type', 'layer_qr'))
+
+        front_offset = math.radians(float(self.get_parameter('front_qr_yaw_offset_deg').value))
+        right_offset = math.radians(float(self.get_parameter('right_side_qr_yaw_offset_deg').value))
+        left_offset = math.radians(float(self.get_parameter('left_side_qr_yaw_offset_deg').value))
+
+        if obs_type in ['layer_qr', 'front_qr', 'row_qr']:
+            shelf_yaw = qr_yaw_map + front_offset
+        elif obs_type in ['column_qr', 'right_side_qr', 'side_qr_right']:
+            shelf_yaw = qr_yaw_map + right_offset
+        elif obs_type in ['left_side_qr', 'side_qr_left']:
+            shelf_yaw = qr_yaw_map + left_offset
+        else:
+            shelf_yaw = qr_yaw_map + front_offset
+
+        shelf_yaw = self.normalize_angle(shelf_yaw)
+
+        self.get_logger().info(
+            'single QR shelf yaw update: '
+            f'obs_type={obs_type}, '
+            f'normal_raw=({normal[0]:.3f},{normal[1]:.3f},{normal[2]:.3f}), '
+            f'normal_base=({nx:.3f},{ny:.3f},{nz:.3f}), '
+            f'mount_yaw={math.degrees(yaw_mount):.1f}, '
+            f'pitch_down={math.degrees(pitch_down):.1f}, '
+            f'roll={math.degrees(roll_mount):.1f}, '
+            f'qr_yaw_base={math.degrees(qr_yaw_base):.1f}, '
+            f'base_yaw={math.degrees(base_yaw):.1f}, '
+            f'shelf_yaw={math.degrees(shelf_yaw):.1f}'
+        )
+
+        return shelf_yaw
+
+
+    # ------------------------------------------------------------------
+    # Math helpers
+    # ------------------------------------------------------------------
+
+    def quat_to_yaw(self, x, y, z, w):
+        siny_cosp = 2.0 * (w * z + x * y)
+        cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+        return math.atan2(siny_cosp, cosy_cosp)
+
+    def quat_multiply(self, q1, q2):
+        x1, y1, z1, w1 = q1
+        x2, y2, z2, w2 = q2
+
+        x = w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2
+        y = w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2
+        z = w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2
+        w = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2
+
+        return self.normalize_quat((x, y, z, w))
+
+    def normalize_quat(self, q):
+        x, y, z, w = q
+        n = math.sqrt(x * x + y * y + z * z + w * w)
+
+        if n < 1e-9:
+            return 0.0, 0.0, 0.0, 1.0
+
+        return x / n, y / n, z / n, w / n
+
+    def rotate_vector_by_quat(self, v, q):
+        x, y, z = v
+        qx, qy, qz, qw = self.normalize_quat(q)
+
+        tx = 2.0 * (qy * z - qz * y)
+        ty = 2.0 * (qz * x - qx * z)
+        tz = 2.0 * (qx * y - qy * x)
+
+        rx = x + qw * tx + (qy * tz - qz * ty)
+        ry = y + qw * ty + (qz * tx - qx * tz)
+        rz = z + qw * tz + (qx * ty - qy * tx)
+
+        return rx, ry, rz
+
+    def normalize_angle(self, a):
+        while a > math.pi:
+            a -= 2.0 * math.pi
+        while a < -math.pi:
+            a += 2.0 * math.pi
+        return a
+
+    def yaw_diff_abs(self, a, b):
+        return abs(self.normalize_angle(a - b))
+
+    def parse_col_id(self, column_id):
+        if not column_id:
+            return 0
+
+        try:
+            return int(str(column_id).replace('C', '').replace('c', ''))
+        except Exception:
+            return 0
+
+    def parse_layer_id(self, layer_id):
+        if not layer_id:
+            return 0
+
+        try:
+            return int(str(layer_id).replace('L', '').replace('l', ''))
+        except Exception:
+            return 0
+
+    def stamp_to_float(self, stamp):
+        try:
+            return float(stamp.sec) + float(stamp.nanosec) * 1e-9
+        except Exception:
+            return 0.0
+
+
+def main():
+    rclpy.init()
+    node = SemanticRegistrarNode()
+
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+
+    node.destroy_node()
+    rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
