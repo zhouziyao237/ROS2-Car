@@ -418,7 +418,7 @@ public:
                << " goal=(" << goal.x << "," << goal.y << ")"
                << " base=(" << bx << "," << by << ")";
 
-            if(dist < 0.18){
+            if(dist < 0.38){
                 if(stable_start_ <= 0.0){
                     stable_start_ = steady_seconds();
                 }
@@ -446,6 +446,53 @@ public:
 };
 
 class WaitNavSettle:public TimedAction{public:WaitNavSettle(const std::string&n,const BT::NodeConfiguration&c):TimedAction(n,c,"WaitNavSettle",3.0){}SIMPLE_PORTS};
+
+class StopBeforeOakAlign:public BT::StatefulActionNode{
+    double start_=0.0;
+public:
+    StopBeforeOakAlign(const std::string&n,const BT::NodeConfiguration&c):BT::StatefulActionNode(n,c){}
+    SIMPLE_PORTS
+
+    BT::NodeStatus onStart()override{
+        auto ctx=get_ctx(*this);
+        ctx->set_state("StopBeforeOakAlign");
+        start_=steady_seconds();
+
+        std_msgs::msg::String mode;
+        mode.data = "stop";
+        ctx->control_mode_pub->publish(mode);
+        publish_stop(ctx);
+
+        ctx->status("RUNNING","stop control before OAK align");
+        ctx->trace(name(),"RUNNING");
+        return BT::NodeStatus::RUNNING;
+    }
+
+    BT::NodeStatus onRunning()override{
+        auto ctx=get_ctx(*this);
+
+        publish_stop(ctx);
+
+        if(steady_seconds() - start_ >= 1.0){
+            std_msgs::msg::String mode;
+            mode.data = "auto";
+            ctx->control_mode_pub->publish(mode);
+
+            ctx->status("SUCCESS","stopped before OAK align, switch control back to auto");
+            ctx->trace(name(),"SUCCESS");
+            return BT::NodeStatus::SUCCESS;
+        }
+
+        return BT::NodeStatus::RUNNING;
+    }
+
+    void onHalted()override{
+        auto ctx=get_ctx(*this);
+        publish_stop(ctx);
+        ctx->trace(name(),"HALTED");
+    }
+};
+
 class WaitAfterOakAlign:public TimedAction{public:WaitAfterOakAlign(const std::string&n,const BT::NodeConfiguration&c):TimedAction(n,c,"WaitAfterOakAlign",1.5){}SIMPLE_PORTS};
 class SearchShelfQR:public TimedAction{public:SearchShelfQR(const std::string&n,const BT::NodeConfiguration&c):TimedAction(n,c,"SearchShelfQR",1.0){}SIMPLE_PORTS};
 class AlignToCell:public TimedAction{public:AlignToCell(const std::string&n,const BT::NodeConfiguration&c):TimedAction(n,c,"AlignToCell",1.0){}SIMPLE_PORTS};
@@ -741,7 +788,7 @@ class MissionNode:public rclcpp::Node{std::shared_ptr<SharedContext>ctx_;BT::Beh
   factory_.registerNodeType<EnterExploreMode>("EnterShelfExplorationMode");factory_.registerNodeType<SearchShelfReference>("SearchShelfReference");factory_.registerNodeType<DetectShelfAnchor>("DetectShelfAnchor");factory_.registerNodeType<EstimateShelfPoseFromAnchor>("EstimateShelfPoseFromAnchor");
   factory_.registerNodeType<EstimateShelfPoseFromAnchor>("EstimateShelfPoseFromShelfAnchor");factory_.registerNodeType<UpdateSemanticSessionPose>("UpdateSemanticSessionPose");
   factory_.registerNodeType<UpdateSemanticSessionPose>("UpdateSemanticShelfPose");factory_.registerNodeType<NavigateToShelf>("NavigateToShelf");
-  factory_.registerNodeType<NavigateToShelf>("NavigateToTargetShelf");factory_.registerNodeType<WaitNavArrive>("WaitNavArrive");factory_.registerNodeType<WaitNavSettle>("WaitNavSettle");factory_.registerNodeType<WaitAfterOakAlign>("WaitAfterOakAlign");
+  factory_.registerNodeType<NavigateToShelf>("NavigateToTargetShelf");factory_.registerNodeType<WaitNavArrive>("WaitNavArrive");factory_.registerNodeType<WaitNavSettle>("WaitNavSettle");factory_.registerNodeType<WaitAfterOakAlign>("WaitAfterOakAlign");factory_.registerNodeType<StopBeforeOakAlign>("StopBeforeOakAlign");
   factory_.registerNodeType<WaitNavArrive>("WaitShelfNavigationArrive");factory_.registerNodeType<VerifyShelfQR>("VerifyShelfQR");
   factory_.registerNodeType<VerifyShelfQR>("VerifyTargetShelfIdentity");factory_.registerNodeType<SearchShelfQR>("SearchShelfQR");
   factory_.registerNodeType<SearchShelfQR>("SearchTargetShelfIdentity");factory_.registerNodeType<AlignToCell>("AlignToCell");factory_.registerNodeType<AlignOakToTargetShelfFront>("AlignOakToTargetShelfFront");factory_.registerNodeType<ScanTargetPackageOnShelf>("ScanTargetPackageOnShelf");factory_.registerNodeType<RequestOakPackageSearchAlign>("RequestOakPackageSearchAlign");factory_.registerNodeType<SendPlatformTarget>("SendPlatformTarget");factory_.registerNodeType<WaitPickupDone>("WaitPickupDone");factory_.registerNodeType<PublishTaskDone>("PublishTaskDone");

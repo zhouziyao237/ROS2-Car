@@ -19,7 +19,6 @@
 
       <NavigateToShelf/>
       <WaitNavArrive/>
-      <!-- 等导航停止、速度归零、TF 稳定后再进入货架验证和 OAK 对正 -->
       <WaitNavSettle/>
 
       <Fallback name="VerifyShelfOrSearchQR">
