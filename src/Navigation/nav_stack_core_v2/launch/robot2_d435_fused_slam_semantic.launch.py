@@ -262,7 +262,7 @@ def generate_launch_description():
             'swap_xy': False,
             'invert_x': False,
             'invert_y': True,
-            'invert_z': False,
+            'invert_z': True,
 
             'debug_cmd': True,
             'debug_period': 0.5,

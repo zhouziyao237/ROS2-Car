@@ -37,10 +37,32 @@ class TaskCancelGuard(Node):
             "/unsmoothed_plan",
         ])
 
+        # 安全改动：
+        # 默认不再接受 /task/shelf_goal 里面的 cancel JSON。
+        # /task/shelf_goal 只应该放任务目标，取消只走 /task/cancel。
+        self.declare_parameter("allow_cancel_on_task_goal", False)
+
+        # 允许明确的 raw cancel 字符串，例如 "cancel"、"stop"。
+        # 空字符串和未知字符串不会再被当成 cancel。
+        self.declare_parameter("allow_raw_cancel", True)
+
         self.declare_parameter("cancel_repeat_sec", 2.5)
         self.declare_parameter("zero_vel_hz", 20.0)
         self.declare_parameter("clear_path_repeat_sec", 3.0)
         self.declare_parameter("clear_path_hz", 20.0)
+
+        # 只取消 Nav2 相关 action，不再全场扫描取消 camera calibration 等无关 action。
+        self.declare_parameter("cancel_action_services", [
+            "/navigate_to_pose/_action/cancel_goal",
+            "/navigate_through_poses/_action/cancel_goal",
+            "/follow_waypoints/_action/cancel_goal",
+            "/follow_path/_action/cancel_goal",
+            "/compute_path_to_pose/_action/cancel_goal",
+            "/compute_path_through_poses/_action/cancel_goal",
+            "/smooth_path/_action/cancel_goal",
+            "/backup/_action/cancel_goal",
+            "/wait/_action/cancel_goal",
+        ])
 
         self.goal_sub = self.create_subscription(
             String,
@@ -74,7 +96,8 @@ class TaskCancelGuard(Node):
         self.last_cancel_time = 0.0
 
         self.get_logger().info("task_cancel_guard_node started")
-        self.get_logger().info("Listening /task/cancel and cancel JSON on /task/shelf_goal")
+        self.get_logger().info("Listening explicit cancel on /task/cancel")
+        self.get_logger().info("Cancel JSON on /task/shelf_goal is ignored unless allow_cancel_on_task_goal=true")
 
     def parse_json(self, text: str):
         try:
@@ -93,22 +116,63 @@ class TaskCancelGuard(Node):
         return (
             task_type == "cancel"
             or command == "cancel"
-            or status == "cancel_requested"
+            or status in ["cancel_requested", "canceled", "cancelled"]
         )
+
+    def raw_cancel_payload(self, text: str):
+        raw = str(text).strip().lower()
+        if not raw:
+            return None
+
+        allowed = {
+            "cancel",
+            "c",
+            "stop",
+            "interrupt",
+            "operator_interrupt",
+            "emergency_stop",
+        }
+
+        if raw in allowed:
+            return {
+                "task_type": "cancel",
+                "command": "cancel",
+                "reason": raw,
+                "raw": raw,
+            }
+
+        return None
 
     def on_goal_or_cancel(self, msg: String):
         data = self.parse_json(msg.data)
+
         if self.is_cancel_payload(data):
-            self.handle_cancel(data, source="/task/shelf_goal")
+            if bool(self.get_parameter("allow_cancel_on_task_goal").value):
+                self.handle_cancel(data, source="/task/shelf_goal")
+            else:
+                self.get_logger().warn(
+                    "Ignored cancel-like payload on /task/shelf_goal. "
+                    "Use /task/cancel for cancel."
+                )
 
     def on_cancel(self, msg: String):
-        data = self.parse_json(msg.data)
-        if not data:
-            data = {
-                "task_type": "cancel",
-                "reason": "raw_cancel_message",
-            }
-        self.handle_cancel(data, source="/task/cancel")
+        text = msg.data
+        data = self.parse_json(text)
+
+        if data:
+            if self.is_cancel_payload(data):
+                self.handle_cancel(data, source="/task/cancel")
+            else:
+                self.get_logger().warn(f"Ignored non-cancel JSON on /task/cancel: {text}")
+            return
+
+        if bool(self.get_parameter("allow_raw_cancel").value):
+            raw_data = self.raw_cancel_payload(text)
+            if raw_data is not None:
+                self.handle_cancel(raw_data, source="/task/cancel")
+                return
+
+        self.get_logger().warn(f"Ignored invalid/raw non-cancel message on /task/cancel: {text!r}")
 
     def publish_status(self, state: str, status: str, message: str, extra=None):
         payload = {
@@ -165,43 +229,32 @@ class TaskCancelGuard(Node):
 
     def discover_cancel_services(self) -> List[str]:
         services = self.get_service_names_and_types()
-        candidates = []
+        available = set()
 
         for name, types in services:
             if name.endswith("/_action/cancel_goal"):
                 if "action_msgs/srv/CancelGoal" in types:
-                    candidates.append(name)
+                    available.add(name)
 
-        preferred = [
-            "/navigate_to_pose/_action/cancel_goal",
-            "/navigate_through_poses/_action/cancel_goal",
-            "/follow_waypoints/_action/cancel_goal",
-            "/follow_path/_action/cancel_goal",
-            "/compute_path_to_pose/_action/cancel_goal",
-            "/bt_navigator/_action/cancel_goal",
-        ]
+        configured = [str(x) for x in self.get_parameter("cancel_action_services").value]
 
         ordered = []
-        for p in preferred:
-            if p in candidates and p not in ordered:
-                ordered.append(p)
-
-        for c in candidates:
-            if c not in ordered:
-                ordered.append(c)
+        for name in configured:
+            if name in available and name not in ordered:
+                ordered.append(name)
 
         return ordered
 
     def call_cancel_service(self, service_name: str) -> bool:
         client = self.create_client(CancelGoal, service_name)
 
-        if not client.wait_for_service(timeout_sec=0.4):
+        if not client.wait_for_service(timeout_sec=0.25):
             self.get_logger().warn(f"cancel service not available: {service_name}")
             return False
 
         req = CancelGoal.Request()
         future = client.call_async(req)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=1.0)
+        rclpy.spin_until_future_complete(self, future, timeout_sec=0.5)
 
         if future.done() and future.result() is not None:
             self.get_logger().info(
@@ -216,11 +269,10 @@ class TaskCancelGuard(Node):
         services = self.discover_cancel_services()
 
         if not services:
-            self.get_logger().warn("no action cancel service found")
-            self.get_logger().warn("check with: ros2 service list | grep cancel_goal")
+            self.get_logger().warn("no configured Nav2 action cancel service found")
             return 0
 
-        self.get_logger().info("found action cancel services:")
+        self.get_logger().info("found Nav2 action cancel services:")
         for s in services:
             self.get_logger().info(f"  - {s}")
 
@@ -234,12 +286,12 @@ class TaskCancelGuard(Node):
     def clear_costmap(self, service_name: str) -> bool:
         client = self.create_client(ClearEntireCostmap, service_name)
 
-        if not client.wait_for_service(timeout_sec=0.3):
+        if not client.wait_for_service(timeout_sec=0.25):
             return False
 
         req = ClearEntireCostmap.Request()
         future = client.call_async(req)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=1.0)
+        rclpy.spin_until_future_complete(self, future, timeout_sec=0.5)
 
         return future.done() and future.result() is not None
 
@@ -268,7 +320,7 @@ class TaskCancelGuard(Node):
         self.canceling = True
         self.last_cancel_time = now
 
-        reason = data.get("reason", "operator_interrupt")
+        reason = str(data.get("reason", "operator_interrupt"))
 
         self.publish_status(
             state="TASK_CANCELING",

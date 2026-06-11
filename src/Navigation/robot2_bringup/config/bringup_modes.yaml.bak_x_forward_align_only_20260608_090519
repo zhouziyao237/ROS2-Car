@@ -130,7 +130,7 @@ modules:
       swap_xy: true
       invert_x: true
       invert_y: false
-      invert_z: false
+      invert_z: true
       deadband_linear: 0.0
       deadband_angular: 0.0
       debug_log: true

@@ -1,0 +1,648 @@
+modules:
+  robot_description:
+    type: node
+    package: robot_state_publisher
+    executable: robot_state_publisher
+    name: robot_state_publisher
+    output: screen
+    delay: 0.0
+    parameters:
+    - use_sim_time: false
+      robot_description: $(file /host-home/src/Diverse/robot2/urdf/robot2.urdf)
+  joint_state_publisher:
+    type: node
+    package: joint_state_publisher
+    executable: joint_state_publisher
+    name: joint_state_publisher
+    output: screen
+    delay: 0.2
+    parameters:
+    - use_sim_time: false
+      rate: 30
+      robot_description: $(file /host-home/src/Diverse/robot2/urdf/robot2.urdf)
+  lidar:
+    type: node
+    package: lslidar_driver
+    executable: lslidar_driver_node
+    name: lslidar_driver_node
+    output: screen
+    delay: 0.5
+    respawn: true
+    respawn_delay: 2.0
+    parameters:
+    - /host-home/install/lslidar_driver/share/lslidar_driver/params/lidar_uart_ros2/lsm10_p.yaml
+    - serial_port: /dev/ttyUSB0
+      port: /dev/ttyUSB0
+      frame_id: SCAN-Link
+  front_scan_filter:
+    type: node
+    package: nav_stack_core_v2
+    executable: front_scan_filter
+    name: front_scan_filter
+    output: screen
+    delay: 1.5
+    parameters:
+    - input_topic: /scan
+      output_topic: /scan_front
+      mode: block_sector
+      filter_mode: block_sector
+      block_start_deg: 180.0
+      block_end_deg: 280.0
+      min_range: 0.18
+      max_range: 12.0
+      reverse_scan: false
+      force_fixed_count: true
+      fixed_count: 1324
+      output_max_hz: 12.0
+      stamp_policy: now
+      pub_qos: BEST_EFFORT
+      qos_depth: 10
+    respawn: true
+    respawn_delay: 2.0
+  rf2o:
+    type: node
+    package: rf2o_laser_odometry
+    executable: rf2o_laser_odometry_node
+    name: rf2o_laser_odometry
+    output: log
+    delay: 2.5
+    parameters:
+    - laser_scan_topic: /scan
+      odom_topic: /odom_laser
+      publish_tf: false
+      base_frame_id: d435-cam-Link
+      odom_frame_id: odom
+      init_pose_from_topic: ''
+      freq: 12.0
+    arguments_list:
+    - --ros-args
+    - --log-level
+    - warn
+    respawn: true
+    respawn_delay: 2.0
+  rf2o_odom_adapter:
+    type: node
+    package: nav_stack_core_v2
+    executable: rf2o_odom_adapter
+    name: rf2o_odom_adapter
+    output: screen
+    delay: 3.0
+    parameters:
+    - input_odom_topic: /odom_laser
+      output_odom_topic: /odom
+      odom_frame: odom
+      base_frame: base_link
+      odom_frame_id: odom
+      base_frame_id: d435-cam-Link
+      publish_odom_topic: true
+      publish_tf: true
+      zero_z: true
+      stamp_policy: now
+      qos_depth: 1
+    respawn: true
+    respawn_delay: 2.0
+  cmd_vel_mux:
+    type: node
+    package: nav_stack_core_v2
+    executable: cmd_vel_mode_mux.py
+    name: cmd_vel_mode_mux
+    output: screen
+    delay: 6.0
+    respawn: true
+    respawn_delay: 2.0
+    parameters:
+    - nav_cmd_topics:
+      - /cmd_vel_smoothed
+      - /cmd_vel
+      - /cmd_vel_nav
+      - /cmd_vel_auto
+      manual_cmd_topics:
+      - /cmd_vel_manual
+      - /cmd_vel_keyboard
+      - /cmd_vel_teleop
+      - /cmd_vel_manual_raw
+      output_cmd_topic: /cmd_vel_selected
+      control_mode_topic: /control_mode
+      publish_rate_hz: 50.0
+      nav_timeout_sec: 0.8
+      manual_timeout_sec: 0.8
+      default_mode: auto
+      swap_xy: true
+      invert_x: true
+      invert_y: false
+      invert_z: false
+      deadband_linear: 0.0
+      deadband_angular: 0.0
+      debug_log: true
+      debug_period_sec: 0.5
+  slam:
+    type: node
+    package: slam_toolbox
+    executable: async_slam_toolbox_node
+    name: slam_toolbox
+    output: screen
+    delay: 5.0
+    parameters:
+    - /host-home/src/Navigation/nav_stack_core_v2/config/slam_toolbox_online_highres.yaml
+    - use_sim_time: false
+      odom_frame: odom
+      map_frame: map
+      base_frame: base_link
+      scan_topic: /scan_front
+    respawn: true
+    respawn_delay: 2.0
+  nav2:
+    type: include
+    package: nav2_bringup
+    launch: navigation_launch.py
+    delay: 8.0
+    arguments:
+      use_sim_time: 'false'
+      params_file: /host-home/src/Navigation/nav_stack_core_v2/config/nav2_params_min.yaml
+      autostart: 'true'
+    respawn: true
+    respawn_delay: 2.0
+  goal_pose_bridge:
+    type: node
+    package: nav_stack_core_v2
+    executable: goal_pose_bridge
+    name: goal_pose_bridge
+    output: screen
+    delay: 9.0
+    parameters:
+    - goal_pose_topic: /goal_pose
+      navigate_action_name: /navigate_to_pose
+      marker_topic: /goal_markers
+      clear_topic: /clear_goal
+      stop_topic: /cmd_vel_selected
+    respawn: true
+    respawn_delay: 2.0
+  chassis_serial:
+    type: include
+    package: rm_serial_driver
+    launch: serial_driver.launch.py
+    delay: 32.0
+    arguments:
+      cmd_vel_topic: /cmd_vel_selected
+      serial_port: /dev/ttyACM0
+      device_name: /dev/ttyACM0
+      port: /dev/ttyACM0
+      wheel_vx_scale: '0.0775'
+      wheel_vy_scale: '0.0775'
+      wheel_wz_scale: '1.0'
+      cmd_vx_scale: '1.0'
+      cmd_vy_scale: '1.0'
+      cmd_wz_scale: '1.0'
+      nav_cmd_timeout: '0.10'
+      nav_cmd_send_rate: '50.0'
+      platform_target_topic: /platform/target
+      platform_current_status_topic: /platform/current_status
+  realsense:
+    type: node
+    package: realsense2_camera
+    executable: realsense2_camera_node
+    name: camera
+    namespace: camera
+    output: screen
+    delay: 4.0
+    parameters:
+    - use_sim_time: false
+      camera_name: camera
+      camera_namespace: camera
+      enable_color: true
+      enable_depth: true
+      enable_infra: false
+      enable_infra1: false
+      enable_infra2: false
+      pointcloud.enable: false
+      align_depth.enable: true
+      enable_sync: true
+      rgb_camera.color_profile: 424x240x15
+      depth_module.depth_profile: 424x240x15
+      publish_tf: true
+      tf_publish_rate: 10.0
+      initial_reset: false
+      reconnect_timeout: 6.0
+    respawn: true
+    respawn_delay: 2.0
+  d435_depth_to_scan:
+    type: node
+    package: nav_stack_core_v2
+    executable: d435_depth_to_scan
+    name: d435_depth_to_scan_node
+    output: screen
+    delay: 6.0
+    parameters:
+    - depth_image_topic: /camera/camera/aligned_depth_to_color/image_raw
+      camera_info_topic: /camera/camera/color/camera_info
+      output_scan_topic: /d435_scan
+      output_frame: base_link
+      scan_height_pixels: 16
+      range_min: 0.25
+      range_max: 3.0
+      angle_min_deg: -35.0
+      angle_max_deg: 35.0
+    respawn: true
+    respawn_delay: 2.0
+  scan_fusion:
+    type: node
+    package: nav_stack_core_v2
+    executable: scan_fusion_node
+    name: scan_fusion_node
+    output: screen
+    delay: 7.0
+    parameters:
+    - lidar_scan_topic: /scan_front
+      depth_scan_topic: /d435_scan
+      d435_scan_topic: /d435_scan
+      output_scan_topic: /scan_fused
+      enable_d435_clearing: false
+      range_min: 0.18
+      range_max: 12.0
+      depth_timeout_sec: 0.5
+    respawn: true
+    respawn_delay: 2.0
+  semantic_registrar:
+    type: node
+    package: robot_logistics_semantic
+    executable: semantic_registrar_node
+    name: semantic_registrar_node
+    output: screen
+    delay: 10.5
+    respawn: true
+    respawn_delay: 2.0
+    parameters:
+    - input_topic: /vision/semantic_observation
+      semantic_map_path: /host-home/maps/semantic_library.json
+      map_frame: map
+      robot_frame: base_link
+      min_confidence: 0.2
+      shelf_width: 1.85
+      shelf_depth: 0.35
+      shelf_height: 1.5
+      approach_distance: 0.2
+      face_to_center_offset: 0.0
+      front_qr_back_offset_m: 0.0
+      front_qr_lateral_offset_m: 0.0
+      front_qr_side_offset_m: 0.0
+      side_qr_front_offset_m: 0.0
+      side_qr_width_offset_m: 0.0
+      column_qr_front_offset_m: 0.0
+      column_qr_width_offset_m: 0.0
+      front_label_lateral_offset: 0.0
+      side_label_front_offset: 0.0
+      side_label_width_offset: 0.0
+      allow_side_qr_create_candidate_pose: true
+      moving_shelf_realign_mode: true
+      prefer_latest_front_qr: true
+      enable_front_side_intersection: false
+      qr_pose_normal_axis: x
+      use_single_qr_normal_yaw: false
+      front_qr_yaw_offset_deg: 0.0
+      right_side_qr_yaw_offset_deg: 0.0
+      left_side_qr_yaw_offset_deg: 0.0
+      column_side_yaw_offset_deg: 0.0
+      normal_points_to_camera: true
+      max_yaw_jump_deg: 180.0
+      yaw_smooth_alpha: 1.0
+      tf_timeout_sec: 0.5
+      camera_mount_pitch_down_deg: 0.0
+      camera_mount_roll_deg: 0.0
+      camera_mount_yaw_deg: 0.0
+  rviz:
+    type: node
+    package: rviz2
+    executable: rviz2
+    name: rviz2
+    output: screen
+    delay: 12.0
+    arguments_list:
+    - -d
+    - /host-home/src/Navigation/nav_stack_core_v2/rviz/nav_stack.rviz
+  mission_bt:
+    type: node
+    package: robot_logistics_task
+    executable: mission_btcpp_node
+    name: mission_btcpp_node
+    output: screen
+    delay: 11.0
+    parameters:
+    - bt_xml: /host-home/src/Navigation/robot_logistics_task/behavior_tree/pickup_task_full_groot1.xml
+      semantic_map_path: /host-home/maps/semantic_library.json
+      semantic_session_path: /host-home/maps/semantic_session_pose.json
+      map_session_id: current_slam_session
+      shelf_goal_topic: /task/shelf_goal
+      cancel_topic: /task/cancel
+      task_status_topic: /task/status
+      current_state_topic: /task/current_state
+      current_goal_topic: /task/current_goal
+      bt_trace_topic: /task/bt_trace
+      bt_xml_topic: /task/bt_tree_xml
+      goal_pose_topic: /goal_pose
+      platform_target_topic: /platform/target
+      platform_status_topic: /platform/status
+      explore_cmd_topic: /task/explore_cmd
+      control_mode_topic: /control_mode
+      anchor_detection_topic: /semantic/anchor_detection
+      current_shelf_topic: /semantic/current_shelf
+      map_frame: map
+      base_frame: base_link
+      session_pose_max_age_sec: 600.0
+      min_session_confidence: 0.5
+      allow_demo_anchor_if_missing: false
+      enable_groot_monitoring: true
+      groot_publisher_port: 1666
+      groot_server_port: 1667
+      groot_max_msg_per_second: 25
+      approach_distance: 0.2
+    respawn: true
+    respawn_delay: 2.0
+    arguments:
+      allow_demo_anchor_if_missing: 'false'
+      semantic_map_path: /host-home/maps/semantic_library.json
+      semantic_session_path: /host-home/maps/semantic_session_pose.json
+      bt_xml: /host-home/src/Navigation/robot_logistics_task/behavior_tree/pickup_task_full_groot1.xml
+  bt_osd_overlay:
+    type: node
+    package: robot_logistics_task
+    executable: bt_osd_overlay.py
+    name: bt_osd_overlay
+    output: screen
+    delay: 12.0
+    respawn: true
+    respawn_delay: 2.0
+    parameters:
+    - image_topic: /camera/camera/color/image_raw
+      output_image_topic: /task/bt_osd/image_raw
+      task_status_topic: /task/status
+      current_state_topic: /task/current_state
+      current_goal_topic: /task/current_goal
+      bt_trace_topic: /task/bt_trace
+      semantic_observation_topic: /vision/apriltag_semantic_observation
+      current_shelf_topic: /semantic/current_shelf
+      goal_pose_topic: /goal_pose
+      selected_cmd_topic: /cmd_vel_selected
+      control_mode_topic: /control_mode
+      nav_cmd_topics:
+      - /cmd_vel
+      - /cmd_vel_smoothed
+      - /cmd_vel_nav
+      - /cmd_vel_auto
+      font_scale: 0.46
+      line_height: 18
+      panel_alpha: 0.58
+      max_lines: 22
+      apriltag_observation_topic: /vision/apriltag_semantic_observation
+      front_writer_status_topic: /semantic/front_qr_writer_status
+      home_status_topic: /semantic/home_anchor_status
+  apriltag_shelf_bridge:
+    type: node
+    package: robot_logistics_semantic
+    executable: apriltag_shelf_bridge_node.py
+    name: apriltag_shelf_bridge_node
+    output: screen
+    delay: 13.2
+    respawn: true
+    respawn_delay: 2.0
+    parameters:
+    - image_topic: /camera/camera/color/image_raw
+      camera_info_topic: /camera/camera/color/camera_info
+      debug_image_topic: /vision/apriltag_debug_image
+      tag_family: tag36h11
+      tag_size_m: 0.1
+      min_area_px: 250.0
+      publish_debug_image: true
+      frame_id_fallback: camera_color_optical_frame
+      source_name: apriltag_shelf_bridge
+      debug_log: true
+      normal_points_to_camera: true
+      typed_observation_topic: /vision/semantic_observation
+      json_observation_topic: /vision/apriltag_semantic_observation
+      depth_topics:
+      - /camera/camera/aligned_depth_to_color/image_raw
+      - /camera/camera/depth/image_rect_raw
+      database_path: /host-home/maps/apriltag_shelf_database.json
+      depth_topic: /camera/camera/aligned_depth_to_color/image_raw
+      output_frame_id: camera_link
+      convert_optical_to_camera_link: true
+      use_latest_tf_stamp: true
+      normal_direction_sign: -1.0
+      convert_optical_to_base_link: true
+      tag_to_shelf_yaw_offset_deg: 90.0
+      decision_margin_min: 20.0
+      hamming_max: 0
+  home_anchor_validator:
+    type: node
+    package: robot_logistics_semantic
+    executable: home_anchor_validator_node.py
+    name: home_anchor_validator_node
+    output: screen
+    delay: 13.6
+    respawn: true
+    respawn_delay: 2.0
+    parameters:
+    - observation_topic: /vision/apriltag_semantic_observation
+      home_anchor_path: /host-home/maps/home_anchor.json
+      status_topic: /semantic/home_anchor_status
+      debug_log: true
+  front_qr_semantic_writer:
+    type: node
+    package: robot_logistics_semantic
+    executable: front_qr_semantic_writer_node
+    name: front_qr_semantic_writer_node
+    output: screen
+    delay: 13.7
+    respawn: true
+    respawn_delay: 2.0
+    parameters:
+    - input_topic: /vision/apriltag_semantic_observation
+      semantic_map_path: /host-home/maps/semantic_library.json
+      map_frame: map
+      camera_frame_fallback: camera_color_optical_frame
+      tf_timeout_sec: 0.5
+      min_confidence: 0.2
+      shelf_width: 1.85
+      shelf_depth: 0.35
+      shelf_height: 1.5
+      face_to_center_offset: 0.175
+      approach_distance: 0.6
+      front_qr_yaw_offset_deg: 0.0
+      normal_points_to_camera: true
+      require_apriltag_source: false
+      debug_log: true
+  semantic_marker_publisher:
+    type: node
+    package: robot_logistics_semantic
+    executable: semantic_marker_publisher_node
+    name: semantic_marker_publisher_node
+    output: screen
+    delay: 11.5
+    respawn: true
+    respawn_delay: 2.0
+    parameters:
+    - semantic_map_path: /host-home/maps/semantic_library.json
+      map_frame: map
+      publish_rate_hz: 2.0
+  task_cancel_guard:
+    type: node
+    package: robot2_bringup
+    executable: task_cancel_guard.py
+    name: task_cancel_guard_node
+    output: screen
+    delay: 12.5
+    respawn: true
+    respawn_delay: 2.0
+    parameters:
+    - task_goal_topic: /task/shelf_goal
+      task_cancel_topic: /task/cancel
+      task_status_topic: /task/status
+      cmd_vel_topics:
+      - /cmd_vel_selected
+      - /cmd_vel
+      - /cmd_vel_nav
+      path_clear_topics:
+      - /plan
+      - /local_plan
+      - /received_global_plan
+      - /transformed_global_plan
+      - /unsmoothed_plan
+      cancel_repeat_sec: 2.5
+      zero_vel_hz: 20.0
+      clear_path_repeat_sec: 3.0
+      clear_path_hz: 20.0
+  oak_vision_driver:
+    type: include
+    package: oak_vision_driver
+    launch: oak_vision_driver.launch.py
+    delay: 13.0
+    arguments:
+      enable_rgb: 'true'
+      enable_depth: 'true'
+      enable_yolo: 'false'
+      enable_stereo_fusion: 'false'
+      sensor_resolution: 1080p
+      rgb_output: video
+      video_width: '1920'
+      video_height: '1080'
+      fps: '10.0'
+      force_usb2: 'true'
+  oak_parcel_pose:
+    type: include
+    package: oak_parcel_pose
+    launch: oak_parcel_pose.launch.py
+    delay: 16.0
+  oak_package_search:
+    type: node
+    package: oak_package_search
+    executable: oak_package_search_node
+    name: oak_package_search_node
+    output: screen
+    delay: 17.0
+    respawn: true
+    respawn_delay: 2.0
+    parameters:
+    - /host-home/src/target_detection/oak_package_search/config/oak_package_search.yaml
+    - request_topic: /target_detection/package_search/request
+      status_topic: /target_detection/package_search/status
+      datamatrix_topic: /oak/datamatrix_3d_result_json
+      cmd_vel_topic: /cmd_vel
+      fixed_frame: map
+      oak_camera_frame: oak_camera_link
+      oak_forward_frame: oak_camera_forward_link
+      enable_motion: true
+      match_only_in_scan: true
+      ignore_detection_before_request: true
+      min_confirm_matches: 2
+      min_search_time_before_match_sec: 0.5
+      datamatrix_fresh_timeout_sec: 1.2
+      scan_range_deg: 25.0
+      scan_speed_wz: 0.1
+      scan_timeout_sec: 30.0
+      max_scan_passes: 2
+      align_yaw_tolerance_deg: 5.0
+      scan_start_yaw_tolerance_deg: 5.0
+      kp_wz: 0.6
+      min_wz: 0.0
+      max_wz: 0.16
+      require_tf_for_alignment: true
+      allow_no_tf_in_dry_run: false
+      tf_failure_timeout_sec: 8.0
+      yaw_control_sign: 1.0
+      yaw_settle_count_required: 3
+      stop_publish_repeat: 5
+      align_only: false
+      yaw_deadband_deg: 2.0
+modes:
+  hardware:
+    enable:
+    - robot_description
+    - joint_state_publisher
+    - lidar
+    - chassis_serial
+  mapping:
+    enable:
+    - robot_description
+    - joint_state_publisher
+    - lidar
+    - front_scan_filter
+    - rf2o
+    - rf2o_odom_adapter
+    - cmd_vel_mux
+    - slam
+  nav:
+    enable:
+    - robot_description
+    - joint_state_publisher
+    - lidar
+    - front_scan_filter
+    - rf2o
+    - rf2o_odom_adapter
+    - cmd_vel_mux
+    - slam
+    - nav2
+    - goal_pose_bridge
+    - chassis_serial
+  task:
+    enable:
+    - robot_description
+    - joint_state_publisher
+    - lidar
+    - front_scan_filter
+    - rf2o
+    - rf2o_odom_adapter
+    - cmd_vel_mux
+    - chassis_serial
+    - realsense
+    - d435_depth_to_scan
+    - scan_fusion
+    - slam
+    - nav2
+    - goal_pose_bridge
+    - apriltag_shelf_bridge
+    - semantic_registrar
+    - home_anchor_validator
+    - semantic_marker_publisher
+    - mission_bt
+    - task_cancel_guard
+    - bt_osd_overlay
+    - oak_vision_driver
+    - oak_parcel_pose
+    - oak_package_search
+  nav_d435:
+    enable:
+    - robot_description
+    - joint_state_publisher
+    - lidar
+    - front_scan_filter
+    - rf2o
+    - rf2o_odom_adapter
+    - cmd_vel_mux
+    - realsense
+    - d435_depth_to_scan
+    - slam
+    - nav2
+    - goal_pose_bridge
+    - chassis_serial
+  debug:
+    enable:
+    - rviz

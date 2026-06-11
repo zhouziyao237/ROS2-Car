@@ -1,0 +1,36 @@
+oak_package_search_node:
+  ros__parameters:
+    request_topic: /target_detection/package_search/request
+    status_topic: /target_detection/package_search/status
+    datamatrix_topic: /oak/datamatrix_3d_result_json
+    cmd_vel_topic: /cmd_vel
+    fixed_frame: map
+    oak_camera_frame: oak-cam-Link
+    oak_forward_frame: oak_camera_forward_link
+    enable_motion: true
+    allow_no_tf_in_dry_run: true
+    require_tf_for_alignment: true
+    tf_failure_timeout_sec: 8.0
+    align_yaw_tolerance_deg: 5.0
+    scan_start_yaw_tolerance_deg: 5.0
+    kp_wz: 0.8
+    min_wz: 0.04
+    max_wz: 0.1
+    scan_range_deg: 12.0
+    scan_speed_wz: 0.06
+    scan_timeout_sec: 25.0
+    max_scan_passes: 1
+    match_only_in_scan: true
+    ignore_detection_before_request: true
+    min_search_time_before_match_sec: 0.5
+    min_confirm_matches: 2
+    datamatrix_fresh_timeout_sec: 1.2
+    tick_hz: 20.0
+    search_already_ok_deg: 8.0
+    search_start_align_deg: 12.0
+    same_shelf_skip_sec: 12.0
+    search_align_only: true
+    semantic_shelf_topic: /semantic/current_shelf
+    yaw_control_sign: 1.0
+    yaw_deadband_deg: 2.0
+    yaw_settle_count_required: 3

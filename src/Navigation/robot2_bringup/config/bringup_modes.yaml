@@ -130,7 +130,7 @@ modules:
       swap_xy: true
       invert_x: true
       invert_y: false
-      invert_z: false
+      invert_z: true
       deadband_linear: 0.0
       deadband_angular: 0.0
       debug_log: true
@@ -181,7 +181,7 @@ modules:
     type: include
     package: rm_serial_driver
     launch: serial_driver.launch.py
-    delay: 32.0
+    delay: 7.0
     arguments:
       cmd_vel_topic: /cmd_vel_selected
       serial_port: /dev/ttyACM0
@@ -320,7 +320,7 @@ modules:
     delay: 12.0
     arguments_list:
     - -d
-    - /host-home/src/Navigation/nav_stack_core_v2/rviz/nav_stack.rviz
+    - /host-home/src/Navigation/nav_stack_core_v2/rviz/robot2_fused_semantic_shelf.rviz
   mission_bt:
     type: node
     package: robot_logistics_task
@@ -329,7 +329,7 @@ modules:
     output: screen
     delay: 11.0
     parameters:
-    - bt_xml: /host-home/src/Navigation/robot_logistics_task/behavior_tree/pickup_task_full_groot1.xml
+    - bt_xml: /host-home/src/Navigation/robot_logistics_task/behavior_tree/pickup_task_nav_oak_scan_only.xml
       semantic_map_path: /host-home/maps/semantic_library.json
       semantic_session_path: /host-home/maps/semantic_session_pose.json
       map_session_id: current_slam_session
@@ -357,13 +357,35 @@ modules:
       groot_server_port: 1667
       groot_max_msg_per_second: 25
       approach_distance: 0.75
+      oak_frame: oak-cam-Link
+      oak_align_max_wz: 1.2
+      oak_align_kp: 1.6
+      oak_align_min_wz: 0.12
+      oak_align_yaw_tolerance_deg: 4.0
+      oak_align_timeout_sec: 25.0
+      package_search_timeout_sec: 45.0
+      package_scan_range_deg: 12.0
+      package_scan_step_deg: 2.0
+      package_scan_wait_sec: 0.0
+      package_scan_timeout_sec: 40.0
     respawn: true
     respawn_delay: 2.0
     arguments:
       allow_demo_anchor_if_missing: 'false'
       semantic_map_path: /host-home/maps/semantic_library.json
       semantic_session_path: /host-home/maps/semantic_session_pose.json
-      bt_xml: /host-home/src/Navigation/robot_logistics_task/behavior_tree/pickup_task_full_groot1.xml
+      bt_xml: /host-home/src/Navigation/robot_logistics_task/behavior_tree/pickup_task_nav_oak_scan_only.xml
+      oak_frame: oak-cam-Link
+      oak_align_max_wz: 1.2
+      oak_align_kp: 1.6
+      oak_align_min_wz: 0.12
+      oak_align_yaw_tolerance_deg: 4.0
+      oak_align_timeout_sec: 25.0
+      package_search_timeout_sec: 45.0
+      package_scan_range_deg: 12.0
+      package_scan_step_deg: 2.0
+      package_scan_wait_sec: 0.0
+      package_scan_timeout_sec: 40.0
   bt_osd_overlay:
     type: node
     package: robot_logistics_task
@@ -555,17 +577,17 @@ modules:
       match_only_in_scan: true
       ignore_detection_before_request: true
       min_confirm_matches: 2
-      min_search_time_before_match_sec: 0.5
+      min_search_time_before_match_sec: 0.3
       datamatrix_fresh_timeout_sec: 1.2
-      scan_range_deg: 25.0
-      scan_speed_wz: 0.1
-      scan_timeout_sec: 30.0
-      max_scan_passes: 2
-      align_yaw_tolerance_deg: 5.0
+      scan_range_deg: 12.0
+      scan_speed_wz: 0.18
+      scan_timeout_sec: 40.0
+      max_scan_passes: 1
+      align_yaw_tolerance_deg: 4.0
       scan_start_yaw_tolerance_deg: 5.0
-      kp_wz: 0.6
-      min_wz: 0.0
-      max_wz: 0.16
+      kp_wz: 1.6
+      min_wz: 0.12
+      max_wz: 1.2
       require_tf_for_alignment: true
       allow_no_tf_in_dry_run: false
       tf_failure_timeout_sec: 8.0
@@ -573,19 +595,23 @@ modules:
       yaw_settle_count_required: 3
       stop_publish_repeat: 5
       align_only: true
-      yaw_deadband_deg: 2.0
+      yaw_deadband_deg: 1.5
       global_frame: map
       oak_forward_axis: x
-      oak_yaw_offset_deg: 0.0
+      oak_yaw_offset_deg: 180.0
       tick_hz: 10.0
       semantic_shelf_topic: /semantic/current_shelf
       base_frame: base_link
       oak_forward_vector_x: 1.0
       oak_forward_vector_y: 0.0
       oak_forward_vector_z: 0.0
-      target_mode: point_or_front_yaw
+      target_mode: front_yaw
       use_semantic_shelf_topic: true
       shelf_target_offset_m: 0.0
+      search_already_ok_deg: 4.0
+      search_start_align_deg: 6.0
+      same_shelf_skip_sec: 0.0
+      search_align_only: true
 modes:
   hardware:
     enable:
