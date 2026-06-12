@@ -12,7 +12,7 @@ module = {
     'output': 'screen',
     'delay': 11.0,
     'parameters': [{
-        'bt_xml': '/host-home/src/Navigation/robot_logistics_task/behavior_tree/pickup_task_full_groot1.xml',
+        'bt_xml': '/host-home/src/Navigation/robot_logistics_task/behavior_tree/pickup_task_scan_finally_oak_realign.xml',
         'semantic_map_path': '/host-home/maps/semantic_library.json',
         'semantic_session_path': '/host-home/maps/semantic_session_pose.json',
         'map_session_id': 'current_slam_session',

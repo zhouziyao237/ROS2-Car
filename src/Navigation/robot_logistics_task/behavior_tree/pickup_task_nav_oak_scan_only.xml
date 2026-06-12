@@ -11,6 +11,9 @@
       <RequestOakPackageSearchAlign/>
       <WaitAfterOakAlign/>
       <ScanTargetPackageOnShelf/>
+      <!-- after_scan_oak_realign: scan finished, use OAK alignment logic again to face shelf front -->
+      <RequestOakPackageSearchAlign/>
+      <WaitAfterOakAlign/>
       <PublishTaskDone/>
     </Sequence>
   </BehaviorTree>
