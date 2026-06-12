@@ -43,3 +43,6 @@ mission_btcpp_node:
     package_scan_step_deg: 2.0
     package_scan_wait_sec: 0.0
     package_scan_timeout_sec: 40.0
+    nav_settle_quiet_sec: 0.4
+    nav_settle_timeout_sec: 2.0
+    nav_settle_speed_eps: 0.12

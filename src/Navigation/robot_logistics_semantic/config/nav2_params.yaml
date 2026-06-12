@@ -29,8 +29,8 @@ controller_server:
     goal_checker:
       plugin: nav2_controller::SimpleGoalChecker
       stateful: true
-      xy_goal_tolerance: 0.18
-      yaw_goal_tolerance: 0.25
+      xy_goal_tolerance: 0.32
+      yaw_goal_tolerance: 3.14
     FollowPath:
       plugin: dwb_core::DWBLocalPlanner
       debug_trajectory_details: true
@@ -55,7 +55,7 @@ controller_server:
       linear_granularity: 0.05
       angular_granularity: 0.05
       transform_tolerance: 1.0
-      xy_goal_tolerance: 0.18
+      xy_goal_tolerance: 0.32
       trans_stopped_velocity: 0.05
       short_circuit_trajectory_evaluation: true
       stateful: true

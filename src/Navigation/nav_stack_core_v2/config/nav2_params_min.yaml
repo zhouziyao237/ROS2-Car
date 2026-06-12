@@ -22,8 +22,8 @@ controller_server:
       movement_time_allowance: 10.0
     goal_checker:
       plugin: nav2_controller::SimpleGoalChecker
-      xy_goal_tolerance: 0.25
-      yaw_goal_tolerance: 0.805
+      xy_goal_tolerance: 0.32
+      yaw_goal_tolerance: 3.14
       stateful: true
     FollowPath:
       plugin: dwb_core::DWBLocalPlanner
@@ -46,7 +46,7 @@ controller_server:
       vtheta_samples: 20
       sim_time: 1.2
       transform_tolerance: 0.5
-      xy_goal_tolerance: 0.25
+      xy_goal_tolerance: 0.32
       trans_stopped_velocity: 0.05
       short_circuit_trajectory_evaluation: true
       stateful: true
