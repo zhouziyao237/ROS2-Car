@@ -19,7 +19,8 @@
 
       <NavigateToShelf/>
       <WaitNavArrive/>
-      <WaitNavDoneBeforeOak/>
+        <WaitNavSettle/>
+
       <WaitNavSettle/>
 
       <Fallback name="VerifyShelfOrSearchQR">

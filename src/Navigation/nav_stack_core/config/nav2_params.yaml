@@ -34,13 +34,13 @@ controller_server:
       min_approach_linear_velocity: 0.05
       use_collision_detection: true
       max_allowed_time_to_collision_up_to_carrot: 1.0
-      max_vel_x: 1.8
-      min_vel_x: -0.3
-      max_vel_y: 1.8
-      min_vel_y: -1.8
-      max_speed_xy: 1.8
+      max_vel_x: 4.2
+      min_vel_x: -4.2
+      max_vel_y: 4.2
+      min_vel_y: -4.2
+      max_speed_xy: 4.2
       min_speed_xy: 0.0
-      max_vel_theta: 1.8
+      max_vel_theta: 2.6
       min_speed_theta: 0.25
       acc_lim_x: 2.5
       acc_lim_y: 2.5

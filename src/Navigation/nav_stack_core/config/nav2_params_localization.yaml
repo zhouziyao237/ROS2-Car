@@ -108,13 +108,13 @@ controller_server:
     FollowPath:
       plugin: dwb_core::DWBLocalPlanner
       debug_trajectory_details: false
-      min_vel_x: -0.3
-      max_vel_x: 1.8
-      min_vel_y: -1.8
-      max_vel_y: 1.8
-      max_vel_theta: 1.8
+      min_vel_x: -4.2
+      max_vel_x: 4.2
+      min_vel_y: -4.2
+      max_vel_y: 4.2
+      max_vel_theta: 2.6
       min_speed_xy: 0.0
-      max_speed_xy: 1.8
+      max_speed_xy: 4.2
       min_speed_theta: 0.25
       acc_lim_x: 2.5
       acc_lim_y: 2.5
@@ -264,5 +264,9 @@ waypoint_follower:
     use_sim_time: false
 velocity_smoother:
   ros__parameters:
+    max_velocity: [4.2, 4.2, 2.6]
+    min_velocity: [-4.2, -4.2, -2.6]
+    max_accel: [1.6, 1.6, 2.0]
+    max_decel: [-1.6, -1.6, -2.0]
     use_sim_time: false
     odom_topic: /odometry/filtered

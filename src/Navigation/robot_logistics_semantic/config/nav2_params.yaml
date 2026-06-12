@@ -34,13 +34,13 @@ controller_server:
     FollowPath:
       plugin: dwb_core::DWBLocalPlanner
       debug_trajectory_details: true
-      min_vel_x: -0.3
-      min_vel_y: -1.8
-      max_vel_x: 1.8
-      max_vel_y: 1.8
-      max_vel_theta: 1.8
+      min_vel_x: -4.2
+      min_vel_y: -4.2
+      max_vel_x: 4.2
+      max_vel_y: 4.2
+      max_vel_theta: 2.6
       min_speed_xy: 0.0
-      max_speed_xy: 1.8
+      max_speed_xy: 4.2
       min_speed_theta: 0.25
       acc_lim_x: 2.5
       acc_lim_y: 2.5

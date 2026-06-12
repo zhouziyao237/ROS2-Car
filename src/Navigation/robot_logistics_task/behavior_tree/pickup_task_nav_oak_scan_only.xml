@@ -6,7 +6,8 @@
       <QueryShelfPose/>
       <NavigateToShelf/>
       <WaitNavArrive/>
-      <WaitNavDoneBeforeOak/>
+        <WaitNavSettle/>
+
       <RequestOakPackageSearchAlign/>
       <WaitAfterOakAlign/>
       <ScanTargetPackageOnShelf/>

@@ -364,10 +364,10 @@ modules:
       oak_align_yaw_tolerance_deg: 4.0
       oak_align_timeout_sec: 25.0
       package_search_timeout_sec: 45.0
-      package_scan_range_deg: 12.0
-      package_scan_step_deg: 2.0
-      package_scan_wait_sec: 0.0
-      package_scan_timeout_sec: 40.0
+      package_scan_range_deg: 0.0
+      package_scan_step_deg: 4.0
+      package_scan_wait_sec: 0.05
+      package_scan_timeout_sec: 15.0
     respawn: true
     respawn_delay: 2.0
     arguments:
@@ -382,10 +382,10 @@ modules:
       oak_align_yaw_tolerance_deg: 4.0
       oak_align_timeout_sec: 25.0
       package_search_timeout_sec: 45.0
-      package_scan_range_deg: 12.0
-      package_scan_step_deg: 2.0
-      package_scan_wait_sec: 0.0
-      package_scan_timeout_sec: 40.0
+      package_scan_range_deg: 0.0
+      package_scan_step_deg: 4.0
+      package_scan_wait_sec: 0.05
+      package_scan_timeout_sec: 15.0
   bt_osd_overlay:
     type: node
     package: robot_logistics_task
