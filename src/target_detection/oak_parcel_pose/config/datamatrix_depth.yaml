@@ -10,16 +10,16 @@ oak_parcel_pose_node:
     result_json_topic: "/oak/datamatrix_3d_result_json"
     debug_image_topic: "/oak/datamatrix_depth_debug_image"
 
-    publish_debug_image: true
+    publish_debug_image: false
     show_window: false
 
     # Detection
     roi_ratio: 1.0
-    resize_scale: 2.0
-    decode_interval: 0.20
+    resize_scale: 1.5
+    decode_interval: 0.125
     datamatrix_only: true
     deduplicate: true
-    repeat_publish_interval: 0.20
+    repeat_publish_interval: 0.125
     enable_sharpen: true
     enable_binary: false
 
@@ -31,7 +31,7 @@ oak_parcel_pose_node:
     min_valid_depth_mm: 50.0
     max_valid_depth_mm: 10000.0
     allow_resize_depth_to_rgb: true
-    publish_debug_image: true\n    decode_interval: 0.05\n    repeat_publish_interval: 0.05\n    resize_scale: 1.5\n    enable_sharpen: false\n    enable_binary: false\n    roi_ratio: 1.0\n    fast_decode_mode: true
+    publish_debug_image: false
     enhanced_decode_interval: 0.60
     decode_log_interval: 1.0
     fast_decode_mode: true

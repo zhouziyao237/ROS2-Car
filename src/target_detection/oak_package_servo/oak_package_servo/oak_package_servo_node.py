@@ -704,9 +704,14 @@ class OakPackageServoNode(Node):
             self.publish_status('running', stage=stage, reason='waiting_target', target_lost_sec=lost_sec)
             return
         if lost_sec >= float(self.get_parameter('target_lost_timeout_sec').value):
+            # Do not immediately fail when the target code is still intermittently visible
+            # but depth / camera_xyz is temporarily invalid.
+            # Stop and wait for reacquisition; the whole stage will still fail by timeout.
             self.publish_stop()
-            self.publish_status('failed', stage=stage, reason='target_lost_timeout', target_lost_sec=lost_sec)
-            self.active = ActiveRequest()
+            self.filtered_p_oak = None
+            self.latest_target_raw_oak = None
+            self.lock_count = 0
+            self.publish_status('running', stage=stage, reason='target_lost_waiting_reacquire', target_lost_sec=lost_sec)
             return
 
         if stage == 'center':
