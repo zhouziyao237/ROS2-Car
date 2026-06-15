@@ -364,10 +364,15 @@ modules:
       oak_align_yaw_tolerance_deg: 4.0
       oak_align_timeout_sec: 25.0
       package_search_timeout_sec: 45.0
+      package_servo_request_topic: /target_detection/package_servo/request
+      package_servo_status_topic: /target_detection/package_servo/status
+      oak_servo_center_timeout_sec: 12.0
+      oak_servo_approach_timeout_sec: 18.0
+      oak_servo_fine_timeout_sec: 8.0
       package_scan_range_deg: 0.0
       package_scan_step_deg: 4.0
       package_scan_wait_sec: 0.05
-      package_scan_timeout_sec: 15.0
+      package_scan_timeout_sec: 100.0
     respawn: true
     respawn_delay: 2.0
     arguments:
@@ -385,7 +390,7 @@ modules:
       package_scan_range_deg: 0.0
       package_scan_step_deg: 4.0
       package_scan_wait_sec: 0.05
-      package_scan_timeout_sec: 15.0
+      package_scan_timeout_sec: 100.0
   bt_osd_overlay:
     type: node
     package: robot_logistics_task
@@ -550,6 +555,9 @@ modules:
       video_height: '1080'
       fps: '10.0'
       force_usb2: 'true'
+      focus_mode: manual
+      manual_focus: '40'
+      autofocus_mode: continuous_video
   oak_parcel_pose:
     type: include
     package: oak_parcel_pose
@@ -612,6 +620,28 @@ modules:
       search_start_align_deg: 6.0
       same_shelf_skip_sec: 0.0
       search_align_only: true
+  oak_package_servo:
+    type: node
+    package: oak_package_servo
+    executable: oak_package_servo_node
+    name: oak_package_servo_node
+    output: screen
+    delay: 18.0
+    respawn: true
+    respawn_delay: 2.0
+    parameters:
+    - /host-home/src/target_detection/oak_package_servo/config/oak_package_servo.yaml
+    - request_topic: /target_detection/package_servo/request
+      status_topic: /target_detection/package_servo/status
+      datamatrix_topic: /oak/datamatrix_3d_result_json
+      cmd_vel_topic: /cmd_vel_auto
+      base_frame: base_link
+      oak_frame: oak-cam-Link
+      map_frame: map
+      scan_topic: /scan
+      map_topic: /map
+      semantic_shelf_topic: /semantic/current_shelf
+
 modes:
   hardware:
     enable:
@@ -668,6 +698,7 @@ modes:
     - oak_vision_driver
     - oak_parcel_pose
     - oak_package_search
+    - oak_package_servo
   nav_d435:
     enable:
     - robot_description

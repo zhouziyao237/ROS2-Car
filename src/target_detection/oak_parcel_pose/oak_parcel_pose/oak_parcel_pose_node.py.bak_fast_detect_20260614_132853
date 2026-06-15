@@ -1,0 +1,900 @@
+#!/usr/bin/env python3
+import json
+import time
+
+import cv2
+import numpy as np
+import rclpy
+from cv_bridge import CvBridge
+from rclpy.node import Node
+from sensor_msgs.msg import CameraInfo, Image
+from std_msgs.msg import String
+
+try:
+    import zxingcpp
+    HAS_ZXING = True
+except Exception:
+    zxingcpp = None
+    HAS_ZXING = False
+
+
+class OakParcelPoseNode(Node):
+    """
+    OAK Lite HD RGB Data Matrix pose node.
+
+    Core logic:
+      1. Use HD RGB image to detect Data Matrix.
+      2. Keep depth image at original low resolution.
+      3. Map RGB detection center to depth image by center-aligned uniform scaling.
+      4. Read depth around the mapped point using median window.
+      5. Use RGB camera intrinsics to calculate XYZ in camera frame, unit: mm.
+
+    Input:
+      /oak/rgb/image_raw
+      /oak/depth/image_raw
+      /oak/rgb/camera_info
+
+    Output:
+      /oak/datamatrix_result
+      /oak/datamatrix_3d_result_json
+      /oak/datamatrix_depth_debug_image
+    """
+
+    def __init__(self):
+        super().__init__("oak_parcel_pose_node")
+
+        # ---------------- Topics ----------------
+        self.declare_parameter("rgb_topic", "/oak/rgb/image_raw")
+        self.declare_parameter("depth_topic", "/oak/depth/image_raw")
+        self.declare_parameter("camera_info_topic", "/oak/rgb/camera_info")
+
+        self.declare_parameter("result_topic", "/oak/datamatrix_result")
+        self.declare_parameter("result_json_topic", "/oak/datamatrix_3d_result_json")
+        self.declare_parameter("debug_image_topic", "/oak/datamatrix_depth_debug_image")
+
+        # ---------------- Display / debug ----------------
+        self.declare_parameter("publish_debug_image", True)
+        self.declare_parameter("show_window", False)
+
+        # ---------------- Decode parameters ----------------
+        self.declare_parameter("roi_ratio", 1.0)
+        self.declare_parameter("resize_scale", 2.0)
+        self.declare_parameter("decode_interval", 0.15)
+        self.declare_parameter("datamatrix_only", True)
+        self.declare_parameter("deduplicate", True)
+        self.declare_parameter("repeat_publish_interval", 0.8)
+        self.declare_parameter("enable_sharpen", True)
+        self.declare_parameter("enable_binary", False)
+
+        # ---------------- Depth lookup parameters ----------------
+        # center_crop:
+        #   RGB 1920x1080 center square region is mapped to depth 640x640.
+        # scale:
+        #   RGB whole image is stretched to depth size. Not recommended for 16:9 -> 1:1.
+        # direct:
+        #   Use same pixel coordinate only when RGB and depth sizes are identical.
+        self.declare_parameter("depth_lookup_mode", "center_crop")
+        self.declare_parameter("depth_window_size", 9)
+        self.declare_parameter("depth_u_offset_px", 0.0)
+        self.declare_parameter("depth_v_offset_px", 0.0)
+        self.declare_parameter("min_valid_depth_mm", 150.0)
+        self.declare_parameter("max_valid_depth_mm", 5000.0)
+        self.declare_parameter("z_scale", 1.0)
+        self.declare_parameter("z_offset_mm", 0.0)
+
+        # ---------------- Intrinsics fallback ----------------
+        # Normally overwritten by /oak/rgb/camera_info.
+        self.declare_parameter("use_camera_info", True)
+        self.declare_parameter("camera_fx", 1319.569942366)
+        self.declare_parameter("camera_fy", 1278.941323880)
+        self.declare_parameter("camera_cx", 926.520877915)
+        self.declare_parameter("camera_cy", 346.934588194)
+
+        self.bridge = CvBridge()
+
+        self.rgb_topic = str(self.get_parameter("rgb_topic").value)
+        self.depth_topic = str(self.get_parameter("depth_topic").value)
+        self.camera_info_topic = str(self.get_parameter("camera_info_topic").value)
+
+        self.result_topic = str(self.get_parameter("result_topic").value)
+        self.result_json_topic = str(self.get_parameter("result_json_topic").value)
+        self.debug_image_topic = str(self.get_parameter("debug_image_topic").value)
+
+        self.publish_debug_image = bool(self.get_parameter("publish_debug_image").value)
+        self.show_window = bool(self.get_parameter("show_window").value)
+
+        self.roi_ratio = float(self.get_parameter("roi_ratio").value)
+        self.resize_scale = float(self.get_parameter("resize_scale").value)
+        self.decode_interval = float(self.get_parameter("decode_interval").value)
+
+        self.datamatrix_only = bool(self.get_parameter("datamatrix_only").value)
+        self.deduplicate = bool(self.get_parameter("deduplicate").value)
+        self.repeat_publish_interval = float(self.get_parameter("repeat_publish_interval").value)
+
+        self.enable_sharpen = bool(self.get_parameter("enable_sharpen").value)
+        self.enable_binary = bool(self.get_parameter("enable_binary").value)
+
+        self.use_camera_info = bool(self.get_parameter("use_camera_info").value)
+
+        self.fx = float(self.get_parameter("camera_fx").value)
+        self.fy = float(self.get_parameter("camera_fy").value)
+        self.cx = float(self.get_parameter("camera_cx").value)
+        self.cy = float(self.get_parameter("camera_cy").value)
+        self.have_intrinsics = self.fx > 0.0 and self.fy > 0.0
+
+        self.latest_depth = None
+        self.latest_depth_stamp = None
+        self.latest_depth_encoding = ""
+
+        self.last_decode_time = 0.0
+        self.last_publish_time = 0.0
+        self.last_signature = ""
+
+        self.last_warn_time = {}
+        self.logged_size_once = False
+        self.logged_camera_info_once = False
+
+        self.depth_sub = self.create_subscription(
+            Image,
+            self.depth_topic,
+            self.depth_callback,
+            10,
+        )
+
+        self.rgb_sub = self.create_subscription(
+            Image,
+            self.rgb_topic,
+            self.rgb_callback,
+            10,
+        )
+
+        self.camera_info_sub = self.create_subscription(
+            CameraInfo,
+            self.camera_info_topic,
+            self.camera_info_callback,
+            10,
+        )
+
+        self.result_pub = self.create_publisher(String, self.result_topic, 10)
+        self.result_json_pub = self.create_publisher(String, self.result_json_topic, 10)
+
+        self.debug_image_pub = (
+            self.create_publisher(Image, self.debug_image_topic, 10)
+            if self.publish_debug_image
+            else None
+        )
+
+        self.get_logger().info("oak_parcel_pose_node started")
+        self.get_logger().info(f"rgb_topic: {self.rgb_topic}")
+        self.get_logger().info(f"depth_topic: {self.depth_topic}")
+        self.get_logger().info(f"camera_info_topic: {self.camera_info_topic}")
+        self.get_logger().info(f"result_json_topic: {self.result_json_topic}")
+        self.get_logger().info(
+            f"initial intrinsics: fx={self.fx:.6f}, fy={self.fy:.6f}, "
+            f"cx={self.cx:.6f}, cy={self.cy:.6f}, use_camera_info={self.use_camera_info}"
+        )
+        self.get_logger().info(
+            "HD RGB mode enabled. RGB detection stays HD; depth lookup uses low-res depth directly."
+        )
+
+        if not HAS_ZXING:
+            self.get_logger().error("zxing-cpp not installed. Run: pip3 install zxing-cpp")
+
+    # ============================================================
+    # Helpers
+    # ============================================================
+
+    def warn_throttle(self, key, msg, period_sec=2.0):
+        now = time.time()
+        last = self.last_warn_time.get(key, 0.0)
+        if now - last >= period_sec:
+            self.get_logger().warn(msg)
+            self.last_warn_time[key] = now
+
+    def refresh_runtime_params(self):
+        self.depth_lookup_mode = str(self.get_parameter("depth_lookup_mode").value)
+        self.depth_window_size = int(self.get_parameter("depth_window_size").value)
+        self.depth_u_offset_px = float(self.get_parameter("depth_u_offset_px").value)
+        self.depth_v_offset_px = float(self.get_parameter("depth_v_offset_px").value)
+        self.min_valid_depth_mm = float(self.get_parameter("min_valid_depth_mm").value)
+        self.max_valid_depth_mm = float(self.get_parameter("max_valid_depth_mm").value)
+        self.z_scale = float(self.get_parameter("z_scale").value)
+        self.z_offset_mm = float(self.get_parameter("z_offset_mm").value)
+
+    # ============================================================
+    # ROS callbacks
+    # ============================================================
+
+    def camera_info_callback(self, msg):
+        if not self.use_camera_info:
+            return
+
+        if len(msg.k) >= 6 and msg.k[0] > 0.0 and msg.k[4] > 0.0:
+            self.fx = float(msg.k[0])
+            self.fy = float(msg.k[4])
+            self.cx = float(msg.k[2])
+            self.cy = float(msg.k[5])
+            self.have_intrinsics = True
+
+            if not self.logged_camera_info_once:
+                self.get_logger().info(
+                    f"CameraInfo received: fx={self.fx:.6f}, fy={self.fy:.6f}, "
+                    f"cx={self.cx:.6f}, cy={self.cy:.6f}"
+                )
+                self.logged_camera_info_once = True
+
+    def depth_callback(self, msg):
+        try:
+            self.latest_depth = self.bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
+            self.latest_depth_stamp = msg.header.stamp
+            self.latest_depth_encoding = msg.encoding
+        except Exception as e:
+            self.get_logger().error(f"Depth convert failed: {e}")
+
+    def rgb_callback(self, msg):
+        now = time.time()
+
+        if now - self.last_decode_time < self.decode_interval:
+            return
+
+        self.last_decode_time = now
+        self.refresh_runtime_params()
+
+        if self.latest_depth is None:
+            self.warn_throttle("no_depth", "Waiting for depth image ...", 2.0)
+            return
+
+        if not self.have_intrinsics:
+            self.warn_throttle("no_intrinsics", "Waiting for CameraInfo intrinsics ...", 2.0)
+            return
+
+        try:
+            frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+        except Exception as e:
+            self.get_logger().error(f"RGB convert failed: {e}")
+            return
+
+        rgb_h, rgb_w = frame.shape[:2]
+
+        roi, roi_box = self.crop_center_roi(frame)
+        decoded = self.decode_all_in_roi(roi, roi_box)
+        results = self.enrich_results_with_pose(decoded, rgb_w, rgb_h)
+
+        debug = self.draw_results(frame, results, roi_box)
+
+        if results:
+            self.publish_results(results, rgb_w, rgb_h)
+
+        if self.debug_image_pub is not None:
+            try:
+                debug_msg = self.bridge.cv2_to_imgmsg(debug, encoding="bgr8")
+                debug_msg.header = msg.header
+                self.debug_image_pub.publish(debug_msg)
+            except Exception as e:
+                self.warn_throttle("debug_pub", f"debug image publish failed: {e}", 2.0)
+
+        if self.show_window:
+            cv2.imshow("oak_parcel_pose HD RGB depth lookup", debug)
+            key = cv2.waitKey(1)
+            if key == ord("q"):
+                rclpy.shutdown()
+
+    # ============================================================
+    # ROI and decoding
+    # ============================================================
+
+    def crop_center_roi(self, frame):
+        h, w = frame.shape[:2]
+        ratio = max(0.1, min(1.0, self.roi_ratio))
+
+        roi_w = int(w * ratio)
+        roi_h = int(h * ratio)
+
+        x1 = max((w - roi_w) // 2, 0)
+        y1 = max((h - roi_h) // 2, 0)
+        x2 = min(x1 + roi_w, w)
+        y2 = min(y1 + roi_h, h)
+
+        return frame[y1:y2, x1:x2], (x1, y1, x2, y2)
+
+    def make_candidates(self, roi):
+        candidates = []
+        candidates.append(("raw", roi, 1.0))
+
+        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        candidates.append(("gray", gray, 1.0))
+
+        if self.resize_scale > 1.0:
+            gray_big = cv2.resize(
+                gray,
+                None,
+                fx=self.resize_scale,
+                fy=self.resize_scale,
+                interpolation=cv2.INTER_CUBIC,
+            )
+            candidates.append(("gray_big", gray_big, self.resize_scale))
+        else:
+            gray_big = gray
+
+        if self.enable_sharpen:
+            blur = cv2.GaussianBlur(gray_big, (0, 0), 1.0)
+            sharp = cv2.addWeighted(gray_big, 1.6, blur, -0.6, 0)
+            candidates.append(("sharp_big", sharp, self.resize_scale))
+        else:
+            sharp = gray_big
+
+        if self.enable_binary:
+            try:
+                binary = cv2.adaptiveThreshold(
+                    sharp,
+                    255,
+                    cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                    cv2.THRESH_BINARY,
+                    31,
+                    5,
+                )
+                candidates.append(("binary", binary, self.resize_scale))
+            except Exception:
+                pass
+
+        return candidates
+
+    def is_datamatrix(self, fmt):
+        f = str(fmt).lower()
+        return "datamatrix" in f or "data_matrix" in f or "data matrix" in f
+
+    def extract_points_from_zxing(self, result, roi_offset=(0, 0), scale=1.0):
+        ox, oy = roi_offset
+
+        pos = getattr(result, "position", None)
+        if pos is None:
+            return None
+
+        raw_points = []
+        names = ["top_left", "top_right", "bottom_right", "bottom_left"]
+
+        if all(hasattr(pos, name) for name in names):
+            for name in names:
+                raw_points.append(getattr(pos, name))
+        elif hasattr(pos, "__iter__"):
+            try:
+                raw_points = list(pos)
+            except Exception:
+                raw_points = []
+
+        points = []
+        for p in raw_points:
+            try:
+                x = getattr(p, "x", None)
+                y = getattr(p, "y", None)
+
+                if x is None or y is None:
+                    if isinstance(p, (tuple, list)) and len(p) >= 2:
+                        x, y = p[0], p[1]
+
+                if x is None or y is None:
+                    continue
+
+                x = int(float(x) / scale + ox)
+                y = int(float(y) / scale + oy)
+                points.append((x, y))
+            except Exception:
+                continue
+
+        if len(points) >= 4:
+            return points[:4]
+
+        return None
+
+    def result_center_key(self, item):
+        text = item.get("text", "")
+        pts = item.get("points", None)
+
+        if pts is None or len(pts) < 4:
+            return (text, "no_points")
+
+        xs = [p[0] for p in pts]
+        ys = [p[1] for p in pts]
+
+        cx = int(sum(xs) / len(xs) / 20) * 20
+        cy = int(sum(ys) / len(ys) / 20) * 20
+
+        return (text, cx, cy)
+
+    def decode_all_in_roi(self, roi, roi_box):
+        if not HAS_ZXING:
+            return []
+
+        x1, y1, _, _ = roi_box
+        all_items = []
+
+        for method, img, scale in self.make_candidates(roi):
+            try:
+                results = zxingcpp.read_barcodes(img)
+            except Exception as e:
+                self.warn_throttle("zxing", f"ZXing decode error: {e}", 2.0)
+                continue
+
+            for r in results:
+                text = getattr(r, "text", "")
+                fmt = str(getattr(r, "format", "UNKNOWN"))
+
+                if not text:
+                    continue
+
+                if self.datamatrix_only and not self.is_datamatrix(fmt):
+                    continue
+
+                points = self.extract_points_from_zxing(
+                    r,
+                    roi_offset=(x1, y1),
+                    scale=scale,
+                )
+
+                all_items.append(
+                    {
+                        "text": text,
+                        "format": fmt,
+                        "method": method,
+                        "points": points,
+                    }
+                )
+
+        if not self.deduplicate:
+            return all_items
+
+        unique = {}
+        for item in all_items:
+            key = self.result_center_key(item)
+            if key not in unique:
+                unique[key] = item
+
+        return list(unique.values())
+
+    # ============================================================
+    # Depth lookup and pose calculation
+    # ============================================================
+
+    def get_center_px(self, points):
+        if points is None or len(points) < 4:
+            return None
+
+        xs = [float(p[0]) for p in points]
+        ys = [float(p[1]) for p in points]
+
+        return int(round(sum(xs) / len(xs))), int(round(sum(ys) / len(ys)))
+
+    def rgb_to_depth_px(self, u_rgb, v_rgb, rgb_w, rgb_h, depth_w, depth_h):
+        """
+        Convert HD RGB pixel to low-res depth pixel.
+
+        Modes:
+          center_crop:
+            Center-aligned uniform scaling.
+            For 1920x1080 RGB and 640x640 depth:
+              RGB center square 1080x1080 maps to depth 640x640.
+              RGB x from 420 to 1500 maps to depth x from 0 to 640.
+              RGB center [960, 540] maps to depth center [320, 320].
+
+          scale:
+            Stretch whole RGB image to whole depth image.
+            This is not recommended when RGB is 16:9 and depth is 1:1.
+
+          direct:
+            Use same pixel only if RGB and depth have same size.
+        """
+        mode = self.depth_lookup_mode.lower().strip()
+
+        if mode == "direct" and depth_w == rgb_w and depth_h == rgb_h:
+            u_depth = float(u_rgb)
+            v_depth = float(v_rgb)
+
+        elif mode == "scale":
+            u_depth = float(u_rgb) * float(depth_w) / float(rgb_w)
+            v_depth = float(v_rgb) * float(depth_h) / float(rgb_h)
+
+        else:
+            # Recommended for OAK Lite HD RGB 1920x1080 + depth 640x640.
+            # Center-aligned uniform scaling. Do not stretch 16:9 to 1:1.
+            rgb_cx_img = (float(rgb_w) - 1.0) * 0.5
+            rgb_cy_img = (float(rgb_h) - 1.0) * 0.5
+            depth_cx_img = (float(depth_w) - 1.0) * 0.5
+            depth_cy_img = (float(depth_h) - 1.0) * 0.5
+
+            # Use height-based scale:
+            # RGB height 1080 maps to depth height 640.
+            scale = float(depth_h) / float(rgb_h)
+
+            u_depth = (float(u_rgb) - rgb_cx_img) * scale + depth_cx_img
+            v_depth = (float(v_rgb) - rgb_cy_img) * scale + depth_cy_img
+
+        u_depth += self.depth_u_offset_px
+        v_depth += self.depth_v_offset_px
+
+        u_depth_i = int(round(u_depth))
+        v_depth_i = int(round(v_depth))
+
+        u_depth_i = max(0, min(depth_w - 1, u_depth_i))
+        v_depth_i = max(0, min(depth_h - 1, v_depth_i))
+
+        return u_depth_i, v_depth_i
+
+    def lookup_depth_mm(self, u_rgb, v_rgb, rgb_w, rgb_h):
+        if self.latest_depth is None:
+            return None
+
+        depth = self.latest_depth
+
+        if depth.ndim == 3:
+            depth = depth[:, :, 0]
+
+        depth_h, depth_w = depth.shape[:2]
+
+        if not self.logged_size_once:
+            self.get_logger().info(
+                f"RGB size {rgb_w}x{rgb_h}, Depth size {depth_w}x{depth_h}, "
+                f"encoding={self.latest_depth_encoding}, lookup_mode={self.depth_lookup_mode}"
+            )
+            self.get_logger().info(
+                "Depth lookup does NOT resize the depth image. "
+                "It maps RGB detection center to low-res depth coordinates."
+            )
+            self.logged_size_once = True
+
+        u_depth_i, v_depth_i = self.rgb_to_depth_px(
+            u_rgb=u_rgb,
+            v_rgb=v_rgb,
+            rgb_w=rgb_w,
+            rgb_h=rgb_h,
+            depth_w=depth_w,
+            depth_h=depth_h,
+        )
+
+        win = max(1, int(self.depth_window_size))
+        if win % 2 == 0:
+            win += 1
+
+        half = win // 2
+        x1 = max(0, u_depth_i - half)
+        x2 = min(depth_w, u_depth_i + half + 1)
+        y1 = max(0, v_depth_i - half)
+        y2 = min(depth_h, v_depth_i + half + 1)
+
+        patch = depth[y1:y2, x1:x2].astype(np.float32).reshape(-1)
+
+        # 16UC1 is usually millimeters.
+        # 32FC1 is usually meters.
+        if "32F" in self.latest_depth_encoding.upper():
+            patch = patch * 1000.0
+
+        valid = patch[np.isfinite(patch)]
+        valid = valid[valid > 0.0]
+        valid = valid[valid >= self.min_valid_depth_mm]
+        valid = valid[valid <= self.max_valid_depth_mm]
+
+        if valid.size == 0:
+            return {
+                "valid": False,
+                "depth_lookup_px": [u_depth_i, v_depth_i],
+                "depth_mm_raw": None,
+                "depth_mm": None,
+                "valid_count": 0,
+                "window_size": win,
+            }
+
+        raw_z = float(np.median(valid))
+        z = float(raw_z * self.z_scale + self.z_offset_mm)
+
+        return {
+            "valid": True,
+            "depth_lookup_px": [u_depth_i, v_depth_i],
+            "depth_mm_raw": raw_z,
+            "depth_mm": z,
+            "valid_count": int(valid.size),
+            "window_size": win,
+        }
+
+    def compute_xyz_mm(self, u_rgb, v_rgb, z_mm):
+        if not self.have_intrinsics or z_mm is None:
+            return None
+
+        x = (float(u_rgb) - self.cx) * float(z_mm) / self.fx
+        y = (float(v_rgb) - self.cy) * float(z_mm) / self.fy
+        z = float(z_mm)
+
+        return {
+            "x": float(x),
+            "y": float(y),
+            "z": float(z),
+        }
+
+    def enrich_results_with_pose(self, results, rgb_w, rgb_h):
+        enriched = []
+
+        for item in results:
+            points = item.get("points", None)
+            center = self.get_center_px(points)
+
+            new_item = dict(item)
+            new_item["center_px"] = list(center) if center is not None else None
+
+            if center is None:
+                new_item["valid_depth"] = False
+                new_item["depth_lookup_px"] = None
+                new_item["depth_mm_raw"] = None
+                new_item["depth_mm"] = None
+                new_item["camera_xyz_mm"] = None
+                enriched.append(new_item)
+                continue
+
+            u_rgb, v_rgb = center
+            depth_info = self.lookup_depth_mm(u_rgb, v_rgb, rgb_w, rgb_h)
+
+            if depth_info is None:
+                new_item["valid_depth"] = False
+                new_item["depth_lookup_px"] = None
+                new_item["depth_mm_raw"] = None
+                new_item["depth_mm"] = None
+                new_item["camera_xyz_mm"] = None
+                enriched.append(new_item)
+                continue
+
+            z_mm = depth_info["depth_mm"]
+            xyz = self.compute_xyz_mm(u_rgb, v_rgb, z_mm) if depth_info["valid"] else None
+
+            new_item["valid_depth"] = bool(depth_info["valid"])
+            new_item["depth_lookup_px"] = depth_info["depth_lookup_px"]
+            new_item["depth_mm_raw"] = depth_info["depth_mm_raw"]
+            new_item["depth_mm"] = depth_info["depth_mm"]
+            new_item["depth_valid_count"] = depth_info["valid_count"]
+            new_item["depth_window_size"] = depth_info["window_size"]
+            new_item["camera_xyz_mm"] = xyz
+
+            enriched.append(new_item)
+
+        return enriched
+
+    # ============================================================
+    # Draw and publish
+    # ============================================================
+
+    def draw_results(self, frame, results, roi_box):
+        out = frame.copy()
+
+        x1, y1, x2, y2 = roi_box
+        cv2.rectangle(out, (x1, y1), (x2, y2), (255, 255, 0), 2)
+
+        if results:
+            title = f"DataMatrix count: {len(results)}"
+            color_title = (0, 255, 0)
+        else:
+            title = "DataMatrix: NOT DECODED"
+            color_title = (0, 0, 255)
+
+        cv2.putText(
+            out,
+            title,
+            (20, 40),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1.0,
+            color_title,
+            2,
+            cv2.LINE_AA,
+        )
+
+        for idx, item in enumerate(results):
+            text = item.get("text", "")
+            points = item.get("points", None)
+            center = item.get("center_px", None)
+            depth_lookup_px = item.get("depth_lookup_px", None)
+            z = item.get("depth_mm", None)
+            xyz = item.get("camera_xyz_mm", None)
+
+            valid = item.get("valid_depth", False)
+            color = (0, 255, 0) if valid else (0, 0, 255)
+
+            if points is not None and len(points) >= 4:
+                pts = np.array(points, dtype=np.int32).reshape((-1, 1, 2))
+                cv2.polylines(out, [pts], True, color, 3)
+
+            if center is not None:
+                cu, cv = int(center[0]), int(center[1])
+                cv2.circle(out, (cu, cv), 6, color, -1)
+                text_pos = (cu + 10, max(30, cv - 10))
+            elif points is not None and len(points) >= 1:
+                text_pos = (points[0][0], max(30, points[0][1] - 12))
+            else:
+                text_pos = (20, 80 + idx * 40)
+
+            if xyz is not None:
+                label = (
+                    f"{idx+1}:{text} "
+                    f"Z={z:.0f}mm X={xyz['x']:.0f} Y={xyz['y']:.0f}"
+                )
+            else:
+                label = f"{idx+1}:{text} Z=invalid"
+
+            cv2.putText(
+                out,
+                label,
+                text_pos,
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.75,
+                color,
+                2,
+                cv2.LINE_AA,
+            )
+
+            if depth_lookup_px is not None and center is not None:
+                small_label = f"RGB:{center} DEPTH:{depth_lookup_px}"
+                cv2.putText(
+                    out,
+                    small_label,
+                    (text_pos[0], text_pos[1] + 28),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.55,
+                    color,
+                    2,
+                    cv2.LINE_AA,
+                )
+
+        return out
+
+
+    def draw_camera_reference(self, out):
+        h, w = out.shape[:2]
+
+        # RGB image pixel origin: top-left corner.
+        cv2.circle(out, (0, 0), 10, (255, 0, 255), -1)
+        cv2.putText(
+            out,
+            "RGB pixel origin (0,0)",
+            (20, 25),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.65,
+            (255, 0, 255),
+            2,
+            cv2.LINE_AA,
+        )
+
+        # Camera optical center projected onto image plane.
+        if self.have_intrinsics:
+            ox = int(round(self.cx))
+            oy = int(round(self.cy))
+        else:
+            ox = w // 2
+            oy = h // 2
+
+        if 0 <= ox < w and 0 <= oy < h:
+            cv2.drawMarker(
+                out,
+                (ox, oy),
+                (255, 0, 255),
+                markerType=cv2.MARKER_CROSS,
+                markerSize=36,
+                thickness=2,
+            )
+            cv2.putText(
+                out,
+                f"optical center ({ox},{oy})",
+                (ox + 12, max(30, oy - 12)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.65,
+                (255, 0, 255),
+                2,
+                cv2.LINE_AA,
+            )
+
+            # Camera optical frame direction on image:
+            # +X right, +Y down, +Z forward out of image plane.
+            cv2.arrowedLine(out, (ox, oy), (min(w - 1, ox + 90), oy), (255, 0, 255), 2)
+            cv2.putText(out, "+X/+u", (min(w - 120, ox + 95), oy + 5),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 0, 255), 2)
+
+            cv2.arrowedLine(out, (ox, oy), (ox, min(h - 1, oy + 90)), (255, 0, 255), 2)
+            cv2.putText(out, "+Y/+v", (ox + 8, min(h - 20, oy + 105)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 0, 255), 2)
+
+            cv2.putText(out, "+Z forward", (ox + 12, oy + 28),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 0, 255), 2)
+
+        out = self.draw_camera_reference(out)
+        return out
+
+    def publish_results(self, results, rgb_w, rgb_h):
+        if not results:
+            return
+
+        now = time.time()
+        codes = [r.get("text", "") for r in results]
+        signature = "|".join(sorted(codes))
+
+        if signature == self.last_signature and now - self.last_publish_time < self.repeat_publish_interval:
+            return
+
+        first_msg = String()
+        first_msg.data = codes[0]
+        self.result_pub.publish(first_msg)
+
+        depth_shape = None
+        if self.latest_depth is not None:
+            d = self.latest_depth
+            depth_shape = [int(d.shape[1]), int(d.shape[0])]
+
+        json_msg = String()
+        json_msg.data = json.dumps(
+            {
+                "timestamp": now,
+                "count": len(results),
+                "codes": codes,
+                "rgb_size": [int(rgb_w), int(rgb_h)],
+                "depth_size": depth_shape,
+                "depth_encoding": self.latest_depth_encoding,
+                "intrinsics": {
+                    "fx": self.fx,
+                    "fy": self.fy,
+                    "cx": self.cx,
+                    "cy": self.cy,
+                },
+                "depth_lookup": {
+                    "mode": self.depth_lookup_mode,
+                    "window_size": self.depth_window_size,
+                    "u_offset_px": self.depth_u_offset_px,
+                    "v_offset_px": self.depth_v_offset_px,
+                    "z_scale": self.z_scale,
+                    "z_offset_mm": self.z_offset_mm,
+                    "note": "RGB point is mapped to depth point. Depth image is not resized.",
+                },
+                "items": [
+                    {
+                        "code": r.get("text", ""),
+                        "format": r.get("format", ""),
+                        "method": r.get("method", ""),
+                        "points": r.get("points", None),
+                        "center_px": r.get("center_px", None),
+                        "valid_depth": r.get("valid_depth", False),
+                        "depth_lookup_px": r.get("depth_lookup_px", None),
+                        "depth_mm_raw": r.get("depth_mm_raw", None),
+                        "depth_mm": r.get("depth_mm", None),
+                        "depth_valid_count": r.get("depth_valid_count", 0),
+                        "depth_window_size": r.get("depth_window_size", None),
+                        "camera_xyz_mm": r.get("camera_xyz_mm", None),
+                    }
+                    for r in results
+                ],
+            },
+            ensure_ascii=False,
+        )
+
+        self.result_json_pub.publish(json_msg)
+        self.last_signature = signature
+        self.last_publish_time = now
+
+        self.get_logger().info(
+            f"DataMatrix count={len(results)} codes={codes} "
+            f"z={[r.get('depth_mm', None) for r in results]}"
+        )
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = OakParcelPoseNode()
+
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            cv2.destroyAllWindows()
+        except Exception:
+            pass
+
+        node.destroy_node()
+
+        if rclpy.ok():
+            rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()

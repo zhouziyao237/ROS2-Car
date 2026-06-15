@@ -65,6 +65,10 @@ class OakParcelPoseNode(Node):
         self.declare_parameter("repeat_publish_interval", 0.8)
         self.declare_parameter("enable_sharpen", True)
         self.declare_parameter("enable_binary", False)
+        self.declare_parameter("fast_decode_mode", True)
+        self.declare_parameter("enhanced_decode_interval", 0.30)
+        self.declare_parameter("stop_on_first_success", True)
+        self.declare_parameter("decode_log_interval", 1.0)
 
         # ---------------- Depth lookup parameters ----------------
         # center_crop:
@@ -113,6 +117,13 @@ class OakParcelPoseNode(Node):
 
         self.enable_sharpen = bool(self.get_parameter("enable_sharpen").value)
         self.enable_binary = bool(self.get_parameter("enable_binary").value)
+        self.fast_decode_mode = bool(self.get_parameter("fast_decode_mode").value)
+        self.enhanced_decode_interval = float(self.get_parameter("enhanced_decode_interval").value)
+        self.stop_on_first_success = bool(self.get_parameter("stop_on_first_success").value)
+        self.decode_log_interval = float(self.get_parameter("decode_log_interval").value)
+        self.fast_decode_mode = bool(self.get_parameter("fast_decode_mode").value)
+        self.enhanced_decode_interval = float(self.get_parameter("enhanced_decode_interval").value)
+        self.decode_log_interval = float(self.get_parameter("decode_log_interval").value)
 
         self.use_camera_info = bool(self.get_parameter("use_camera_info").value)
 
@@ -129,6 +140,8 @@ class OakParcelPoseNode(Node):
         self.last_decode_time = 0.0
         self.last_publish_time = 0.0
         self.last_signature = ""
+        self.last_enhanced_decode_time = 0.0
+        self.last_decode_log_time = 0.0
 
         self.last_warn_time = {}
         self.logged_size_once = False
@@ -138,14 +151,14 @@ class OakParcelPoseNode(Node):
             Image,
             self.depth_topic,
             self.depth_callback,
-            10,
+            1,
         )
 
         self.rgb_sub = self.create_subscription(
             Image,
             self.rgb_topic,
             self.rgb_callback,
-            10,
+            1,
         )
 
         self.camera_info_sub = self.create_subscription(
@@ -192,6 +205,13 @@ class OakParcelPoseNode(Node):
             self.last_warn_time[key] = now
 
     def refresh_runtime_params(self):
+        self.decode_interval = float(self.get_parameter("decode_interval").value)
+        self.repeat_publish_interval = float(self.get_parameter("repeat_publish_interval").value)
+        self.fast_decode_mode = bool(self.get_parameter("fast_decode_mode").value)
+        self.enhanced_decode_interval = float(self.get_parameter("enhanced_decode_interval").value)
+        self.stop_on_first_success = bool(self.get_parameter("stop_on_first_success").value)
+        self.decode_log_interval = float(self.get_parameter("decode_log_interval").value)
+
         self.depth_lookup_mode = str(self.get_parameter("depth_lookup_mode").value)
         self.depth_window_size = int(self.get_parameter("depth_window_size").value)
         self.depth_u_offset_px = float(self.get_parameter("depth_u_offset_px").value)
@@ -260,24 +280,25 @@ class OakParcelPoseNode(Node):
         decoded = self.decode_all_in_roi(roi, roi_box)
         results = self.enrich_results_with_pose(decoded, rgb_w, rgb_h)
 
-        debug = self.draw_results(frame, results, roi_box)
-
         if results:
             self.publish_results(results, rgb_w, rgb_h)
 
-        if self.debug_image_pub is not None:
-            try:
-                debug_msg = self.bridge.cv2_to_imgmsg(debug, encoding="bgr8")
-                debug_msg.header = msg.header
-                self.debug_image_pub.publish(debug_msg)
-            except Exception as e:
-                self.warn_throttle("debug_pub", f"debug image publish failed: {e}", 2.0)
+        if self.debug_image_pub is not None or self.show_window:
+            debug = self.draw_results(frame, results, roi_box)
 
-        if self.show_window:
-            cv2.imshow("oak_parcel_pose HD RGB depth lookup", debug)
-            key = cv2.waitKey(1)
-            if key == ord("q"):
-                rclpy.shutdown()
+            if self.debug_image_pub is not None:
+                try:
+                    debug_msg = self.bridge.cv2_to_imgmsg(debug, encoding="bgr8")
+                    debug_msg.header = msg.header
+                    self.debug_image_pub.publish(debug_msg)
+                except Exception as e:
+                    self.warn_throttle("debug_pub", f"debug image publish failed: {e}", 2.0)
+
+            if self.show_window:
+                cv2.imshow("oak_parcel_pose HD RGB depth lookup", debug)
+                key = cv2.waitKey(1)
+                if key == ord("q"):
+                    rclpy.shutdown()
 
     # ============================================================
     # ROI and decoding
@@ -299,10 +320,21 @@ class OakParcelPoseNode(Node):
 
     def make_candidates(self, roi):
         candidates = []
-        candidates.append(("raw", roi, 1.0))
 
         gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+
+        # Fast path: every decode tick uses gray first.
         candidates.append(("gray", gray, 1.0))
+
+        now = time.time()
+        if self.fast_decode_mode:
+            if now - self.last_enhanced_decode_time < self.enhanced_decode_interval:
+                return candidates
+
+        self.last_enhanced_decode_time = now
+
+        # Recovery path: slower candidates, not every frame.
+        candidates.append(("raw", roi, 1.0))
 
         if self.resize_scale > 1.0:
             gray_big = cv2.resize(
@@ -320,13 +352,11 @@ class OakParcelPoseNode(Node):
             blur = cv2.GaussianBlur(gray_big, (0, 0), 1.0)
             sharp = cv2.addWeighted(gray_big, 1.6, blur, -0.6, 0)
             candidates.append(("sharp_big", sharp, self.resize_scale))
-        else:
-            sharp = gray_big
 
         if self.enable_binary:
             try:
                 binary = cv2.adaptiveThreshold(
-                    sharp,
+                    gray_big,
                     255,
                     cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
                     cv2.THRESH_BINARY,
@@ -338,6 +368,7 @@ class OakParcelPoseNode(Node):
                 pass
 
         return candidates
+
 
     def is_datamatrix(self, fmt):
         f = str(fmt).lower()
@@ -409,6 +440,8 @@ class OakParcelPoseNode(Node):
         all_items = []
 
         for method, img, scale in self.make_candidates(roi):
+            method_items = []
+
             try:
                 results = zxingcpp.read_barcodes(img)
             except Exception as e:
@@ -431,7 +464,7 @@ class OakParcelPoseNode(Node):
                     scale=scale,
                 )
 
-                all_items.append(
+                method_items.append(
                     {
                         "text": text,
                         "format": fmt,
@@ -439,6 +472,12 @@ class OakParcelPoseNode(Node):
                         "points": points,
                     }
                 )
+
+            if method_items:
+                all_items.extend(method_items)
+
+                if self.fast_decode_mode and self.stop_on_first_success:
+                    break
 
         if not self.deduplicate:
             return all_items
@@ -450,6 +489,7 @@ class OakParcelPoseNode(Node):
                 unique[key] = item
 
         return list(unique.values())
+
 
     # ============================================================
     # Depth lookup and pose calculation
@@ -870,10 +910,12 @@ class OakParcelPoseNode(Node):
         self.last_signature = signature
         self.last_publish_time = now
 
-        self.get_logger().info(
-            f"DataMatrix count={len(results)} codes={codes} "
-            f"z={[r.get('depth_mm', None) for r in results]}"
-        )
+        if now - self.last_decode_log_time >= self.decode_log_interval:
+            self.get_logger().info(
+                f"DataMatrix count={len(results)} codes={codes} "
+                f"z={[r.get('depth_mm', None) for r in results]}"
+            )
+            self.last_decode_log_time = now
 
 
 def main(args=None):

@@ -1,0 +1,36 @@
+oak_parcel_pose_node:
+  ros__parameters:
+    # OAK / Depth camera topics. Depth should preferably be aligned to RGB.
+    rgb_topic: "/oak/rgb/image_raw"
+    depth_topic: "/oak/depth/image_raw"
+    camera_info_topic: "/oak/rgb/camera_info"
+
+    # Outputs
+    result_topic: "/oak/datamatrix_result"
+    result_json_topic: "/oak/datamatrix_3d_result_json"
+    debug_image_topic: "/oak/datamatrix_depth_debug_image"
+
+    publish_debug_image: true
+    show_window: false
+
+    # Detection
+    roi_ratio: 1.0
+    resize_scale: 2.0
+    decode_interval: 0.0
+    datamatrix_only: true
+    deduplicate: true
+    repeat_publish_interval: 0.033
+    enable_sharpen: true
+    enable_binary: false
+
+    # Depth
+    # auto: 16UC1/mono16 normally means mm; 32FC1 normally means meter and will be converted to mm.
+    depth_unit: "auto"
+    depth_search_radius_px: 4
+    bbox_depth_fallback: true
+    min_valid_depth_mm: 50.0
+    max_valid_depth_mm: 10000.0
+    allow_resize_depth_to_rgb: true
+    publish_debug_image: true\n    decode_interval: 0.05\n    repeat_publish_interval: 0.05\n    resize_scale: 1.5\n    enable_sharpen: false\n    enable_binary: false\n    roi_ratio: 1.0\n    fast_decode_mode: true
+    enhanced_decode_interval: 0.25
+    decode_log_interval: 0.5

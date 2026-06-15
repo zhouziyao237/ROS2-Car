@@ -40,6 +40,34 @@ class OakVisionDriverNode(Node):
 
     def __init__(self):
         super().__init__("oak_vision_driver_node")
+        # Focus parameters: declare before any get_parameter() access.
+        try:
+            self.declare_parameter("focus_mode", "manual")
+        except Exception:
+            pass
+        try:
+            self.declare_parameter("manual_focus", 40)
+        except Exception:
+            pass
+        try:
+            self.declare_parameter("autofocus_mode", "continuous_video")
+        except Exception:
+            pass
+        try:
+            self.declare_parameter("focus_cmd_topic", "/oak/rgb/focus_set")
+        except Exception:
+            pass
+        try:
+            self.declare_parameter("focus_status_topic", "/oak/rgb/focus_status")
+        except Exception:
+            pass
+
+        self.focus_mode = str(self.get_parameter("focus_mode").value).strip().lower()
+        self.manual_focus = int(self.get_parameter("manual_focus").value)
+        self.autofocus_mode = str(self.get_parameter("autofocus_mode").value).strip().lower()
+        self.focus_cmd_topic = str(self.get_parameter("focus_cmd_topic").value)
+        self.focus_status_topic = str(self.get_parameter("focus_status_topic").value)
+
 
         # =========================
         # Runtime switches
@@ -87,6 +115,11 @@ class OakVisionDriverNode(Node):
         self.declare_parameter("force_usb2", False)
         self.declare_parameter("stop_on_xlink_error", True)
         self.declare_parameter("ros_image_encoding", "bgr8")
+        # RGB focus control.
+        # focus_mode:
+        #   auto   -> use OAK autofocus
+        #   manual -> fixed lens position, disables autofocus hunting
+        # manual_focus range is 0~255. Larger value usually focuses closer.
 
         # Stereo fusion
         self.declare_parameter("stereo_fusion_method", "blend")
@@ -194,6 +227,9 @@ class OakVisionDriverNode(Node):
         self.force_usb2 = bool(self.get_parameter("force_usb2").value)
         self.stop_on_xlink_error = bool(self.get_parameter("stop_on_xlink_error").value)
         self.ros_image_encoding = str(self.get_parameter("ros_image_encoding").value)
+        self.focus_mode = str(self.get_parameter("focus_mode").value).strip().lower()
+        self.manual_focus = int(self.get_parameter("manual_focus").value)
+        self.autofocus_mode = str(self.get_parameter("autofocus_mode").value).strip().lower()
 
         self.stereo_fusion_method = str(self.get_parameter("stereo_fusion_method").value).lower()
         self.stereo_fusion_alpha = float(self.get_parameter("stereo_fusion_alpha").value)
@@ -306,6 +342,26 @@ class OakVisionDriverNode(Node):
             if self.enable_yolo and not HAS_YOLO_MSG:
                 self.get_logger().warn("yolo_msg import failed. /yolov5/detections will not be published.")
 
+        # Focus attributes must exist before creating focus pub/sub.
+        if not hasattr(self, "focus_mode"):
+            self.focus_mode = str(self.get_parameter("focus_mode").value).strip().lower()
+        if not hasattr(self, "manual_focus"):
+            self.manual_focus = int(self.get_parameter("manual_focus").value)
+        if not hasattr(self, "autofocus_mode"):
+            self.autofocus_mode = str(self.get_parameter("autofocus_mode").value).strip().lower()
+        if not hasattr(self, "focus_cmd_topic"):
+            self.focus_cmd_topic = str(self.get_parameter("focus_cmd_topic").value)
+        if not hasattr(self, "focus_status_topic"):
+            self.focus_status_topic = str(self.get_parameter("focus_status_topic").value)
+
+        self.focus_status_pub = self.create_publisher(String, self.focus_status_topic, 10)
+        self.focus_cmd_sub = self.create_subscription(
+            String,
+            self.focus_cmd_topic,
+            self.focus_cmd_callback,
+            10,
+        )
+
         # =========================
         # Runtime state
         # =========================
@@ -317,6 +373,7 @@ class OakVisionDriverNode(Node):
         self.left_queue = None
         self.right_queue = None
         self.nn_queue = None
+        self.rgb_control_queue = None
 
         self.need_rgb_stream = self.enable_rgb or (
             self.enable_yolo and self.publish_annotated_image
@@ -363,6 +420,14 @@ class OakVisionDriverNode(Node):
             f"stereo_fusion_alpha={self.stereo_fusion_alpha}"
         )
         self.get_logger().info(f"force_usb2={self.force_usb2}, queue_size={self.queue_size}")
+        self.get_logger().info(
+            f"focus_mode={self.focus_mode}, manual_focus={self.manual_focus}, "
+            f"autofocus_mode={self.autofocus_mode}, focus_cmd_topic={self.focus_cmd_topic}"
+        )
+        self.get_logger().info(
+            f"focus_mode={self.focus_mode}, manual_focus={self.manual_focus}, "
+            f"autofocus_mode={self.autofocus_mode}"
+        )
         self.get_logger().info(f"rgb_topic={self.rgb_topic if self.enable_rgb else 'DISABLED'}")
         self.get_logger().info(f"depth_topic={self.depth_topic if self.enable_depth else 'DISABLED'}")
         self.get_logger().info(
@@ -403,6 +468,131 @@ class OakVisionDriverNode(Node):
         self.get_logger().warn(f"Unknown mono_resolution={self.mono_resolution}, fallback to 400p")
         return dai.MonoCameraProperties.SensorResolution.THE_400_P
 
+    def apply_rgb_focus_control(self, cam_rgb):
+        """Apply OAK RGB focus mode before starting the DepthAI pipeline."""
+        try:
+            mode = str(getattr(self, "focus_mode", "auto")).strip().lower()
+
+            if mode in ("manual", "fixed", "off"):
+                lens = int(getattr(self, "manual_focus", 145))
+                lens = max(0, min(255, lens))
+                cam_rgb.initialControl.setManualFocus(lens)
+                self.get_logger().info(
+                    f"OAK RGB focus control: MANUAL, lens_position={lens}"
+                )
+                return
+
+            af_name = str(getattr(self, "autofocus_mode", "continuous_video")).strip().lower()
+            af_map = {
+                "auto": dai.CameraControl.AutoFocusMode.AUTO,
+                "continuous_video": dai.CameraControl.AutoFocusMode.CONTINUOUS_VIDEO,
+                "continuous_picture": dai.CameraControl.AutoFocusMode.CONTINUOUS_PICTURE,
+                "macro": dai.CameraControl.AutoFocusMode.MACRO,
+                "edof": dai.CameraControl.AutoFocusMode.EDOF,
+            }
+            af_mode = af_map.get(af_name, dai.CameraControl.AutoFocusMode.CONTINUOUS_VIDEO)
+            cam_rgb.initialControl.setAutoFocusMode(af_mode)
+            self.get_logger().info(
+                f"OAK RGB focus control: AUTO, autofocus_mode={af_name}"
+            )
+
+        except Exception as e:
+            self.get_logger().warn(f"Failed to apply OAK RGB focus control: {e}")
+
+
+    # =========================
+    # RGB focus control
+    # =========================
+    def _autofocus_mode_enum(self, name: str):
+        name = str(name or "continuous_video").strip().lower()
+        table = {
+            "auto": dai.CameraControl.AutoFocusMode.AUTO,
+            "continuous_video": dai.CameraControl.AutoFocusMode.CONTINUOUS_VIDEO,
+            "continuous_picture": dai.CameraControl.AutoFocusMode.CONTINUOUS_PICTURE,
+            "macro": dai.CameraControl.AutoFocusMode.MACRO,
+            "edof": dai.CameraControl.AutoFocusMode.EDOF,
+        }
+        return table.get(name, dai.CameraControl.AutoFocusMode.CONTINUOUS_VIDEO)
+
+    def apply_initial_rgb_focus_control(self, cam_rgb):
+        try:
+            mode = str(getattr(self, "focus_mode", "manual")).strip().lower()
+            if mode in ("manual", "fixed", "off"):
+                lens = max(0, min(255, int(getattr(self, "manual_focus", 145))))
+                cam_rgb.initialControl.setManualFocus(lens)
+                self.get_logger().info(f"OAK RGB initial focus: MANUAL lens={lens}")
+            else:
+                af_mode = self._autofocus_mode_enum(getattr(self, "autofocus_mode", "continuous_video"))
+                cam_rgb.initialControl.setAutoFocusMode(af_mode)
+                self.get_logger().info(f"OAK RGB initial focus: AUTO mode={self.autofocus_mode}")
+        except Exception as e:
+            self.get_logger().warn(f"Failed to apply initial OAK focus: {e}")
+
+    def send_rgb_manual_focus(self, lens: int):
+        lens = max(0, min(255, int(lens)))
+        self.manual_focus = lens
+        self.focus_mode = "manual"
+
+        if self.rgb_control_queue is not None:
+            ctrl = dai.CameraControl()
+            ctrl.setManualFocus(lens)
+            self.rgb_control_queue.send(ctrl)
+
+        self.publish_focus_status("manual", lens)
+        self.get_logger().info(f"OAK RGB runtime focus: MANUAL lens={lens}")
+
+    def send_rgb_auto_focus(self, autofocus_mode: str = None):
+        self.focus_mode = "auto"
+        if autofocus_mode:
+            self.autofocus_mode = str(autofocus_mode).strip().lower()
+
+        if self.rgb_control_queue is not None:
+            ctrl = dai.CameraControl()
+            ctrl.setAutoFocusMode(self._autofocus_mode_enum(self.autofocus_mode))
+            self.rgb_control_queue.send(ctrl)
+
+        self.publish_focus_status("auto", self.manual_focus)
+        self.get_logger().info(f"OAK RGB runtime focus: AUTO mode={self.autofocus_mode}")
+
+    def publish_focus_status(self, mode=None, lens=None):
+        try:
+            msg = String()
+            msg.data = (
+                "{"
+                f'"mode":"{mode or self.focus_mode}",'
+                f'"manual_focus":{int(lens if lens is not None else self.manual_focus)},'
+                f'"autofocus_mode":"{self.autofocus_mode}"'
+                "}"
+            )
+            self.focus_status_pub.publish(msg)
+        except Exception:
+            pass
+
+    def focus_cmd_callback(self, msg):
+        import json
+        raw = str(msg.data or "").strip()
+
+        try:
+            data = json.loads(raw)
+        except Exception:
+            # Allow plain number, e.g. "160"
+            try:
+                data = {"mode": "manual", "manual_focus": int(raw)}
+            except Exception:
+                self.get_logger().warn(f"Invalid focus command: {raw}")
+                return
+
+        mode = str(data.get("mode", data.get("focus_mode", "manual"))).strip().lower()
+
+        if mode in ("manual", "fixed", "off"):
+            lens = int(data.get("manual_focus", data.get("lens", self.manual_focus)))
+            self.send_rgb_manual_focus(lens)
+        elif mode in ("auto", "af"):
+            self.send_rgb_auto_focus(str(data.get("autofocus_mode", self.autofocus_mode)))
+        else:
+            self.get_logger().warn(f"Unknown focus mode: {mode}")
+
+
     # =========================
     # DepthAI pipeline
     # =========================
@@ -429,6 +619,14 @@ class OakVisionDriverNode(Node):
 
             if self.rgb_output == "video":
                 cam_rgb.setVideoSize(self.video_width, self.video_height)
+
+            self.apply_initial_rgb_focus_control(cam_rgb)
+
+            xin_rgb_ctrl = pipeline.create(dai.node.XLinkIn)
+            xin_rgb_ctrl.setStreamName("rgb_control")
+            xin_rgb_ctrl.out.link(cam_rgb.inputControl)
+
+            self.apply_rgb_focus_control(cam_rgb)
 
             if self.need_rgb_stream:
                 xout_rgb = pipeline.create(dai.node.XLinkOut)
@@ -565,6 +763,16 @@ class OakVisionDriverNode(Node):
                     maxSize=self.queue_size,
                     blocking=False,
                 )
+
+            if self.need_rgb_stream or self.enable_yolo:
+                try:
+                    self.rgb_control_queue = self.device.getInputQueue("rgb_control")
+                    if self.focus_mode in ("manual", "fixed", "off"):
+                        self.send_rgb_manual_focus(self.manual_focus)
+                    else:
+                        self.send_rgb_auto_focus(self.autofocus_mode)
+                except Exception as e:
+                    self.get_logger().warn(f"Failed to open rgb_control input queue: {e}")
 
             self.load_camera_intrinsics()
             self.oak_alive = True

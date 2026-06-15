@@ -43,6 +43,9 @@ def generate_launch_description():
 
         DeclareLaunchArgument("fps", default_value="10.0"),
         DeclareLaunchArgument("force_usb2", default_value="false"),
+        DeclareLaunchArgument("focus_mode", default_value="auto"),
+        DeclareLaunchArgument("manual_focus", default_value="145"),
+        DeclareLaunchArgument("autofocus_mode", default_value="continuous_video"),
 
         DeclareLaunchArgument("stereo_fusion_method", default_value="blend"),
         DeclareLaunchArgument("stereo_fusion_alpha", default_value="0.5"),
@@ -123,6 +126,13 @@ def generate_launch_description():
                         LaunchConfiguration("force_usb2"),
                         value_type=bool,
                     ),
+
+                    "focus_mode": LaunchConfiguration("focus_mode"),
+                    "manual_focus": ParameterValue(
+                        LaunchConfiguration("manual_focus"),
+                        value_type=int,
+                    ),
+                    "autofocus_mode": LaunchConfiguration("autofocus_mode"),
 
                     "stereo_fusion_method": LaunchConfiguration("stereo_fusion_method"),
                     "stereo_fusion_alpha": ParameterValue(
