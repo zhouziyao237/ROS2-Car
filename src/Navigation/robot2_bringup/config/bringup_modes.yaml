@@ -345,6 +345,9 @@ modules:
       platform_status_topic: /platform/status
       explore_cmd_topic: /task/explore_cmd
       control_mode_topic: /control_mode
+      oak_guided_pickup_request_topic: /target_capture/oak_guided_pickup/request
+      oak_guided_pickup_status_topic: /target_capture/oak_guided_pickup/status
+      oak_guided_pickup_timeout_sec: 30.0
       anchor_detection_topic: /semantic/anchor_detection
       current_shelf_topic: /semantic/current_shelf
       map_frame: map
@@ -642,6 +645,18 @@ modules:
       map_topic: /map
       semantic_shelf_topic: /semantic/current_shelf
 
+  oak_guided_pickup:
+    type: node
+    package: oak_guided_pickup
+    executable: oak_guided_pickup_node
+    name: oak_guided_pickup
+    output: screen
+    delay: 19.0
+    respawn: true
+    respawn_delay: 2.0
+    parameters:
+    - /host-home/src/target_capture/oak_guided_pickup/config/oak_guided_pickup.yaml
+
 modes:
   hardware:
     enable:
@@ -699,6 +714,7 @@ modes:
     - oak_parcel_pose
     - oak_package_search
     - oak_package_servo
+    - oak_guided_pickup
   nav_d435:
     enable:
     - robot_description

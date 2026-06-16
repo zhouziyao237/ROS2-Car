@@ -1,0 +1,45 @@
+oak_guided_pickup:
+  ros__parameters:
+    request_topic: /target_capture/oak_guided_pickup/request
+    status_topic: /target_capture/oak_guided_pickup/status
+
+    datamatrix_topic: /oak/datamatrix_3d_result_json
+    rgb_image_topic: /oak/rgb/image_raw
+    platform_current_status_topic: /platform/current_status
+    platform_target_topic: /platform/target
+    chassis_control_mode_topic: /chassis_control_mode
+    visual_align_point_topic: /oak/visual_align_point
+
+    # rm_serial_driver: /chassis_control_mode is published by rm_serial_driver.
+    require_chassis_auto_for_platform_control: true
+    allow_control_when_chassis_mode_unknown: false
+    chassis_mode_timeout_sec: 1.0
+
+    # Manual OAK RGB calibration point. Only oak_guided_pickup uses this.
+    enable_custom_align_point: true
+    align_u_px: 1050.0
+    align_v_px: 100.0
+    image_width: 1920
+    image_height: 1080
+    config_yaml_path: /host-home/src/target_capture/oak_guided_pickup/config/oak_guided_pickup.yaml
+
+    # Visual lift control.
+    kv_to_lift_mm_per_px: 0.25
+    lift_pixel_direction: 1.0
+    v_tolerance_px: 20.0
+    stable_required_frames: 5
+
+    max_lift_speed_mmps: 5.0
+    control_hz: 10.0
+    lift_deadband_mm: 3.0
+
+    platform_min_height_mm: 0.0
+    platform_max_height_mm: 330.0
+
+    auto_takeover_hold_ticks: 5
+    auto_takeover_first_target_tolerance_mm: 3.0
+    actual_jump_resync_mm: 10.0
+    platform_current_status_timeout_sec: 0.8
+    target_lost_timeout_sec: 1.0
+    stage_timeout_sec: 25.0
+    debug_log_period_sec: 0.3

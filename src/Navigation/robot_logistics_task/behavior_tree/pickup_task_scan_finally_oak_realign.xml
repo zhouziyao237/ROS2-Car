@@ -26,14 +26,15 @@
           <!-- 扫描找到目标后，先缓存目标；不在扫描角度下取件 -->
           <CacheFoundPackagePose/>
 
-          <!-- 保留原逻辑：扫描结束后先让 OAK / 车体重新正对货架 -->
+          <!-- 二次货架平行对准：必须保留；不是重新搜索包裹。 -->
           <RequestOakPackageSearchAlign/>
           <WaitAfterOakAlign/>
 
-          <!-- 新增：OAK + URDF 解算 base_link 控制量，输出标准 cmd_vel -->
-          <RequestOakServoCenterAlign/>
+          <!-- 二次平行后靠近到约 50cm。 -->
           <RequestOakServoApproach/>
-          <RequestOakServoFineAlign/>
+
+          <!-- 靠近后执行 OAK RGB 像素误差升降对齐。 -->
+          <ExecuteOakGuidedPickup/>
 
           <PublishTaskDone/>
         </Sequence>

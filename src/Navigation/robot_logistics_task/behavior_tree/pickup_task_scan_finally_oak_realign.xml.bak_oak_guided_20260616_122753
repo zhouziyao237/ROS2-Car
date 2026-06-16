@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="4" main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="PickupTask_WithScanFinallyOakRealign">
+      <ReceiveShelfGoal/>
+      <QueryShelfPose/>
+
+      <NavigateToShelf/>
+      <WaitNavArrive/>
+
+      <WaitNavSettle/>
+
+      <!-- 第一次 OAK 对正货架正面 -->
+      <RequestOakPackageSearchAlign/>
+      <WaitAfterOakAlign/>
+
+      <!--
+        核心：
+        扫描成功：Scan -> OAK重新对正 -> Done
+        扫描失败：进入第二分支 -> OAK重新对正 -> AlwaysFailure
+      -->
+      <Fallback name="ScanThenFinallyOakRealign">
+        <Sequence name="ScanSuccess_ReAlign_ThenDone">
+          <ScanTargetPackageOnShelf/>
+
+          <!-- 扫描找到目标后，先缓存目标；不在扫描角度下取件 -->
+          <CacheFoundPackagePose/>
+
+          <!-- 保留原逻辑：扫描结束后先让 OAK / 车体重新正对货架 -->
+          <RequestOakPackageSearchAlign/>
+          <WaitAfterOakAlign/>
+
+          <!-- 新增：OAK + URDF 解算 base_link 控制量，输出标准 cmd_vel -->
+          <RequestOakServoCenterAlign/>
+          <RequestOakServoApproach/>
+          <RequestOakServoFineAlign/>
+
+          <PublishTaskDone/>
+        </Sequence>
+
+        <Sequence name="ScanFailure_ReAlign_ThenFail">
+          <RequestOakPackageSearchAlign/>
+          <WaitAfterOakAlign/>
+          <AlwaysFailure/>
+        </Sequence>
+      </Fallback>
+    </Sequence>
+  </BehaviorTree>
+</root>

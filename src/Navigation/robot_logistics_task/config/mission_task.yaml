@@ -30,6 +30,9 @@ mission_btcpp_node:
     groot_max_msg_per_second: 25
     package_search_request_topic: /target_detection/package_search/request
     package_search_status_topic: /target_detection/package_search/status
+    oak_guided_pickup_request_topic: /target_capture/oak_guided_pickup/request
+    oak_guided_pickup_status_topic: /target_capture/oak_guided_pickup/status
+    oak_guided_pickup_timeout_sec: 30.0
     package_search_timeout_sec: 25.0
     cmd_vel_topic: /cmd_vel
     datamatrix_result_json_topic: /oak/datamatrix_3d_result_json
@@ -40,7 +43,7 @@ mission_btcpp_node:
     oak_align_max_wz: 0.1
     oak_align_min_wz: 0.04
     package_scan_range_deg: 40.0
-package_scan_step_deg: 40.0
+    package_scan_step_deg: 40.0
     package_scan_wait_sec: 0.05
     package_scan_timeout_sec: 60.0
     package_scan_left_deg: 40.0
