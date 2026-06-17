@@ -136,9 +136,17 @@ class OakGuidedPickupNode(Node):
         self.declare_parameter('enable_custom_align_point', True)
         self.declare_parameter('align_u_px', 960.0)
         self.declare_parameter('align_v_px', 540.0)
+        self.declare_parameter('align_v_origin', 'bottom_left')
+        self.declare_parameter('align_v_from_bottom_px', 100.0)
+        self.declare_parameter('image_height_px', 1080.0)
         self.declare_parameter('visual_align_point_topic', '/oak/visual_align_point')
         self.declare_parameter('kv_to_lift_mm_per_px', 0.25)
         self.declare_parameter('v_tolerance_px', 20.0)
+        self.declare_parameter('lift_align_kp_mm_per_px', 0.25)
+        self.declare_parameter('lift_align_ki_mm_per_px_s', 0.0)
+        self.declare_parameter('lift_align_kd_mm_per_px_per_s', 0.0)
+        self.declare_parameter('lift_align_integral_limit_px_s', 300.0)
+        self.declare_parameter('lift_align_command_resync_mm', 30.0)
         self.declare_parameter('lift_pixel_direction', 1.0)
         # Legacy hand-eye parameters are declared only for backward-compatible YAML.
         # They are ignored by the new slider-point lift logic.
@@ -159,6 +167,10 @@ class OakGuidedPickupNode(Node):
         self.declare_parameter('chassis_mode_timeout_sec', 1.0)
         self.declare_parameter('target_lost_timeout_sec', 1.0)
         self.declare_parameter('stage_timeout_sec', 25.0)
+        self.declare_parameter('lift_down_target_mm', 0.0)
+        self.declare_parameter('lift_down_tolerance_mm', 3.0)
+        self.declare_parameter('lift_down_auto_hold_sec', 1.0)
+        self.declare_parameter('lift_down_timeout_sec', 90.0)
 
         self.declare_parameter('lift_direction', 1.0)
         self.declare_parameter('max_lift_speed_mmps', 25.0)
@@ -227,8 +239,16 @@ class OakGuidedPickupNode(Node):
 
         self.previous_command_lift_z_mm: Optional[float] = None
         self.command_lift_z_mm: Optional[float] = None
+        self.lift_align_integral_px_s: float = 0.0
+        self.lift_align_prev_error_px: Optional[float] = None
+        self.lift_align_prev_time: Optional[float] = None
+        self.lift_align_command_z_mm: Optional[float] = None
         self.manual_synced_lift_z_mm: Optional[float] = None
         self.hold_ticks_remaining = 0
+        self.lift_align_integral_px_s = 0.0
+        self.lift_align_prev_error_px = None
+        self.lift_align_prev_time = None
+        self.lift_align_command_z_mm = None
 
         # new_request_clear_previous_command_and_mode_edge
         # Clear stale command from previous run. The new request must start from actual height.
@@ -248,6 +268,9 @@ class OakGuidedPickupNode(Node):
         self.startup_zero_last_mode = 'unknown'
         self.startup_zero_auto_hold_until = 0.0
         self.startup_zero_hold_height_mm = None
+        self.lift_down_auto_hold_until = 0.0
+        self.lift_down_descend_start_time = 0.0
+        self.lift_down_last_mode = 'unknown'
 
         hz = float(self.get_parameter('control_hz').value)
         self.timer = self.create_timer(1.0 / max(1.0, hz), self.on_timer)
@@ -281,6 +304,31 @@ class OakGuidedPickupNode(Node):
             self.publish_status('canceled', 'idle', 'request_cancel')
             return
 
+        if command in ('lift_down_zero', 'lift_down', 'lower_zero', 'return_zero', 'descend_zero'):
+            self.package_code = str(data.get('package_code') or data.get('pickup_code') or data.get('code') or '')
+            self.pickup_code = str(data.get('pickup_code') or self.package_code)
+            self.request_id = str(data.get('request_id') or f'lift_down_{int(time.time()*1000)}')
+            self.request_start_time = self.now_sec()
+            self.active = True
+            self.state = 'LIFT_DOWN_TO_ZERO'
+            self.stable_count = 0
+            self.last_target_seen_time = self.now_sec()
+            self.hold_ticks_remaining = 0
+            self.lift_align_integral_px_s = 0.0
+            self.lift_align_prev_error_px = None
+            self.lift_align_prev_time = None
+            self.lift_align_command_z_mm = None
+            self.lift_down_auto_hold_until = 0.0
+            self.lift_down_descend_start_time = 0.0
+            self.lift_down_last_mode = 'unknown'
+            self.previous_command_lift_z_mm = None
+            self.command_lift_z_mm = None
+            self.manual_synced_lift_z_mm = None
+            if self.platform_status_valid:
+                self.sync_to_actual_height()
+            self.publish_status('running', 'lift_down_zero', 'request_received')
+            return
+
         self.package_code = str(data.get('package_code') or data.get('pickup_code') or data.get('code') or '')
         self.pickup_code = str(data.get('pickup_code') or self.package_code)
         self.request_id = str(data.get('request_id') or f'lift_align_{int(time.time()*1000)}')
@@ -290,6 +338,10 @@ class OakGuidedPickupNode(Node):
         self.stable_count = 0
         self.last_target_seen_time = self.now_sec()
         self.hold_ticks_remaining = 0
+        self.lift_align_integral_px_s = 0.0
+        self.lift_align_prev_error_px = None
+        self.lift_align_prev_time = None
+        self.lift_align_command_z_mm = None
         if self.platform_status_valid:
             self.sync_to_actual_height()
         self.publish_status('running', 'sync_platform_actual_height', 'request_received')
@@ -309,7 +361,7 @@ class OakGuidedPickupNode(Node):
         self.actual_screw_x_mm = float(msg.target_screw_x_mm)
         self.platform_control_mode = int(msg.control_mode)
 
-        if self.active and self.previous_command_lift_z_mm is not None:
+        if self.active and self.state != 'LIFT_DOWN_TO_ZERO' and self.previous_command_lift_z_mm is not None:
             gap = self.actual_lift_z_mm - self.previous_command_lift_z_mm
             if abs(gap) > self.pfloat('actual_jump_resync_mm'):
                 self.sync_to_actual_height()
@@ -650,12 +702,161 @@ class OakGuidedPickupNode(Node):
                 )
             return
 
+    def handle_lift_down_zero(self, now: float) -> None:
+        """Task-stage lift-down after pickup.
+
+        This is not startup zero and not visual lift alignment.
+        It keeps using the original /platform/target PlatformTarget packet.
+        Manual mode publishes the same feedback height to synchronize PC target;
+        auto mode first holds the feedback height, then descends at max_lift_speed_mmps.
+        """
+        if (not self.platform_status_valid) or (now - self.platform_status_stamp > self.pfloat('platform_current_status_timeout_sec')):
+            self.publish_status('running', 'lift_down_zero', 'waiting_platform_current_status')
+            return
+
+        mode = self.effective_chassis_mode()
+        actual = clamp(
+            float(self.actual_lift_z_mm),
+            self.pfloat('platform_min_height_mm'),
+            self.pfloat('platform_max_height_mm')
+        )
+        target = clamp(
+            self.pfloat('lift_down_target_mm'),
+            self.pfloat('platform_min_height_mm'),
+            self.pfloat('platform_max_height_mm')
+        )
+        tol = self.pfloat('lift_down_tolerance_mm')
+
+        # Manual: synchronize to the hand-controlled height. Do not descend.
+        if self.pbool('require_chassis_auto_for_platform_control') and mode != 'auto':
+            command = actual
+            self.lift_down_last_mode = mode
+            self.lift_down_auto_hold_until = 0.0
+            self.lift_down_descend_start_time = 0.0
+            self.previous_command_lift_z_mm = command
+            self.command_lift_z_mm = command
+            self.manual_synced_lift_z_mm = actual
+            self.publish_platform_target(command, 'lift_down_manual_sync_same_height')
+            self.publish_status('running', 'lift_down_zero', 'manual_sync_same_height', {
+                'effective_chassis_mode': mode,
+                'actual_lift_z_mm': actual,
+                'command_lift_z_mm': command,
+                'target_lift_z_mm': target,
+            })
+            if now - self.last_log_time > self.pfloat('debug_log_period_sec'):
+                self.last_log_time = now
+                self.get_logger().warn(
+                    f'[lift_down_zero] waiting auto/manual sync actual={actual:.1f} cmd={command:.1f}'
+                )
+            return
+
+        # Auto takeover: hold current feedback height first.
+        if self.lift_down_last_mode != 'auto':
+            hold_sec = self.pfloat('lift_down_auto_hold_sec')
+            self.lift_down_last_mode = 'auto'
+            self.lift_down_auto_hold_until = now + hold_sec
+            self.lift_down_descend_start_time = 0.0
+            command = actual
+            self.previous_command_lift_z_mm = command
+            self.command_lift_z_mm = command
+            self.manual_synced_lift_z_mm = actual
+            self.publish_platform_target(command, 'lift_down_auto_takeover_hold_height')
+            self.publish_status('running', 'lift_down_zero', 'auto_takeover_hold_height', {
+                'effective_chassis_mode': mode,
+                'actual_lift_z_mm': actual,
+                'command_lift_z_mm': command,
+                'target_lift_z_mm': target,
+                'hold_sec': hold_sec,
+            })
+            self.get_logger().info(
+                f'[lift_down_zero] auto takeover hold actual={actual:.1f} hold_sec={hold_sec:.1f}'
+            )
+            return
+
+        if now < self.lift_down_auto_hold_until:
+            command = actual
+            self.previous_command_lift_z_mm = command
+            self.command_lift_z_mm = command
+            self.manual_synced_lift_z_mm = actual
+            self.publish_platform_target(command, 'lift_down_auto_hold_same_height')
+            self.publish_status('running', 'lift_down_zero', 'auto_hold_same_height', {
+                'effective_chassis_mode': mode,
+                'actual_lift_z_mm': actual,
+                'command_lift_z_mm': command,
+                'target_lift_z_mm': target,
+                'hold_left_sec': max(0.0, self.lift_down_auto_hold_until - now),
+            })
+            if now - self.last_log_time > self.pfloat('debug_log_period_sec'):
+                self.last_log_time = now
+                self.get_logger().info(
+                    f'[lift_down_zero] auto hold same height actual={actual:.1f} cmd={command:.1f} hold_left={self.lift_down_auto_hold_until-now:.1f}s'
+                )
+            return
+
+        # Success: near zero. Hold actual; do not keep forcing hard zero.
+        if abs(actual - target) <= tol:
+            self.active = False
+            self.command_lift_z_mm = actual
+            self.previous_command_lift_z_mm = actual
+            self.manual_synced_lift_z_mm = actual
+            self.publish_hold_actual('lift_down_zero_succeeded_hold_actual')
+            self.publish_status('succeeded', 'lift_down_zero', 'lift_down_zero_reached', {
+                'effective_chassis_mode': mode,
+                'actual_lift_z_mm': actual,
+                'target_lift_z_mm': target,
+            })
+            self.get_logger().info(f'[lift_down_zero] succeeded actual={actual:.1f} target={target:.1f}')
+            return
+
+        if self.lift_down_descend_start_time <= 0.0:
+            self.lift_down_descend_start_time = now
+
+        if now - self.lift_down_descend_start_time > self.pfloat('lift_down_timeout_sec'):
+            self.active = False
+            self.publish_status('failed', 'lift_down_zero', 'stage_timeout', {
+                'effective_chassis_mode': mode,
+                'actual_lift_z_mm': actual,
+                'target_lift_z_mm': target,
+            })
+            self.get_logger().error(
+                f'[lift_down_zero] timeout actual={actual:.1f} target={target:.1f}'
+            )
+            return
+
+        max_step = self.pfloat('max_lift_speed_mmps') / max(1.0, self.pfloat('control_hz'))
+        if target <= actual:
+            command = max(target, actual - max_step)
+        else:
+            command = min(target, actual + max_step)
+        command = clamp(command, self.pfloat('platform_min_height_mm'), self.pfloat('platform_max_height_mm'))
+
+        self.previous_command_lift_z_mm = command
+        self.command_lift_z_mm = command
+        self.manual_synced_lift_z_mm = actual
+        self.publish_platform_target(command, 'lift_down_zero_limited_command')
+        self.publish_status('running', 'lift_down_zero', 'descending_to_zero', {
+            'effective_chassis_mode': mode,
+            'actual_lift_z_mm': actual,
+            'command_lift_z_mm': command,
+            'target_lift_z_mm': target,
+            'max_step_mm': max_step,
+        })
+        if now - self.last_log_time > self.pfloat('debug_log_period_sec'):
+            self.last_log_time = now
+            self.get_logger().info(
+                f'[lift_down_zero] descending actual={actual:.1f} cmd={command:.1f} target={target:.1f} max_step={max_step:.2f}'
+            )
+
     def on_timer(self) -> None:
         if not self.active:
             self.handle_startup_safe_zero()
             return
 
         now = self.now_sec()
+        if self.state == 'LIFT_DOWN_TO_ZERO':
+            self.handle_lift_down_zero(now)
+            return
+
         if now - self.request_start_time > self.pfloat('stage_timeout_sec'):
             self.active = False
             self.publish_status('failed', self.state, 'stage_timeout')
@@ -715,25 +916,134 @@ class OakGuidedPickupNode(Node):
             return
 
         code_u_px, code_v_px, xyz = obs
-        error_v_px = float(code_v_px) - float(self.align_v_px_current)
-        desired = self.actual_lift_z_mm + self.pfloat('lift_pixel_direction') * self.pfloat('kv_to_lift_mm_per_px') * error_v_px
-        if self.previous_command_lift_z_mm is None:
-            self.sync_to_actual_height()
-        max_step = self.pfloat('max_lift_speed_mmps') / max(1.0, self.pfloat('control_hz'))
-        if abs(error_v_px) < self.pfloat('v_tolerance_px'):
-            command = self.actual_lift_z_mm
-        else:
-            delta = desired - float(self.previous_command_lift_z_mm)
-            command = float(self.previous_command_lift_z_mm) + clamp(delta, -max_step, max_step)
-        command = clamp(command, self.pfloat('platform_min_height_mm'), self.pfloat('platform_max_height_mm'))
-        self.command_lift_z_mm = command
-        self.previous_command_lift_z_mm = command
-        self.publish_platform_target(command, 'rgb_slider_v_lift_align_limited_command')
 
-        if abs(error_v_px) <= self.pfloat('v_tolerance_px'):
+        # Image coordinate v increases downward. Define signed error as setpoint - measurement:
+        #   error_v > 0: target code is above align point -> lift should go UP
+        #   error_v < 0: target code is below align point -> lift should go DOWN
+        # This is PID-style closed-loop control on image vertical error.
+        # Raw OAK/OpenCV image coordinate: top-left origin, v increases downward.
+        # User calibration can be bottom-left origin, where v_up increases upward.
+        # We convert the calibration target to an effective top-left align_v first,
+        # then compute signed PID error in a physical/upward-positive sense:
+        #   code_v_up  = image_height_px - code_v_px
+        #   align_v_up = image_height_px - align_v_effective_top_px
+        #   error_v_px = code_v_up - align_v_up
+        # This is algebraically equal to align_v_effective_top_px - code_v_px,
+        # but the explicit variables make logs and calibration unambiguous.
+        image_height_px = max(1.0, self.pfloat('image_height_px'))
+        align_v_origin = str(self.get_parameter('align_v_origin').value).strip().lower()
+        if align_v_origin in ('bottom_left', 'left_bottom', 'bottom-left', 'left-bottom', 'bottom'):
+            align_v_from_bottom_px = clamp(
+                self.pfloat('align_v_from_bottom_px'),
+                0.0,
+                image_height_px,
+            )
+            align_v_effective_top_px = image_height_px - align_v_from_bottom_px
+        else:
+            align_v_from_bottom_px = image_height_px - float(self.align_v_px_current)
+            align_v_effective_top_px = float(self.align_v_px_current)
+
+        code_v_top_px = float(code_v_px)
+        code_v_up_px = image_height_px - code_v_top_px
+        align_v_up_px = image_height_px - align_v_effective_top_px
+        error_v_px = code_v_up_px - align_v_up_px
+        self.align_v_px_current = align_v_effective_top_px
+        now_pid = now
+        if self.lift_align_prev_time is None:
+            dt = 1.0 / max(1.0, self.pfloat('control_hz'))
+        else:
+            dt = max(1e-3, min(1.0, now_pid - float(self.lift_align_prev_time)))
+        self.lift_align_prev_time = now_pid
+
+        if self.lift_align_command_z_mm is None or self.previous_command_lift_z_mm is None or self.command_lift_z_mm is None:
+            actual0 = clamp(
+                float(self.actual_lift_z_mm),
+                self.pfloat('platform_min_height_mm'),
+                self.pfloat('platform_max_height_mm'),
+            )
+            self.lift_align_command_z_mm = actual0
+            self.previous_command_lift_z_mm = actual0
+            self.command_lift_z_mm = actual0
+            self.lift_align_integral_px_s = 0.0
+            self.lift_align_prev_error_px = None
+            self.lift_align_prev_time = now_pid
+
+        # Absolute guard: never call float(None) in the PID controller.
+        if self.lift_align_command_z_mm is None:
+            self.lift_align_command_z_mm = float(self.actual_lift_z_mm)
+        if self.previous_command_lift_z_mm is None:
+            self.previous_command_lift_z_mm = float(self.lift_align_command_z_mm)
+        if self.command_lift_z_mm is None:
+            self.command_lift_z_mm = float(self.lift_align_command_z_mm)
+
+        # If feedback and command are far apart, resync once to avoid chasing a stale command.
+        resync_mm = self.pfloat('lift_align_command_resync_mm')
+        # Absolute guard inserted by fix_lift_align_pid_none_guard_and_rebuild.sh
+        if self.lift_align_command_z_mm is None:
+            self.lift_align_command_z_mm = float(self.actual_lift_z_mm)
+        if self.previous_command_lift_z_mm is None:
+            self.previous_command_lift_z_mm = float(self.lift_align_command_z_mm)
+        if self.command_lift_z_mm is None:
+            self.command_lift_z_mm = float(self.lift_align_command_z_mm)
+
+        if abs(float(self.actual_lift_z_mm) - float(self.lift_align_command_z_mm)) > resync_mm:
+            self.lift_align_command_z_mm = float(self.actual_lift_z_mm)
+            self.previous_command_lift_z_mm = float(self.actual_lift_z_mm)
+            self.command_lift_z_mm = float(self.actual_lift_z_mm)
+            self.lift_align_integral_px_s = 0.0
+            self.lift_align_prev_error_px = None
+
+        kp = self.pfloat('lift_align_kp_mm_per_px')
+        # Backward compatibility: if new Kp remains default but YAML has old kv, old value can still be used.
+        try:
+            old_kv = self.pfloat('kv_to_lift_mm_per_px')
+            if abs(kp - 0.25) < 1e-9 and abs(old_kv - 0.25) > 1e-9:
+                kp = old_kv
+        except Exception:
+            pass
+        ki = self.pfloat('lift_align_ki_mm_per_px_s')
+        kd = self.pfloat('lift_align_kd_mm_per_px_per_s')
+        tol_px = self.pfloat('v_tolerance_px')
+        max_step = self.pfloat('max_lift_speed_mmps') / max(1.0, self.pfloat('control_hz'))
+
+        if abs(error_v_px) <= tol_px:
+            # Inside tolerance: hold command, do not integrate, count stable frames.
+            command = float(self.lift_align_command_z_mm)
+            self.lift_align_integral_px_s = 0.0
+            d_error_px_s = 0.0
+            p_term_mm = 0.0
+            i_term_mm = 0.0
+            d_term_mm = 0.0
+            delta_cmd_mm_raw = 0.0
+            delta_cmd_mm = 0.0
             self.stable_count += 1
         else:
             self.stable_count = 0
+            self.lift_align_integral_px_s += error_v_px * dt
+            i_limit = max(0.0, self.pfloat('lift_align_integral_limit_px_s'))
+            if i_limit > 0.0:
+                self.lift_align_integral_px_s = clamp(self.lift_align_integral_px_s, -i_limit, i_limit)
+            else:
+                self.lift_align_integral_px_s = 0.0
+
+            if self.lift_align_prev_error_px is None:
+                d_error_px_s = 0.0
+            else:
+                d_error_px_s = (error_v_px - float(self.lift_align_prev_error_px)) / dt
+
+            p_term_mm = kp * error_v_px
+            i_term_mm = ki * self.lift_align_integral_px_s
+            d_term_mm = kd * d_error_px_s
+            delta_cmd_mm_raw = p_term_mm + i_term_mm + d_term_mm
+            delta_cmd_mm = clamp(delta_cmd_mm_raw, -max_step, max_step)
+            command = float(self.lift_align_command_z_mm) + delta_cmd_mm
+
+        self.lift_align_prev_error_px = error_v_px
+        command = clamp(command, self.pfloat('platform_min_height_mm'), self.pfloat('platform_max_height_mm'))
+        self.lift_align_command_z_mm = command
+        self.command_lift_z_mm = command
+        self.previous_command_lift_z_mm = command
+        self.publish_platform_target(command, 'rgb_slider_v_lift_align_pid_command')
 
         extra = {
             'effective_chassis_mode': mode,
@@ -742,11 +1052,27 @@ class OakGuidedPickupNode(Node):
             'align_u_px': self.align_u_px_current,
             'align_v_px': self.align_v_px_current,
             'error_v_px': error_v_px,
+            'error_definition': 'bottom_left_control: code_v_up_px - align_v_up_px; positive means lift_up, negative means lift_down',
+            'align_v_origin': align_v_origin,
+            'image_height_px': image_height_px,
+            'code_v_top_px': code_v_top_px,
+            'code_v_up_px': code_v_up_px,
+            'align_v_effective_top_px': align_v_effective_top_px,
+            'align_v_from_bottom_px': align_v_from_bottom_px,
+            'align_v_up_px': align_v_up_px,
             'camera_xyz_mm': {'x': xyz[0], 'y': xyz[1], 'z': xyz[2]} if xyz is not None else None,
-            'desired_lift_z_mm': desired,
+            'pid_kp_mm_per_px': kp,
+            'pid_ki_mm_per_px_s': ki,
+            'pid_kd_mm_per_px_per_s': kd,
+            'pid_p_term_mm': p_term_mm,
+            'pid_i_term_mm': i_term_mm,
+            'pid_d_term_mm': d_term_mm,
+            'pid_delta_cmd_mm_raw': delta_cmd_mm_raw,
+            'pid_delta_cmd_mm_limited': delta_cmd_mm,
             'command_lift_z_mm': command,
             'actual_lift_z_mm': self.actual_lift_z_mm,
             'max_step_mm': max_step,
+            'dt_sec': dt,
         }
         if self.stable_count >= self.pint('stable_required_frames'):
             self.active = False
@@ -758,7 +1084,7 @@ class OakGuidedPickupNode(Node):
         if now - self.last_log_time > self.pfloat('debug_log_period_sec'):
             self.last_log_time = now
             self.get_logger().info(
-                f"[rgb_slider_lift] mode={mode} actual={self.actual_lift_z_mm:.1f} code_v={code_v_px:.1f} align_v={self.align_v_px_current:.1f} error_v={error_v_px:.1f}px cmd={command:.1f}"
+                f"[rgb_slider_lift_pid] mode={mode} origin={align_v_origin} actual={self.actual_lift_z_mm:.1f} code_top={code_v_top_px:.1f} code_up={code_v_up_px:.1f} align_top={align_v_effective_top_px:.1f} align_bottom={align_v_from_bottom_px:.1f} error_up={error_v_px:.1f}px P={p_term_mm:.2f} I={i_term_mm:.2f} D={d_term_mm:.2f} dcmd={delta_cmd_mm:.2f} cmd={command:.1f} stable={self.stable_count}"
             )
 
     def publish_status(self, status: str, stage: str, reason: str, extra: Optional[Dict[str, Any]] = None) -> None:

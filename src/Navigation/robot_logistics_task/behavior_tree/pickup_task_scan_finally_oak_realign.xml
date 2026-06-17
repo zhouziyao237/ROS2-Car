@@ -33,8 +33,14 @@
           <!-- 二次平行后靠近到约 50cm。 -->
           <RequestOakServoApproach/>
 
-          <!-- 靠近后执行 OAK RGB 像素误差升降对齐。 -->
+          <!-- 靠近后执行 OAK RGB 像素误差升降对齐：只负责升到可取件高度。 -->
           <ExecuteOakGuidedPickup/>
+
+          <!-- 临时取件占位：之后替换成真实取件机构节点。 -->
+          <WaitOakGuidedPickupPlaceholder/>
+
+          <!-- 取件动作结束后，升降平台下降回 0。 -->
+          <ExecuteOakGuidedLiftDown/>
 
           <PublishTaskDone/>
         </Sequence>

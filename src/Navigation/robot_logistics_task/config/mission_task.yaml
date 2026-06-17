@@ -32,7 +32,7 @@ mission_btcpp_node:
     package_search_status_topic: /target_detection/package_search/status
     oak_guided_pickup_request_topic: /target_capture/oak_guided_pickup/request
     oak_guided_pickup_status_topic: /target_capture/oak_guided_pickup/status
-    oak_guided_pickup_timeout_sec: 30.0
+    oak_guided_pickup_timeout_sec: 90.0
     package_search_timeout_sec: 25.0
     cmd_vel_topic: /cmd_vel
     datamatrix_result_json_topic: /oak/datamatrix_3d_result_json
@@ -49,3 +49,5 @@ mission_btcpp_node:
     package_scan_left_deg: 40.0
     package_scan_right_deg: 40.0
     package_scan_wz_degps: 3.2
+execute_oak_guided_pickup_timeout_sec: 90.0
+lift_align_timeout_sec: 90.0
