@@ -8,6 +8,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, DurabilityPolicy, ReliabilityPolicy, HistoryPolicy
 from std_msgs.msg import String
 from auto_aim_interfaces.msg import PlatformTarget, PlatformCurrentStatus
 
@@ -105,6 +106,7 @@ class OakGuidedPickupNode(Node):
 
         self.declare_parameter('request_topic', '/target_capture/oak_guided_pickup/request')
         self.declare_parameter('status_topic', '/target_capture/oak_guided_pickup/status')
+        self.declare_parameter('startup_zero_done_topic', '/target_capture/oak_guided_pickup/startup_zero_done')
         self.declare_parameter('datamatrix_topic', '/oak/datamatrix_3d_result_json')
         self.declare_parameter('platform_current_status_topic', '/platform/current_status')
         self.declare_parameter('platform_target_topic', '/platform/target')
@@ -117,6 +119,10 @@ class OakGuidedPickupNode(Node):
         self.declare_parameter('startup_safe_zero_tolerance_mm', 3.0)
         self.declare_parameter('startup_safe_zero_timeout_sec', 120.0)
         self.declare_parameter('startup_safe_zero_require_auto', True)
+        self.declare_parameter('startup_safe_zero_confirm_sec', 3.0)
+        self.declare_parameter('startup_auto_hold_sec', 1.0)
+        self.declare_parameter('startup_done_heartbeat_sec', 0.5)
+        self.declare_parameter('startup_zero_follow_actual_jump_mm', 3.0)
 
         # rm_serial fallback mode source. /chassis_control_mode is primary.
         # /platform/current_status.control_mode is only used as fallback.
@@ -168,6 +174,7 @@ class OakGuidedPickupNode(Node):
 
         self.request_topic = str(self.get_parameter('request_topic').value)
         self.status_topic = str(self.get_parameter('status_topic').value)
+        self.startup_zero_done_topic = str(self.get_parameter('startup_zero_done_topic').value)
         self.datamatrix_topic = str(self.get_parameter('datamatrix_topic').value)
         self.platform_current_status_topic = str(self.get_parameter('platform_current_status_topic').value)
         self.platform_target_topic = str(self.get_parameter('platform_target_topic').value)
@@ -177,6 +184,13 @@ class OakGuidedPickupNode(Node):
         self.align_v_px_current = float(self.get_parameter('align_v_px').value)
 
         self.status_pub = self.create_publisher(String, self.status_topic, 10)
+        done_qos = QoSProfile(
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+        )
+        self.startup_zero_done_pub = self.create_publisher(String, self.startup_zero_done_topic, done_qos)
         self.platform_target_pub = self.create_publisher(PlatformTarget, self.platform_target_topic, 10)
 
         self.req_sub = self.create_subscription(String, self.request_topic, self.on_request, 10)
@@ -222,10 +236,18 @@ class OakGuidedPickupNode(Node):
         self.command_lift_z_mm = None
         self.manual_synced_lift_z_mm = None
         self.last_effective_mode = 'unknown'
-        self.startup_zero_done = True
+        self.startup_zero_done = False
         self.stable_count = 0
         self.last_target_center_px: Optional[Tuple[float, float]] = None
         self.last_log_time = 0.0
+
+        self.startup_zero_command_mm: Optional[float] = None
+        self.startup_zero_done_published = False
+        self.startup_zero_stable_since = 0.0
+        self.startup_zero_last_done_pub_time = 0.0
+        self.startup_zero_last_mode = 'unknown'
+        self.startup_zero_auto_hold_until = 0.0
+        self.startup_zero_hold_height_mm = None
 
         hz = float(self.get_parameter('control_hz').value)
         self.timer = self.create_timer(1.0 / max(1.0, hz), self.on_timer)
@@ -415,65 +437,217 @@ class OakGuidedPickupNode(Node):
             return center[0], center[1], xyz
         return None
 
-    def handle_startup_safe_zero(self) -> None:
-        """IDLE safety behavior.
+    def publish_startup_zero_done(self, reason: str, force: bool = False) -> None:
+        """Publish startup-zero done.
 
-        When the node is idle and rm_serial is auto, slowly clear the platform lift
-        target to 0mm. This prevents stale lift target from previous runs, but it
-        never publishes a sudden 0mm jump: it uses the same max_lift_speed_mmps
-        limiter as visual lift control.
+        It is intentionally re-published as a heartbeat after done, because
+        bringup gate helper processes may start after the first done message.
         """
-        if not self.pbool('enable_startup_safe_zero') or self.startup_zero_done:
+        now = self.now_sec()
+        hb = self.pfloat('startup_done_heartbeat_sec')
+        if self.startup_zero_done_published and not force:
+            if now - getattr(self, 'startup_zero_last_done_pub_time', 0.0) < hb:
+                return
+
+        msg = String()
+        msg.data = json.dumps({
+            'status': 'done',
+            'stage': 'startup_feedback_zero',
+            'reason': reason,
+            'actual_lift_z_mm': float(self.actual_lift_z_mm),
+            'target_lift_z_mm': float(self.pfloat('startup_safe_zero_target_mm')),
+            'stamp': now,
+        }, ensure_ascii=False)
+
+        self.startup_zero_done_pub.publish(msg)
+        self.startup_zero_done_published = True
+        self.startup_zero_last_done_pub_time = now
+
+    def handle_startup_safe_zero(self) -> None:
+        """Startup feedback return-to-zero with manual-height synchronization.
+
+        Required behavior:
+        - Before /platform/current_status arrives: publish nothing.
+        - In manual mode: publish target_lift_z_mm = actual_lift_z_mm.
+          This keeps the PC platform command synchronized with the height moved by hand/RC.
+        - When switching from manual to auto: hold the current feedback height for a short time.
+        - Only after the auto hold period, descend toward 0 at max_lift_speed_mmps.
+        - Startup gate opens only after feedback is near zero and stable.
+        """
+        now = self.now_sec()
+
+        if self.startup_zero_done:
+            self.publish_startup_zero_done('heartbeat_after_done', force=True)
             return
 
-        now = self.now_sec()
+        if not self.pbool('enable_startup_safe_zero'):
+            self.startup_zero_done = True
+            self.publish_startup_zero_done('disabled', force=True)
+            self.get_logger().info('[startup_feedback_zero] disabled, publish done gate')
+            return
+
+        if self.active:
+            return
+
         if self.startup_zero_start_time <= 0.0:
             self.startup_zero_start_time = now
 
-        if not self.platform_status_valid or now - self.platform_status_stamp > self.pfloat('platform_current_status_timeout_sec'):
+        # No feedback: do not publish anything.
+        if (not self.platform_status_valid) or (now - self.platform_status_stamp > self.pfloat('platform_current_status_timeout_sec')):
+            self.startup_zero_command_mm = None
+            self.previous_command_lift_z_mm = None
+            self.command_lift_z_mm = None
+            self.startup_zero_stable_since = 0.0
+            self.startup_zero_auto_hold_until = 0.0
+            self.startup_zero_hold_height_mm = None
+
+            if now - self.startup_zero_last_log_time > self.pfloat('debug_log_period_sec'):
+                self.startup_zero_last_log_time = now
+                self.get_logger().warn('[startup_feedback_zero] waiting for /platform/current_status feedback; no platform target published')
             return
 
         mode = self.effective_chassis_mode()
-        if self.pbool('startup_safe_zero_require_auto') and mode != 'auto':
-            self.sync_to_actual_height()
-            return
-
-        target = clamp(
-            self.pfloat('startup_safe_zero_target_mm'),
+        actual = clamp(
+            float(self.actual_lift_z_mm),
             self.pfloat('platform_min_height_mm'),
             self.pfloat('platform_max_height_mm')
         )
+        target = clamp(
+            self.pfloat('startup_safe_zero_target_mm'),
+            self.pfloat('platform_min_height_mm'),
+            self.pfloat('platform_max_height_mm'),
+        )
+        tol = self.pfloat('startup_safe_zero_tolerance_mm')
+        confirm_sec = self.pfloat('startup_safe_zero_confirm_sec')
 
-        if self.previous_command_lift_z_mm is None:
-            self.sync_to_actual_height()
+        # Manual mode: synchronize PC target to current hand-controlled height.
+        # This is intentionally a publish, but it publishes the SAME height, not zero.
+        if self.pbool('startup_safe_zero_require_auto') and mode != 'auto':
+            command = actual
 
-        base = float(self.previous_command_lift_z_mm if self.previous_command_lift_z_mm is not None else self.actual_lift_z_mm)
+            self.startup_zero_command_mm = command
+            self.previous_command_lift_z_mm = command
+            self.command_lift_z_mm = command
+            self.manual_synced_lift_z_mm = actual
+            self.startup_zero_stable_since = 0.0
+            self.startup_zero_auto_hold_until = 0.0
+            self.startup_zero_hold_height_mm = None
+            self.startup_zero_last_mode = mode
+            self.startup_zero_start_time = now
+
+            self.publish_platform_target(command, 'startup_manual_sync_same_height')
+
+            if now - self.startup_zero_last_log_time > self.pfloat('debug_log_period_sec'):
+                self.startup_zero_last_log_time = now
+                self.get_logger().warn(
+                    f'[startup_feedback_zero] manual sync, mode={mode}, '
+                    f'actual={actual:.1f}, cmd={command:.1f}; publish same height, not zero'
+                )
+            return
+
+        # Just switched into auto: hold current height first, do not descend immediately.
+        if self.startup_zero_last_mode != 'auto':
+            hold_sec = self.pfloat('startup_auto_hold_sec')
+            self.startup_zero_auto_hold_until = now + hold_sec
+            self.startup_zero_hold_height_mm = actual
+            self.startup_zero_stable_since = 0.0
+            self.startup_zero_start_time = now
+            self.startup_zero_last_mode = 'auto'
+
+            self.startup_zero_command_mm = actual
+            self.previous_command_lift_z_mm = actual
+            self.command_lift_z_mm = actual
+            self.manual_synced_lift_z_mm = actual
+
+            self.publish_platform_target(actual, 'startup_auto_takeover_hold_height')
+
+            self.get_logger().info(
+                f'[startup_feedback_zero] auto takeover, hold feedback height first: '
+                f'actual={actual:.1f}, hold_sec={hold_sec:.1f}'
+            )
+            return
+
+        self.startup_zero_last_mode = 'auto'
+
+        # During auto takeover hold: keep target equal to current feedback height.
+        if now < self.startup_zero_auto_hold_until:
+            command = actual
+
+            self.startup_zero_command_mm = command
+            self.previous_command_lift_z_mm = command
+            self.command_lift_z_mm = command
+            self.manual_synced_lift_z_mm = actual
+            self.startup_zero_stable_since = 0.0
+
+            self.publish_platform_target(command, 'startup_auto_hold_same_height')
+
+            if now - self.startup_zero_last_log_time > self.pfloat('debug_log_period_sec'):
+                self.startup_zero_last_log_time = now
+                left = self.startup_zero_auto_hold_until - now
+                self.get_logger().info(
+                    f'[startup_feedback_zero] auto hold same height, '
+                    f'actual={actual:.1f}, cmd={command:.1f}, hold_left={left:.1f}s'
+                )
+            return
+
+        # Near zero: confirm stable zero. Do not keep forcing zero.
+        if abs(actual - target) <= tol:
+            self.startup_zero_command_mm = actual
+            self.previous_command_lift_z_mm = actual
+            self.command_lift_z_mm = actual
+            self.manual_synced_lift_z_mm = actual
+
+            if self.startup_zero_stable_since <= 0.0:
+                self.startup_zero_stable_since = now
+
+            stable_elapsed = now - self.startup_zero_stable_since
+
+            if now - self.startup_zero_last_log_time > self.pfloat('debug_log_period_sec'):
+                self.startup_zero_last_log_time = now
+                self.get_logger().info(
+                    f'[startup_feedback_zero] zero confirming actual={actual:.1f} '
+                    f'target={target:.1f} stable={stable_elapsed:.1f}/{confirm_sec:.1f}; no platform target published'
+                )
+
+            if stable_elapsed >= confirm_sec:
+                self.startup_zero_done = True
+                self.publish_startup_zero_done('reached_zero_by_feedback_stable', force=True)
+                self.get_logger().info(
+                    f'[startup_feedback_zero] done reason=reached_zero_by_feedback_stable actual={actual:.1f}'
+                )
+            return
+
+        # Descend toward zero after auto hold.
+        self.startup_zero_stable_since = 0.0
         max_step = self.pfloat('max_lift_speed_mmps') / max(1.0, self.pfloat('control_hz'))
-        delta = target - base
-        command = base + clamp(delta, -max_step, max_step)
+
+        if target <= actual:
+            command = max(target, actual - max_step)
+        else:
+            command = min(target, actual + max_step)
+
         command = clamp(command, self.pfloat('platform_min_height_mm'), self.pfloat('platform_max_height_mm'))
 
-        self.command_lift_z_mm = command
+        self.startup_zero_command_mm = command
         self.previous_command_lift_z_mm = command
-        self.manual_synced_lift_z_mm = self.actual_lift_z_mm
-        self.publish_platform_target(command, 'startup_safe_zero_limited')
+        self.command_lift_z_mm = command
+        self.manual_synced_lift_z_mm = actual
+
+        self.publish_platform_target(command, 'startup_feedback_zero_after_auto_hold')
 
         if now - self.startup_zero_last_log_time > self.pfloat('debug_log_period_sec'):
             self.startup_zero_last_log_time = now
             self.get_logger().info(
-                f'[startup_safe_zero] mode={mode} actual={self.actual_lift_z_mm:.1f} '
-                f'target={target:.1f} cmd={command:.1f} max_step={max_step:.2f}'
+                f'[startup_feedback_zero] descending after hold, mode={mode}, '
+                f'actual={actual:.1f}, cmd={command:.1f}, target={target:.1f}, max_step={max_step:.2f}'
             )
 
-        if abs(self.actual_lift_z_mm - target) <= self.pfloat('startup_safe_zero_tolerance_mm') and abs(command - target) <= self.pfloat('startup_safe_zero_tolerance_mm'):
-            self.publish_platform_target(target, 'startup_safe_zero_done')
-            self.startup_zero_done = True
-            self.get_logger().info('[startup_safe_zero] done')
-            return
-
         if now - self.startup_zero_start_time > self.pfloat('startup_safe_zero_timeout_sec'):
-            self.startup_zero_done = True
-            self.get_logger().warn('[startup_safe_zero] timeout, stop startup zero loop')
+            if now - self.startup_zero_last_log_time > self.pfloat('debug_log_period_sec'):
+                self.startup_zero_last_log_time = now
+                self.get_logger().error(
+                    '[startup_feedback_zero] timeout; NOT opening startup gate because lift is not confirmed zero'
+                )
             return
 
     def on_timer(self) -> None:

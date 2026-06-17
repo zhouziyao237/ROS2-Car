@@ -12,7 +12,7 @@ mission_btcpp_node:
     bt_trace_topic: /task/bt_trace
     bt_xml_topic: /task/bt_tree_xml
     goal_pose_topic: /goal_pose
-    platform_target_topic: /platform/target
+    platform_target_topic: /task/platform_target_legacy
     platform_status_topic: /platform/status
     explore_cmd_topic: /task/explore_cmd
     control_mode_topic: /control_mode

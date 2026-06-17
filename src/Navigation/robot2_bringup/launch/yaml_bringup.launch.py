@@ -31,10 +31,13 @@ from launch.actions import (
     LogInfo,
     OpaqueFunction,
     TimerAction,
+    ExecuteProcess,
+    RegisterEventHandler,
 )
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, Command
 
+from launch.event_handlers import OnProcessExit
 from launch_ros.actions import Node
 
 
@@ -217,6 +220,38 @@ def _module_to_action(module_name, module_cfg):
             f"Supported types: node, include"
         )
 
+    wait_topic = module_cfg.get("wait_for_topic")
+    if wait_topic:
+        wait_type = module_cfg.get("wait_for_topic_type", "std_msgs/msg/String")
+        wait_cmd = (
+            "source /opt/ros/humble/setup.bash; "
+            "if [ -f /host-home/install/setup.bash ]; then source /host-home/install/setup.bash; fi; "
+            f"sleep {delay:.3f}; "
+            f"echo '[robot2_bringup] waiting for topic before {module_name}: {wait_topic}'; "
+            "while true; do "
+            f"timeout 5 ros2 topic echo --once --qos-durability transient_local {wait_topic} {wait_type} >/dev/null 2>&1 "
+            f"&& echo '[robot2_bringup] gate opened for {module_name}: {wait_topic}' && exit 0; "
+            f"echo '[robot2_bringup] still waiting before {module_name}: {wait_topic}'; "
+            "sleep 1; "
+            "done"
+        )
+        wait_action = ExecuteProcess(
+            cmd=["bash", "-lc", wait_cmd],
+            output="screen",
+        )
+        return [
+            wait_action,
+            RegisterEventHandler(
+                OnProcessExit(
+                    target_action=wait_action,
+                    on_exit=[
+                        LogInfo(msg=f"[robot2_bringup] start gated module: {module_name}"),
+                        action,
+                    ],
+                )
+            ),
+        ]
+
     if delay > 0.0:
         return TimerAction(
             period=delay,
@@ -278,7 +313,11 @@ def _runtime_setup(context, *args, **kwargs):
                 f"Mode '{mode_value}' enables unknown module '{module_name}'"
             )
 
-        actions.append(_module_to_action(module_name, modules[module_name]))
+        module_actions = _module_to_action(module_name, modules[module_name])
+        if isinstance(module_actions, list):
+            actions.extend(module_actions)
+        else:
+            actions.append(module_actions)
 
     return actions
 

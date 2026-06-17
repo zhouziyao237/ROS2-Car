@@ -156,6 +156,8 @@ modules:
     package: nav2_bringup
     launch: navigation_launch.py
     delay: 8.0
+    wait_for_topic: /target_capture/oak_guided_pickup/startup_zero_done
+    wait_for_topic_type: std_msgs/msg/String
     arguments:
       use_sim_time: 'false'
       params_file: /host-home/src/Navigation/nav_stack_core_v2/config/nav2_params_min.yaml
@@ -169,6 +171,8 @@ modules:
     name: goal_pose_bridge
     output: screen
     delay: 9.0
+    wait_for_topic: /target_capture/oak_guided_pickup/startup_zero_done
+    wait_for_topic_type: std_msgs/msg/String
     parameters:
     - goal_pose_topic: /goal_pose
       navigate_action_name: /navigate_to_pose
@@ -269,6 +273,8 @@ modules:
     name: semantic_registrar_node
     output: screen
     delay: 10.5
+    wait_for_topic: /target_capture/oak_guided_pickup/startup_zero_done
+    wait_for_topic_type: std_msgs/msg/String
     respawn: true
     respawn_delay: 2.0
     parameters:
@@ -328,6 +334,8 @@ modules:
     name: mission_btcpp_node
     output: screen
     delay: 11.0
+    wait_for_topic: /target_capture/oak_guided_pickup/startup_zero_done
+    wait_for_topic_type: std_msgs/msg/String
     parameters:
     - bt_xml: /host-home/src/Navigation/robot_logistics_task/behavior_tree/pickup_task_scan_finally_oak_realign.xml
       semantic_map_path: /host-home/maps/semantic_library.json
@@ -341,7 +349,7 @@ modules:
       bt_trace_topic: /task/bt_trace
       bt_xml_topic: /task/bt_tree_xml
       goal_pose_topic: /goal_pose
-      platform_target_topic: /platform/target
+      platform_target_topic: /task/platform_target_legacy
       platform_status_topic: /platform/status
       explore_cmd_topic: /task/explore_cmd
       control_mode_topic: /control_mode
@@ -401,6 +409,8 @@ modules:
     name: bt_osd_overlay
     output: screen
     delay: 12.0
+    wait_for_topic: /target_capture/oak_guided_pickup/startup_zero_done
+    wait_for_topic_type: std_msgs/msg/String
     respawn: true
     respawn_delay: 2.0
     parameters:
@@ -470,6 +480,8 @@ modules:
     name: home_anchor_validator_node
     output: screen
     delay: 13.6
+    wait_for_topic: /target_capture/oak_guided_pickup/startup_zero_done
+    wait_for_topic_type: std_msgs/msg/String
     respawn: true
     respawn_delay: 2.0
     parameters:
@@ -509,6 +521,8 @@ modules:
     name: semantic_marker_publisher_node
     output: screen
     delay: 11.5
+    wait_for_topic: /target_capture/oak_guided_pickup/startup_zero_done
+    wait_for_topic_type: std_msgs/msg/String
     respawn: true
     respawn_delay: 2.0
     parameters:
@@ -522,6 +536,8 @@ modules:
     name: task_cancel_guard_node
     output: screen
     delay: 12.5
+    wait_for_topic: /target_capture/oak_guided_pickup/startup_zero_done
+    wait_for_topic_type: std_msgs/msg/String
     respawn: true
     respawn_delay: 2.0
     parameters:
@@ -547,6 +563,8 @@ modules:
     package: oak_vision_driver
     launch: oak_vision_driver.launch.py
     delay: 13.0
+    wait_for_topic: /target_capture/oak_guided_pickup/startup_zero_done
+    wait_for_topic_type: std_msgs/msg/String
     arguments:
       enable_rgb: 'true'
       enable_depth: 'true'
@@ -566,6 +584,8 @@ modules:
     package: oak_parcel_pose
     launch: oak_parcel_pose.launch.py
     delay: 16.0
+    wait_for_topic: /target_capture/oak_guided_pickup/startup_zero_done
+    wait_for_topic_type: std_msgs/msg/String
   oak_package_search:
     type: node
     package: oak_package_search
@@ -573,6 +593,8 @@ modules:
     name: oak_package_search_node
     output: screen
     delay: 17.0
+    wait_for_topic: /target_capture/oak_guided_pickup/startup_zero_done
+    wait_for_topic_type: std_msgs/msg/String
     respawn: true
     respawn_delay: 2.0
     parameters:
@@ -630,6 +652,8 @@ modules:
     name: oak_package_servo_node
     output: screen
     delay: 18.0
+    wait_for_topic: /target_capture/oak_guided_pickup/startup_zero_done
+    wait_for_topic_type: std_msgs/msg/String
     respawn: true
     respawn_delay: 2.0
     parameters:
@@ -651,7 +675,7 @@ modules:
     executable: oak_guided_pickup_node
     name: oak_guided_pickup
     output: screen
-    delay: 19.0
+    delay: 7.8
     respawn: true
     respawn_delay: 2.0
     parameters:
