@@ -329,13 +329,15 @@ void RMSerialDriver::processPacket(const std::vector<uint8_t> & data, uint16_t c
         platform_status.target_lift_z_mm,
         platform_status.target_slide_x_mm,
         platform_status.target_screw_x_mm,
+        platform_status.target_grab_mode,
         platform_status.control_mode);
       RCLCPP_DEBUG_THROTTLE(
         get_logger(), *get_clock(), 1000,
-        "Platform status z=%.2f slide=%.2f screw=%.2f mode=%u",
+        "Platform status z=%.2f slide=%.2f screw=%.2f grab=%.2f mode=%u",
         platform_status.target_lift_z_mm,
         platform_status.target_slide_x_mm,
         platform_status.target_screw_x_mm,
+        platform_status.target_grab_mode,
         static_cast<unsigned int>(platform_status.control_mode));
       break;
     }
@@ -389,7 +391,7 @@ void RMSerialDriver::publishChassisControlMode(uint8_t control_mode)
 
 void RMSerialDriver::publishPlatformCurrentStatus(
   float target_lift_z_mm, float target_slide_x_mm, float target_screw_x_mm,
-  uint8_t control_mode)
+  float target_grab_mode, uint8_t control_mode)
 {
   auto_aim_interfaces::msg::PlatformCurrentStatus msg;
   msg.header.stamp = this->now();
@@ -397,6 +399,7 @@ void RMSerialDriver::publishPlatformCurrentStatus(
   msg.target_lift_z_mm = target_lift_z_mm;
   msg.target_slide_x_mm = target_slide_x_mm;
   msg.target_screw_x_mm = target_screw_x_mm;
+  msg.target_grab_mode = target_grab_mode;
   msg.control_mode = control_mode;
   platform_current_status_pub_->publish(msg);
 }
@@ -560,14 +563,16 @@ void RMSerialDriver::sendPlatformTarget(
     packet.target_lift_z_mm = msg->target_lift_z_mm;
     packet.target_slide_x_mm = msg->target_slide_x_mm;
     packet.target_screw_x_mm = msg->target_screw_x_mm;
+    packet.target_grab_mode = msg->target_grab_mode ? 1 : 0;
 
     crc16::Append_CRC16_Check_Sum(reinterpret_cast<uint8_t *>(&packet), sizeof(packet));
     serial_driver_->port()->send(packetToVector(packet));
 
     RCLCPP_DEBUG_THROTTLE(
       get_logger(), *get_clock(), 1000,
-      "[Send platform] z=%.2f slide=%.2f screw=%.2f",
-      packet.target_lift_z_mm, packet.target_slide_x_mm, packet.target_screw_x_mm);
+      "[Send platform] z=%.2f slide=%.2f screw=%.2f grab=%u",
+      packet.target_lift_z_mm, packet.target_slide_x_mm, packet.target_screw_x_mm,
+      static_cast<unsigned int>(packet.target_grab_mode));
   } catch (const std::exception & ex) {
     RCLCPP_ERROR(get_logger(), "Failed to send platform target: %s", ex.what());
     reopenPort();

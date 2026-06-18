@@ -127,6 +127,7 @@ struct PlatformTargetPacket
   float target_lift_z_mm;
   float target_slide_x_mm;
   float target_screw_x_mm;
+  uint8_t target_grab_mode;
   uint16_t crc16;
 } __attribute__((packed, aligned(1)));
 
@@ -136,6 +137,7 @@ struct PlatformCurrentStatusPacket
   float target_lift_z_mm;
   float target_slide_x_mm;
   float target_screw_x_mm;
+  float target_grab_mode;
   uint8_t control_mode;
   uint16_t crc16;
 } __attribute__((packed, aligned(1)));

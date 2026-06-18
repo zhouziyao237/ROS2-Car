@@ -1,0 +1,4 @@
+std_msgs/Header header
+float32 target_lift_z_mm
+float32 target_slide_x_mm
+float32 target_screw_x_mm

@@ -54,7 +54,7 @@ private:
   void publishChassisControlMode(uint8_t control_mode);
   void publishPlatformCurrentStatus(
     float target_lift_z_mm, float target_slide_x_mm, float target_screw_x_mm,
-    uint8_t control_mode);
+    float target_grab_mode, uint8_t control_mode);
 
   std::unique_ptr<IoContext> owned_ctx_;
   std::string device_name_;
