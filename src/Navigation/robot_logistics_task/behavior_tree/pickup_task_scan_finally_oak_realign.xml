@@ -10,7 +10,12 @@
 
       <WaitNavSettle/>
 
+      <!-- 进入 OAK 搜索模式前先开夹，避免夹爪挡住包裹码 -->
+
       <!-- 第一次 OAK 对正货架正面 -->
+            <!-- 搜索/对齐前只开爪，不推出，避免夹爪挡住包裹码 -->
+      <ExecuteOakPackageOpenBeforeSearch/>
+
       <RequestOakPackageSearchAlign/>
       <WaitAfterOakAlign/>
 
@@ -34,13 +39,27 @@
           <RequestOakServoApproach/>
 
           <!-- 靠近后执行 OAK RGB 像素误差升降对齐：只负责升到可取件高度。 -->
+      <!--
+        Pickup finally block:
+        - Success path:
+            ExecuteOakGuidedPickup -> ExecuteOakPackageGrab -> ExecuteOakGuidedLiftDown -> PublishTaskDone
+        - Failure path:
+            If ExecuteOakGuidedPickup or ExecuteOakPackageGrab fails,
+            still execute ExecuteOakGuidedLiftDown once, then force FAILURE.
+        This guarantees the lift goes down regardless of pickup/grab result.
+      -->
+      <Fallback name="PickupGrabWithLiftDownFinally">
+        <Sequence name="PickupGrabMain">
           <ExecuteOakGuidedPickup/>
-
-          <!-- 临时取件占位：之后替换成真实取件机构节点。 -->
-          <WaitOakGuidedPickupPlaceholder/>
-
-          <!-- 取件动作结束后，升降平台下降回 0。 -->
+          <ExecuteOakPackageGrab/>
+        </Sequence>
+        <ForceFailure name="LiftDownOnPickupOrGrabFailure">
           <ExecuteOakGuidedLiftDown/>
+        </ForceFailure>
+      </Fallback>
+
+      <!-- Success path lift-down after real grab succeeded -->
+      <ExecuteOakGuidedLiftDown/>
 
           <PublishTaskDone/>
         </Sequence>

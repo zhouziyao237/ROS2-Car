@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="4" main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="PickupTask_WithScanFinallyOakRealign">
+      <ReceiveShelfGoal/>
+      <QueryShelfPose/>
+
+      <NavigateToShelf/>
+      <WaitNavArrive/>
+
+      <WaitNavSettle/>
+
+      <!-- 第一次 OAK 对正货架正面 -->
+      <RequestOakPackageSearchAlign/>
+      <WaitAfterOakAlign/>
+
+      <!--
+        核心：
+        扫描成功：Scan -> OAK重新对正 -> Done
+        扫描失败：进入第二分支 -> OAK重新对正 -> AlwaysFailure
+      -->
+      <Fallback name="ScanThenFinallyOakRealign">
+        <Sequence name="ScanSuccess_ReAlign_ThenDone">
+          <ScanTargetPackageOnShelf/>
+
+          <!-- 扫描找到目标后，先缓存目标；不在扫描角度下取件 -->
+          <CacheFoundPackagePose/>
+
+          <!-- 二次货架平行对准：必须保留；不是重新搜索包裹。 -->
+          <RequestOakPackageSearchAlign/>
+          <WaitAfterOakAlign/>
+
+          <!-- 二次平行后靠近到约 50cm。 -->
+          <RequestOakServoApproach/>
+
+          <!-- 靠近后执行 OAK RGB 像素误差升降对齐：只负责升到可取件高度。 -->
+          <ExecuteOakGuidedPickup/>
+
+          <!-- 临时取件占位：之后替换成真实取件机构节点。 -->
+          <ExecuteOakPackageGrab/>
+
+          <!-- 取件动作结束后，升降平台下降回 0。 -->
+          <ExecuteOakGuidedLiftDown/>
+
+          <PublishTaskDone/>
+        </Sequence>
+
+        <Sequence name="ScanFailure_ReAlign_ThenFail">
+          <RequestOakPackageSearchAlign/>
+          <WaitAfterOakAlign/>
+          <AlwaysFailure/>
+        </Sequence>
+      </Fallback>
+    </Sequence>
+  </BehaviorTree>
+</root>

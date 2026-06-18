@@ -848,6 +848,132 @@ public:
 
 
 
+
+// OPEN_GRIPPER_BEFORE_SEARCH_20260618
+// Before entering OAK shelf/package search, make sure the gripper is open.
+// This BT node does not publish /platform/target directly. It only calls the
+// independent oak_package_grabber node through its JSON request/status topics.
+class ExecuteOakPackageOpenBeforeSearch:public BT::StatefulActionNode{
+    std::shared_ptr<SharedContext> ctx_;
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr request_pub_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr status_sub_;
+    std::mutex status_mutex_;
+    std::string request_id_;
+    std::string latest_status_;
+    std::string latest_reason_;
+    std::string latest_request_id_;
+    std::string latest_stage_;
+    double start_=0.0;
+    double timeout_=5.0;
+public:
+    ExecuteOakPackageOpenBeforeSearch(const std::string&n,const BT::NodeConfiguration&c):BT::StatefulActionNode(n,c){}
+    SIMPLE_PORTS
+
+    BT::NodeStatus onStart()override{
+        ctx_=get_ctx(*this);
+        ctx_->set_state("ExecuteOakPackageOpenBeforeSearch");
+        start_=steady_seconds();
+        timeout_=5.0;
+        request_id_="open_before_search_"+std::to_string((long long)(start_*1000.0));
+        {
+            std::lock_guard<std::mutex> lk(status_mutex_);
+            latest_status_.clear();
+            latest_reason_.clear();
+            latest_request_id_.clear();
+            latest_stage_.clear();
+        }
+
+        if(!request_pub_){
+            request_pub_=ctx_->node->create_publisher<std_msgs::msg::String>(
+                "/target_capture/oak_package_grabber/request",10);
+        }
+        if(!status_sub_){
+            status_sub_=ctx_->node->create_subscription<std_msgs::msg::String>(
+                "/target_capture/oak_package_grabber/status",10,
+                [this](std_msgs::msg::String::SharedPtr m){
+                    std::string st,reason,rid,stage;
+                    get_string_json(m->data,"status",st);
+                    get_string_json(m->data,"reason",reason);
+                    get_string_json(m->data,"request_id",rid);
+                    get_string_json(m->data,"stage",stage);
+                    if(st.empty())return;
+
+                    // 优先匹配 request_id。
+                    // 如果旧版 grabber 没回 request_id，则只接受 open_gripper/ensure_gripper_open 阶段。
+                    if(!request_id_.empty() && !rid.empty() && rid!=request_id_)return;
+                    if(!stage.empty() && stage!="open_gripper" && stage!="ensure_gripper_open"){
+                        if(rid.empty())return;
+                    }
+
+                    std::lock_guard<std::mutex> lk(status_mutex_);
+                    latest_status_=st;
+                    latest_reason_=reason;
+                    latest_request_id_=rid;
+                    latest_stage_=stage;
+                });
+        }
+
+        std::string pickup_code,package_code,shelf_id,layer_id;
+        {
+            std::lock_guard<std::mutex> l(ctx_->mutex);
+            if(ctx_->task.active){
+                pickup_code=ctx_->task.pickup_code;
+                package_code=ctx_->task.package_code;
+                shelf_id=ctx_->task.shelf_id;
+                layer_id=ctx_->task.layer_id;
+            }
+        }
+
+        std_msgs::msg::String msg;
+        std::stringstream ss;
+        ss<<"{\"command\":\"open_gripper\""
+          <<",\"request_id\":\""<<request_id_<<"\""
+          <<",\"pickup_code\":\""<<pickup_code<<"\""
+          <<",\"package_code\":\""<<package_code<<"\""
+          <<",\"shelf_id\":\""<<shelf_id<<"\""
+          <<",\"layer_id\":\""<<layer_id<<"\""
+          <<",\"timeout_sec\":"<<timeout_
+          <<",\"source\":\"mission_btcpp_node_open_before_search\"}";
+        msg.data=ss.str();
+        request_pub_->publish(msg);
+
+        RCLCPP_INFO(ctx_->node->get_logger(),"[ExecuteOakPackageOpenBeforeSearch] request=%s",msg.data.c_str());
+        ctx_->status("RUNNING","opening gripper before OAK package search");
+        ctx_->trace(name(),"RUNNING");
+        return BT::NodeStatus::RUNNING;
+    }
+
+    BT::NodeStatus onRunning()override{
+        auto ctx=ctx_?ctx_:get_ctx(*this);
+        {
+            std::lock_guard<std::mutex> lk(status_mutex_);
+            if(latest_status_=="succeeded" || latest_status_=="success" || latest_status_=="done"){
+                ctx->status("SUCCESS","gripper opened before OAK package search");
+                ctx->trace(name(),"SUCCESS");
+                return BT::NodeStatus::SUCCESS;
+            }
+            if(latest_status_=="failed" || latest_status_=="failure" || latest_status_=="error"){
+                ctx->status("FAILURE","failed to open gripper before search: "+latest_reason_);
+                ctx->trace(name(),"FAILURE");
+                return BT::NodeStatus::FAILURE;
+            }
+        }
+
+        if(steady_seconds()-start_>timeout_){
+            ctx->status("FAILURE","timeout opening gripper before OAK package search");
+            ctx->trace(name(),"FAILURE");
+            return BT::NodeStatus::FAILURE;
+        }
+
+        return BT::NodeStatus::RUNNING;
+    }
+
+    void onHalted()override{
+        auto ctx=ctx_?ctx_:get_ctx(*this);
+        ctx->trace(name(),"HALTED");
+    }
+};
+
 class RequestOakPackageSearchAlign:public BT::StatefulActionNode{
     double start_=0;
 public:
@@ -1142,6 +1268,93 @@ class RequestOakServoCenterAlign:public RequestOakServoStage{public:RequestOakSe
 class RequestOakServoApproach:public RequestOakServoStage{public:RequestOakServoApproach(const std::string&n,const BT::NodeConfiguration&c):RequestOakServoStage(n,c,"approach",18.0){}};
 class RequestOakServoFineAlign:public RequestOakServoStage{public:RequestOakServoFineAlign(const std::string&n,const BT::NodeConfiguration&c):RequestOakServoStage(n,c,"fine",8.0){}};
 
+
+
+class ExecuteOakPackageGrab:public BT::StatefulActionNode{
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr request_pub_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr status_sub_;
+    std::mutex local_mutex_;
+    std::string request_id_,last_reason_;
+    bool done_=false,failed_=false;
+    double start_=0.0,timeout_=35.0;
+public:
+    ExecuteOakPackageGrab(const std::string&n,const BT::NodeConfiguration&c):BT::StatefulActionNode(n,c){}
+    SIMPLE_PORTS
+    BT::NodeStatus onStart()override{
+        auto ctx=get_ctx(*this);
+        ctx->set_state("ExecuteOakPackageGrab");
+        start_=steady_seconds();
+        {
+            std::lock_guard<std::mutex>ll(local_mutex_);
+            done_=false;
+            failed_=false;
+            last_reason_.clear();
+        }
+        auto node=ctx->node;
+        if(!node->has_parameter("oak_package_grabber_request_topic"))node->declare_parameter<std::string>("oak_package_grabber_request_topic","/target_capture/oak_package_grabber/request");
+        if(!node->has_parameter("oak_package_grabber_status_topic"))node->declare_parameter<std::string>("oak_package_grabber_status_topic","/target_capture/oak_package_grabber/status");
+        if(!node->has_parameter("oak_package_grab_timeout_sec"))node->declare_parameter<double>("oak_package_grab_timeout_sec",35.0);
+        std::string request_topic=node->get_parameter("oak_package_grabber_request_topic").as_string();
+        std::string status_topic=node->get_parameter("oak_package_grabber_status_topic").as_string();
+        timeout_=node->get_parameter("oak_package_grab_timeout_sec").as_double();
+        if(!request_pub_)request_pub_=node->create_publisher<std_msgs::msg::String>(request_topic,10);
+        if(!status_sub_)status_sub_=node->create_subscription<std_msgs::msg::String>(status_topic,10,[this](std_msgs::msg::String::SharedPtr m){onStatus(m);});
+        std_msgs::msg::String msg;
+        {
+            std::lock_guard<std::mutex>l(ctx->mutex);
+            if(!ctx->task.active){ctx->status("FAILURE","no active task for oak package grab");ctx->trace(name(),"FAILURE");return BT::NodeStatus::FAILURE;}
+            request_id_="grab_"+std::to_string((long long)(steady_seconds()*1000.0));
+            std::stringstream ss;
+            ss<<"{\"command\":\"grab_pickup\"";
+            ss<<",\"request_id\":\""<<request_id_<<"\"";
+            ss<<",\"pickup_code\":\""<<ctx->task.pickup_code<<"\"";
+            ss<<",\"package_code\":\""<<ctx->task.package_code<<"\"";
+            ss<<",\"shelf_id\":\""<<ctx->task.shelf_id<<"\"";
+            ss<<",\"layer_id\":\""<<ctx->task.layer_id<<"\"";
+            ss<<",\"timeout_sec\":"<<timeout_;
+            ss<<",\"source\":\"mission_btcpp_node\"";
+            ss<<"}";
+            msg.data=ss.str();
+        }
+        request_pub_->publish(msg);
+        RCLCPP_INFO(ctx->node->get_logger(),"[ExecuteOakPackageGrab] request=%s",msg.data.c_str());
+        ctx->status("RUNNING","published oak package grab request");
+        ctx->trace(name(),"RUNNING");
+        return BT::NodeStatus::RUNNING;
+    }
+    BT::NodeStatus onRunning()override{
+        auto ctx=get_ctx(*this);
+        {
+            std::lock_guard<std::mutex>ll(local_mutex_);
+            if(done_){ctx->status("SUCCESS","oak package grab succeeded: "+last_reason_);ctx->trace(name(),"SUCCESS");return BT::NodeStatus::SUCCESS;}
+            if(failed_){ctx->status("FAILURE","oak package grab failed: "+last_reason_);ctx->trace(name(),"FAILURE");return BT::NodeStatus::FAILURE;}
+        }
+        if(steady_seconds()-start_>timeout_){
+            ctx->status("FAILURE","oak package grab timeout");
+            ctx->trace(name(),"TIMEOUT");
+            return BT::NodeStatus::FAILURE;
+        }
+        return BT::NodeStatus::RUNNING;
+    }
+    void onHalted()override{
+        auto ctx=get_ctx(*this);
+        ctx->trace(name(),"HALTED");
+    }
+private:
+    void onStatus(const std_msgs::msg::String::SharedPtr msg){
+        std::string rid,st,reason;
+        if(!get_string_json(msg->data,"request_id",rid))return;
+        if(rid!=request_id_)return;
+        get_string_json(msg->data,"status",st);
+        get_string_json(msg->data,"reason",reason);
+        std::transform(st.begin(),st.end(),st.begin(),[](unsigned char c){return std::tolower(c);});
+        std::lock_guard<std::mutex>ll(local_mutex_);
+        last_reason_=reason;
+        if(st=="succeeded"||st=="success")done_=true;
+        else if(st=="failed"||st=="failure"||st=="timeout")failed_=true;
+    }
+};
+
 class SendPlatformTarget:public BT::SyncActionNode{public:SendPlatformTarget(const std::string&n,const BT::NodeConfiguration&c):BT::SyncActionNode(n,c){}SIMPLE_PORTS BT::NodeStatus tick()override{auto ctx=get_ctx(*this);ctx->set_state("SendPlatformTarget");std::lock_guard<std::mutex>l(ctx->mutex);std::stringstream ss;ss<<"{\"action\":\"pickup\",\"shelf_id\":\""<<ctx->task.shelf_id<<"\",\"row\":"<<ctx->task.row<<",\"col\":\""<<ctx->task.col<<"\",\"cell_id\":\""<<ctx->task.cell_id<<"\"}";ctx->platform_pub->publish(std_msgs::msg::String().set__data(ss.str()));ctx->status("RUNNING","published /platform/target");ctx->trace(name(),"SUCCESS");return BT::NodeStatus::SUCCESS;}};
 class WaitPickupDone:public BT::StatefulActionNode{double start_=0;public:WaitPickupDone(const std::string&n,const BT::NodeConfiguration&c):BT::StatefulActionNode(n,c){}SIMPLE_PORTS BT::NodeStatus onStart()override{start_=steady_seconds();auto ctx=get_ctx(*this);ctx->set_state("WaitPickupDone");ctx->status("RUNNING","waiting pickup completion");ctx->trace(name(),"RUNNING");return BT::NodeStatus::RUNNING;}BT::NodeStatus onRunning()override{auto ctx=get_ctx(*this);std::lock_guard<std::mutex>l(ctx->mutex);if(ctx->latest_platform_status.find("done")!=std::string::npos||ctx->latest_platform_status.find("DONE")!=std::string::npos){ctx->status("SUCCESS","platform reports done");ctx->trace(name(),"SUCCESS");return BT::NodeStatus::SUCCESS;}if(ctx->allow_demo_anchor_if_missing&&steady_seconds()-start_>1.0){ctx->status("SUCCESS","demo pickup done");ctx->trace(name(),"SUCCESS");return BT::NodeStatus::SUCCESS;}return BT::NodeStatus::RUNNING;}void onHalted()override{get_ctx(*this)->trace(name(),"HALTED");}};
 class PublishTaskDone:public BT::SyncActionNode{public:PublishTaskDone(const std::string&n,const BT::NodeConfiguration&c):BT::SyncActionNode(n,c){}SIMPLE_PORTS BT::NodeStatus tick()override{auto ctx=get_ctx(*this);ctx->set_state("PublishTaskDone");ctx->status("DONE","pickup task completed");ctx->trace(name(),"SUCCESS");{std::lock_guard<std::mutex>l(ctx->mutex);ctx->task=TaskData();ctx->resolved_pose=Pose2D();}return BT::NodeStatus::SUCCESS;}};
@@ -1155,7 +1368,7 @@ class MissionNode:public rclcpp::Node{std::shared_ptr<SharedContext>ctx_;BT::Beh
   factory_.registerNodeType<NavigateToShelf>("NavigateToTargetShelf");factory_.registerNodeType<WaitNavArrive>("WaitNavArrive");/* WAIT_NAV_DONE_BEFORE_OAK_ALIGN_20260611_V2: register WaitNavDoneBeforeOak */factory_.registerNodeType<WaitNavDoneBeforeOak>("WaitNavDoneBeforeOak");factory_.registerNodeType<WaitNavSettle>("WaitNavSettle");factory_.registerNodeType<WaitAfterOakAlign>("WaitAfterOakAlign");factory_.registerNodeType<StopBeforeOakAlign>("StopBeforeOakAlign");
   factory_.registerNodeType<WaitNavArrive>("WaitShelfNavigationArrive");factory_.registerNodeType<VerifyShelfQR>("VerifyShelfQR");
   factory_.registerNodeType<VerifyShelfQR>("VerifyTargetShelfIdentity");factory_.registerNodeType<SearchShelfQR>("SearchShelfQR");
-  factory_.registerNodeType<SearchShelfQR>("SearchTargetShelfIdentity");factory_.registerNodeType<AlignToCell>("AlignToCell");factory_.registerNodeType<AlignOakToTargetShelfFront>("AlignOakToTargetShelfFront");factory_.registerNodeType<ScanTargetPackageOnShelf>("ScanTargetPackageOnShelf");factory_.registerNodeType<RequestOakPackageSearchAlign>("RequestOakPackageSearchAlign");factory_.registerNodeType<CacheFoundPackagePose>("CacheFoundPackagePose");factory_.registerNodeType<RequestOakServoCenterAlign>("RequestOakServoCenterAlign");factory_.registerNodeType<RequestOakServoApproach>("RequestOakServoApproach");factory_.registerNodeType<RequestOakServoFineAlign>("RequestOakServoFineAlign");factory_.registerNodeType<ExecuteOakGuidedPickup>("ExecuteOakGuidedPickup");factory_.registerNodeType<WaitOakGuidedPickupPlaceholder>("WaitOakGuidedPickupPlaceholder");factory_.registerNodeType<ExecuteOakGuidedLiftDown>("ExecuteOakGuidedLiftDown");factory_.registerNodeType<SendPlatformTarget>("SendPlatformTarget");factory_.registerNodeType<WaitPickupDone>("WaitPickupDone");factory_.registerNodeType<PublishTaskDone>("PublishTaskDone");
+  factory_.registerNodeType<SearchShelfQR>("SearchTargetShelfIdentity");factory_.registerNodeType<AlignToCell>("AlignToCell");factory_.registerNodeType<AlignOakToTargetShelfFront>("AlignOakToTargetShelfFront");factory_.registerNodeType<ScanTargetPackageOnShelf>("ScanTargetPackageOnShelf");factory_.registerNodeType<ExecuteOakPackageOpenBeforeSearch>("ExecuteOakPackageOpenBeforeSearch");factory_.registerNodeType<RequestOakPackageSearchAlign>("RequestOakPackageSearchAlign");factory_.registerNodeType<CacheFoundPackagePose>("CacheFoundPackagePose");factory_.registerNodeType<RequestOakServoCenterAlign>("RequestOakServoCenterAlign");factory_.registerNodeType<RequestOakServoApproach>("RequestOakServoApproach");factory_.registerNodeType<RequestOakServoFineAlign>("RequestOakServoFineAlign");factory_.registerNodeType<ExecuteOakGuidedPickup>("ExecuteOakGuidedPickup");factory_.registerNodeType<ExecuteOakPackageGrab>("ExecuteOakPackageGrab");factory_.registerNodeType<WaitOakGuidedPickupPlaceholder>("WaitOakGuidedPickupPlaceholder");factory_.registerNodeType<ExecuteOakGuidedLiftDown>("ExecuteOakGuidedLiftDown");factory_.registerNodeType<SendPlatformTarget>("SendPlatformTarget");factory_.registerNodeType<WaitPickupDone>("WaitPickupDone");factory_.registerNodeType<PublishTaskDone>("PublishTaskDone");
   factory_.registerNodeType<PublishTaskDone>("FinishCurrentMission");blackboard_=BT::Blackboard::create();blackboard_->set("ctx",ctx_);auto xml=get_parameter("bt_xml").as_string();ctx_->bt_xml_pub->publish(std_msgs::msg::String().set__data(read_file_required(xml)));tree_=std::make_unique<BT::Tree>(factory_.createTreeFromFile(xml,blackboard_));if(get_parameter("enable_groot_monitoring").as_bool()){int pub_port=get_parameter("groot_publisher_port").as_int();int srv_port=get_parameter("groot_server_port").as_int();int max_msg=get_parameter("groot_max_msg_per_second").as_int();groot_pub_=std::make_unique<BT::PublisherZMQ>(*tree_,max_msg,pub_port,srv_port);RCLCPP_INFO(get_logger(),"Groot v1 PublisherZMQ enabled. publisher_port=%d server_port=%d",pub_port,srv_port);}double hz=get_parameter("tick_hz").as_double();timer_=create_wall_timer(std::chrono::milliseconds((int)(1000.0/hz)),[this](){bool skip=false;{std::lock_guard<std::mutex>l(ctx_->mutex);skip=ctx_->cancel_requested||!ctx_->task.active;}if(skip)return;tick();});RCLCPP_INFO(get_logger(),"Full semantic relocalization mission BT started.");}private:void on_goal(const std_msgs::msg::String::SharedPtr m){
     std::string cancel_task_type,cancel_command,cancel_status;
     bool is_cancel_msg=false;

@@ -77,3 +77,5 @@ oak_guided_pickup:
     image_height_px: 1080.0
 
     align_v_from_bottom_px: 441.0
+    keep_gripper_open_during_pickup: true
+    grab_open_value: true

@@ -112,6 +112,9 @@ class OakGuidedPickupNode(Node):
         self.declare_parameter('platform_target_topic', '/platform/target')
         self.declare_parameter('chassis_control_mode_topic', '/chassis_control_mode')
 
+        self.declare_parameter('keep_gripper_open_during_pickup', True)
+        self.declare_parameter('grab_open_value', True)
+
         # Startup safety zero: in IDLE and auto mode, lower lift target to 0 slowly.
         # This clears stale platform targets without sudden drop.
         self.declare_parameter('enable_startup_safe_zero', True)
@@ -227,6 +230,7 @@ class OakGuidedPickupNode(Node):
         self.actual_lift_z_mm = 0.0
         self.actual_slide_x_mm = 0.0
         self.actual_screw_x_mm = 0.0
+        self.last_platform_grab_mode = bool(self.pbool('grab_open_value'))
         self.platform_control_mode = 0
 
         self.chassis_mode = 'unknown'
@@ -359,6 +363,11 @@ class OakGuidedPickupNode(Node):
         self.actual_lift_z_mm = float(msg.target_lift_z_mm)
         self.actual_slide_x_mm = float(msg.target_slide_x_mm)
         self.actual_screw_x_mm = float(msg.target_screw_x_mm)
+        if hasattr(msg, 'target_grab_mode'):
+            try:
+                self.last_platform_grab_mode = bool(msg.target_grab_mode)
+            except Exception:
+                pass
         self.platform_control_mode = int(msg.control_mode)
 
         if self.active and self.state != 'LIFT_DOWN_TO_ZERO' and self.previous_command_lift_z_mm is not None:
@@ -447,6 +456,16 @@ class OakGuidedPickupNode(Node):
         msg.target_lift_z_mm = float(clamp(lift_z_mm, self.pfloat('platform_min_height_mm'), self.pfloat('platform_max_height_mm')))
         msg.target_slide_x_mm = float(self.actual_slide_x_mm)
         msg.target_screw_x_mm = float(self.actual_screw_x_mm)
+        # forced_keep_open_until_real_grab:
+        # While this node controls lift during pickup, keep gripper OPEN.
+        # On the real board: true=OPEN, false=CLOSE.
+        # Do not let the bool default false close the gripper during lift_align.
+        if hasattr(msg, 'target_grab_mode'):
+            if self.active and self.pbool('keep_gripper_open_during_pickup'):
+                msg.target_grab_mode = bool(self.pbool('grab_open_value'))
+            else:
+                msg.target_grab_mode = bool(self.last_platform_grab_mode)
+
         self.platform_target_pub.publish(msg)
 
     def publish_hold_actual(self, reason: str) -> None:

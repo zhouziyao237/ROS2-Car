@@ -108,7 +108,7 @@ runtime:
   debug_scores: false
   score_log_interval: 60
 
-  force_usb2: true
+  force_usb2: false
   stop_on_xlink_error: true
   queue_size: 1
   timer_period: 0.02

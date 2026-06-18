@@ -1,0 +1,1011 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+oak_package_grabber_node
+
+独立两节抓取包：
+- 不计算伸出距离；slide/screw 固定距离来自 YAML。
+- 不控制底盘，不做升降视觉对齐，不做升降归零。
+- 只在关夹后回拉阶段，用 OAK DataMatrix 目标 z 距离是否减小判断是否抓到。
+- 成功：两节缩回 + 保持关夹。
+- 失败：开夹 + 两节缩回。
+
+平台语义：
+- target_grab_mode = False / 0 -> open
+- target_grab_mode = True  / 1 -> close
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import time
+from typing import Any, Dict, Iterable, List, Optional, Tuple
+
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import String
+from auto_aim_interfaces.msg import PlatformCurrentStatus, PlatformTarget
+
+
+RUNNING_STAGES = {
+    'WAIT_PLATFORM_STATUS',
+    'WAIT_AUTO_MODE',
+    'ENSURE_GRIPPER_OPEN',
+    'EXTEND_SLIDE',
+    'EXTEND_SCREW',
+    'CLOSE_GRIPPER',
+    'RECORD_Z_BEFORE_PULLBACK',
+    'PULLBACK_SCREW_WITH_Z_CHECK',
+    'PULLBACK_SLIDE_WITH_Z_CHECK',
+    'OPEN_GRIPPER_AFTER_FAIL',
+    'RETRACT_ALL_AFTER_FAIL',
+    'DEBUG_OPEN_GRIPPER',
+    'DEBUG_CLOSE_GRIPPER',
+    'DEBUG_EXTEND_SLIDE',
+    'DEBUG_EXTEND_SCREW',
+    'DEBUG_RETRACT_ALL',
+}
+
+
+def clamp(value: float, low: float, high: float) -> float:
+    return max(low, min(high, value))
+
+
+def now_s() -> float:
+    return time.monotonic()
+
+
+def normalize_code(value: Any) -> str:
+    return str(value or '').strip().upper()
+
+
+def iter_dicts(obj: Any) -> Iterable[Dict[str, Any]]:
+    """递归提取 JSON 中所有 dict，兼容不同 OAK 输出格式。"""
+    if isinstance(obj, dict):
+        yield obj
+        for v in obj.values():
+            yield from iter_dicts(v)
+    elif isinstance(obj, list):
+        for item in obj:
+            yield from iter_dicts(item)
+
+
+class OakPackageGrabberNode(Node):
+    def __init__(self) -> None:
+        super().__init__('oak_package_grabber_node')
+
+        # ---------------- Parameters ----------------
+        self.request_topic = self.declare_parameter(
+            'request_topic', '/target_capture/oak_package_grabber/request'
+        ).value
+        self.status_topic = self.declare_parameter(
+            'status_topic', '/target_capture/oak_package_grabber/status'
+        ).value
+        self.platform_target_topic = self.declare_parameter(
+            'platform_target_topic', '/platform/target'
+        ).value
+        self.platform_current_status_topic = self.declare_parameter(
+            'platform_current_status_topic', '/platform/current_status'
+        ).value
+        self.datamatrix_topic = self.declare_parameter(
+            'datamatrix_topic', '/oak/datamatrix_3d_result_json'
+        ).value
+
+        self.control_hz = float(self.declare_parameter('control_hz', 20.0).value)
+        self.current_status_timeout_sec = float(
+            self.declare_parameter('current_status_timeout_sec', 1.0).value
+        )
+        self.wait_auto_mode_timeout_sec = float(
+            self.declare_parameter('wait_auto_mode_timeout_sec', 10.0).value
+        )
+        self.action_timeout_sec = float(
+            self.declare_parameter('action_timeout_sec', 30.0).value
+        )
+
+        # Fixed distances: user tunes these, node does not calculate them.
+        self.pickup_slide_extend_x_mm = float(
+            self.declare_parameter('pickup_slide_extend_x_mm', 80.0).value
+        )
+        self.slide_retract_x_mm = float(self.declare_parameter('slide_retract_x_mm', 0.0).value)
+        self.slide_min_x_mm = float(self.declare_parameter('slide_min_x_mm', 0.0).value)
+        self.slide_max_x_mm = float(self.declare_parameter('slide_max_x_mm', 150.0).value)
+
+        self.pickup_screw_extend_x_mm = float(
+            self.declare_parameter('pickup_screw_extend_x_mm', 60.0).value
+        )
+        self.screw_retract_x_mm = float(self.declare_parameter('screw_retract_x_mm', 0.0).value)
+        self.screw_min_x_mm = float(self.declare_parameter('screw_min_x_mm', 0.0).value)
+        self.screw_max_x_mm = float(self.declare_parameter('screw_max_x_mm', 150.0).value)
+
+        # Board semantic: 0=open, 1=close.
+        self.grab_open_value = bool(self.declare_parameter('grab_open_value', False).value)
+        self.grab_close_value = bool(self.declare_parameter('grab_close_value', True).value)
+
+        self.open_wait_sec = float(self.declare_parameter('open_wait_sec', 0.4).value)
+        # Feedback confirmation: do not report open/close success until board feedback agrees.
+        self.gripper_feedback_confirm_sec = float(
+            self.declare_parameter('gripper_feedback_confirm_sec', 0.20).value
+        )
+        self.gripper_feedback_timeout_sec = float(
+            self.declare_parameter('gripper_feedback_timeout_sec', 5.0).value
+        )
+        self.slide_extend_wait_sec = float(
+            self.declare_parameter('slide_extend_wait_sec', 1.5).value
+        )
+        self.screw_extend_wait_sec = float(
+            self.declare_parameter('screw_extend_wait_sec', 1.5).value
+        )
+        self.close_wait_sec = float(self.declare_parameter('close_wait_sec', 0.6).value)
+        self.screw_pullback_wait_sec = float(
+            self.declare_parameter('screw_pullback_wait_sec', 1.5).value
+        )
+        self.slide_pullback_wait_sec = float(
+            self.declare_parameter('slide_pullback_wait_sec', 1.5).value
+        )
+        self.fail_recover_wait_sec = float(
+            self.declare_parameter('fail_recover_wait_sec', 2.0).value
+        )
+
+        self.require_z_before_pullback = bool(
+            self.declare_parameter('require_z_before_pullback', True).value
+        )
+        self.z_before_pullback_max_age_sec = float(
+            self.declare_parameter('z_before_pullback_max_age_sec', 1.0).value
+        )
+        self.grab_verify_min_delta_z_m = float(
+            self.declare_parameter('grab_verify_min_delta_z_m', 0.06).value
+        )
+        self.grab_verify_min_samples = int(
+            self.declare_parameter('grab_verify_min_samples', 4).value
+        )
+        self.grab_verify_max_lost_sec = float(
+            self.declare_parameter('grab_verify_max_lost_sec', 0.8).value
+        )
+        self.grab_verify_window_sec = float(
+            self.declare_parameter('grab_verify_window_sec', 3.0).value
+        )
+
+        self.allow_match_full_pickup_code = bool(
+            self.declare_parameter('allow_match_full_pickup_code', True).value
+        )
+        self.allow_match_package_code = bool(
+            self.declare_parameter('allow_match_package_code', True).value
+        )
+        self.require_auto_mode = bool(self.declare_parameter('require_auto_mode', True).value)
+        self.debug_log = bool(self.declare_parameter('debug_log', True).value)
+        self.log_status_period_sec = float(
+            self.declare_parameter('log_status_period_sec', 0.5).value
+        )
+
+        # Search-stage gripper hold:
+        # After BT sends open_gripper before OAK search, keep publishing OPEN in background.
+        # This prevents the one-shot open command from being too short or overwritten.
+        # It will stop when grab_pickup starts, when guided pickup starts, or after max duration.
+        self.hold_open_after_open_gripper = bool(
+            self.declare_parameter('hold_open_after_open_gripper', True).value
+        )
+        self.hold_open_max_sec = float(
+            self.declare_parameter('hold_open_max_sec', 12.0).value
+        )
+        self.hold_open_stop_on_guided_pickup_request = bool(
+            self.declare_parameter('hold_open_stop_on_guided_pickup_request', True).value
+        )
+        self.guided_pickup_request_topic = str(
+            self.declare_parameter(
+                'guided_pickup_request_topic',
+                '/target_capture/oak_guided_pickup/request'
+            ).value
+        )
+
+        # ---------------- Platform feedback cache ----------------
+        self.actual_lift_z_mm: Optional[float] = None
+        self.actual_slide_x_mm: float = 0.0
+        self.actual_screw_x_mm: float = 0.0
+        self.current_grab_mode_bool: bool = self.grab_open_value
+        self.control_mode: int = 1  # 0=auto, 1=manual; default safe/manual.
+        self.last_platform_status_time: Optional[float] = None
+
+        # ---------------- OAK target z cache ----------------
+        self.pickup_code: str = ''
+        self.package_code: str = ''
+        self.latest_target_z_m: Optional[float] = None
+        self.latest_target_code: str = ''
+        self.last_target_seen_time: Optional[float] = None
+        self.last_sample_time: Optional[float] = None
+        self.z_before_pullback_m: Optional[float] = None
+        self.z_end_m: Optional[float] = None
+        self.z_samples: List[Tuple[float, float]] = []
+        self.grab_verified: bool = False
+
+        # ---------------- Request/state machine ----------------
+        self.active: bool = False
+        self.command: str = ''
+        self.request_id: str = ''
+        self.shelf_id: str = ''
+        self.layer_id: str = ''
+        self.stage: str = 'IDLE'
+        self.stage_start_time: float = now_s()
+        self.request_start_time: float = now_s()
+        self.timeout_sec: float = self.action_timeout_sec
+        self.fail_reason: str = ''
+        self.last_status_publish_time: float = 0.0
+        self.last_cmd_slide_x_mm: float = self.slide_retract_x_mm
+        self.last_cmd_screw_x_mm: float = self.screw_retract_x_mm
+        self.last_cmd_grab_mode: bool = self.grab_open_value
+        self.gripper_feedback_ok_since: Optional[float] = None
+
+        # Background hold-open state for search / alignment stage.
+        self.hold_open_active: bool = False
+        self.hold_open_start_time: float = 0.0
+        self.hold_open_request_id: str = ''
+        self.hold_open_last_log_time: float = 0.0
+        self.request_source: str = ''
+
+        # Debug targets.
+        self.debug_target_slide_x_mm: float = self.pickup_slide_extend_x_mm
+        self.debug_target_screw_x_mm: float = self.pickup_screw_extend_x_mm
+
+        # ---------------- ROS interfaces ----------------
+        self.request_sub = self.create_subscription(
+            String, str(self.request_topic), self.on_request, 10
+        )
+        self.status_pub = self.create_publisher(String, str(self.status_topic), 10)
+        self.platform_target_pub = self.create_publisher(
+            PlatformTarget, str(self.platform_target_topic), 10
+        )
+        self.platform_status_sub = self.create_subscription(
+            PlatformCurrentStatus, str(self.platform_current_status_topic), self.on_platform_status, 10
+        )
+        self.datamatrix_sub = self.create_subscription(
+            String, str(self.datamatrix_topic), self.on_datamatrix, 10
+        )
+
+        # When lift-align starts, stop background hold-open so oak_guided_pickup becomes
+        # the only node publishing /platform/target for lift control.
+        self.guided_pickup_req_sub = self.create_subscription(
+            String, str(self.guided_pickup_request_topic), self.on_guided_pickup_request, 10
+        )
+
+        self.timer = self.create_timer(max(0.001, 1.0 / self.control_hz), self.tick)
+
+        self.get_logger().info(
+            f"oak_package_grabber_node started: request={self.request_topic} "
+            f"status={self.status_topic} platform_target={self.platform_target_topic} "
+            f"platform_status={self.platform_current_status_topic} datamatrix={self.datamatrix_topic}"
+        )
+        self.get_logger().info(
+            f"fixed distances: slide_extend={self.pickup_slide_extend_x_mm:.1f} "
+            f"slide_retract={self.slide_retract_x_mm:.1f} "
+            f"screw_extend={self.pickup_screw_extend_x_mm:.1f} "
+            f"screw_retract={self.screw_retract_x_mm:.1f}; "
+            f"grab: 0=open false, 1=close true"
+        )
+
+    # ------------------------------------------------------------------
+    # Callbacks
+    # ------------------------------------------------------------------
+    def on_platform_status(self, msg: PlatformCurrentStatus) -> None:
+        self.actual_lift_z_mm = float(msg.target_lift_z_mm)
+        self.actual_slide_x_mm = float(msg.target_slide_x_mm)
+        self.actual_screw_x_mm = float(msg.target_screw_x_mm)
+
+        if hasattr(msg, 'target_grab_mode'):
+            # PlatformCurrentStatus uses float32 target_grab_mode: 0=open, 1=close.
+            self.current_grab_mode_bool = float(msg.target_grab_mode) >= 0.5
+        else:
+            # Should not happen after protocol sync. Keep a safe value.
+            self.current_grab_mode_bool = self.grab_close_value
+
+        self.control_mode = int(msg.control_mode)
+        self.last_platform_status_time = now_s()
+
+    def on_datamatrix(self, msg: String) -> None:
+        try:
+            data = json.loads(msg.data)
+        except Exception:
+            return
+
+        for det in self.extract_detections(data):
+            code = normalize_code(det.get('code', ''))
+            z_m = self.extract_z_m(det)
+            if not code or z_m is None or not math.isfinite(z_m) or z_m <= 0.0:
+                continue
+
+            if self.is_target_code(code):
+                t = now_s()
+                self.latest_target_code = code
+                self.latest_target_z_m = float(z_m)
+                self.last_target_seen_time = t
+
+                if self.stage in ('PULLBACK_SCREW_WITH_Z_CHECK', 'PULLBACK_SLIDE_WITH_Z_CHECK'):
+                    self.append_z_sample(t, float(z_m))
+                    self.update_grab_verify()
+                break
+
+    def on_request(self, msg: String) -> None:
+        try:
+            req = json.loads(msg.data)
+        except Exception as exc:
+            self.publish_status(
+                status='failed',
+                stage='request_parse',
+                reason=f'invalid_json: {exc}',
+                request_id='',
+                force=True,
+            )
+            return
+
+        request_id = str(req.get('request_id') or f'grab_{int(time.time() * 1000)}')
+        command = str(req.get('command', '')).strip()
+
+        if self.active:
+            self.publish_status(
+                status='failed',
+                stage='busy',
+                reason='busy',
+                request_id=request_id,
+                force=True,
+            )
+            return
+
+        self.command = command
+        self.request_id = request_id
+        self.request_source = str(req.get('source', ''))
+        self.pickup_code = normalize_code(req.get('pickup_code', ''))
+        self.package_code = normalize_code(req.get('package_code', ''))
+
+        # Keep OPEN through search / approach / lift-align.
+        # Stop the background holder only when this grabber is about to execute
+        # the real grab sequence or an explicit manual close/retract command.
+        if command in ('grab_pickup', 'close_gripper', 'retract_all') and self.hold_open_active:
+            self.stop_hold_open(f'new_command_{command}')
+        self.shelf_id = str(req.get('shelf_id', ''))
+        self.layer_id = str(req.get('layer_id', ''))
+        self.timeout_sec = float(req.get('timeout_sec', self.action_timeout_sec))
+        self.request_start_time = now_s()
+        self.stage_start_time = now_s()
+        self.fail_reason = ''
+
+        self.z_before_pullback_m = None
+        self.z_end_m = None
+        self.z_samples.clear()
+        self.last_sample_time = None
+        self.grab_verified = False
+
+        if command == 'grab_pickup':
+            self.stage = 'WAIT_PLATFORM_STATUS'
+        elif command == 'open_gripper':
+            self.stage = 'WAIT_PLATFORM_STATUS'
+            self.command = 'open_gripper'
+        elif command == 'close_gripper':
+            self.stage = 'WAIT_PLATFORM_STATUS'
+            self.command = 'close_gripper'
+        elif command == 'extend_slide':
+            self.debug_target_slide_x_mm = float(
+                req.get('target_slide_x_mm', self.pickup_slide_extend_x_mm)
+            )
+            self.stage = 'WAIT_PLATFORM_STATUS'
+            self.command = 'extend_slide'
+        elif command == 'extend_screw':
+            self.debug_target_screw_x_mm = float(
+                req.get('target_screw_x_mm', self.pickup_screw_extend_x_mm)
+            )
+            self.stage = 'WAIT_PLATFORM_STATUS'
+            self.command = 'extend_screw'
+        elif command == 'retract_all':
+            self.stage = 'WAIT_PLATFORM_STATUS'
+            self.command = 'retract_all'
+        else:
+            self.publish_status(
+                status='failed',
+                stage='request',
+                reason=f'unknown_command:{command}',
+                request_id=request_id,
+                force=True,
+            )
+            return
+
+        self.active = True
+        self.get_logger().info(
+            f"[grabber] accepted request={self.request_id} command={self.command} "
+            f"pickup={self.pickup_code} package={self.package_code}"
+        )
+        self.publish_running('request_received', 'request_accepted', force=True)
+
+    # ------------------------------------------------------------------
+    # Data parsing helpers
+    # ------------------------------------------------------------------
+    def extract_detections(self, data: Any) -> List[Dict[str, Any]]:
+        detections: List[Dict[str, Any]] = []
+        for d in iter_dicts(data):
+            code = None
+            for key in ('code', 'text', 'data', 'raw', 'value'):
+                if key in d and d[key] not in (None, ''):
+                    code = d[key]
+                    break
+            if code is None:
+                continue
+            item = dict(d)
+            item['code'] = code
+            detections.append(item)
+        return detections
+
+    def extract_z_m(self, det: Dict[str, Any]) -> Optional[float]:
+        # Direct meter fields.
+        for key in ('z_m', 'z_meter', 'depth_m'):
+            if key in det:
+                try:
+                    return float(det[key])
+                except Exception:
+                    pass
+
+        # Direct mm fields.
+        for key in ('depth_mm', 'z_mm'):
+            if key in det:
+                try:
+                    return float(det[key]) / 1000.0
+                except Exception:
+                    pass
+
+        # XYZ arrays.
+        for key in ('camera_xyz_mm', 'xyz_mm', 'position_mm'):
+            v = det.get(key)
+            if isinstance(v, (list, tuple)) and len(v) >= 3:
+                try:
+                    return float(v[2]) / 1000.0
+                except Exception:
+                    pass
+
+        for key in ('camera_xyz_m', 'xyz_m', 'position_m'):
+            v = det.get(key)
+            if isinstance(v, (list, tuple)) and len(v) >= 3:
+                try:
+                    return float(v[2])
+                except Exception:
+                    pass
+
+        # Nested position dictionaries.
+        for key in ('camera_xyz', 'position', 'pose'):
+            v = det.get(key)
+            if isinstance(v, dict):
+                for z_key in ('z_m', 'z', 'depth_m'):
+                    if z_key in v:
+                        try:
+                            return float(v[z_key])
+                        except Exception:
+                            pass
+                for z_key in ('z_mm', 'depth_mm'):
+                    if z_key in v:
+                        try:
+                            return float(v[z_key]) / 1000.0
+                        except Exception:
+                            pass
+        return None
+
+    def is_target_code(self, code: str) -> bool:
+        code = normalize_code(code)
+        pickup = normalize_code(self.pickup_code)
+        pkg = normalize_code(self.package_code)
+
+        if self.allow_match_full_pickup_code and pickup and code == pickup:
+            return True
+        if self.allow_match_package_code and pkg:
+            if code == pkg:
+                return True
+            if code.endswith('-' + pkg):
+                return True
+            # Some decoders may return a full code with separators normalized differently.
+            if pickup and pickup.endswith('-' + pkg) and pkg in code.split('-'):
+                return True
+        return False
+
+    # ------------------------------------------------------------------
+    # State machine helpers
+    # ------------------------------------------------------------------
+    def platform_status_valid(self) -> bool:
+        if self.actual_lift_z_mm is None or self.last_platform_status_time is None:
+            return False
+        return now_s() - self.last_platform_status_time <= self.current_status_timeout_sec
+
+    def stage_elapsed(self) -> float:
+        return now_s() - self.stage_start_time
+
+    def request_elapsed(self) -> float:
+        return now_s() - self.request_start_time
+
+    def goto(self, stage: str) -> None:
+        self.stage = stage
+        self.stage_start_time = now_s()
+        self.gripper_feedback_ok_since = None
+        self.publish_running(stage.lower(), 'enter_stage', force=True)
+
+    def append_z_sample(self, t: float, z_m: float) -> None:
+        if self.last_sample_time is not None and abs(t - self.last_sample_time) < 1e-3:
+            return
+        self.last_sample_time = t
+        self.z_samples.append((t, z_m))
+        self.z_end_m = z_m
+
+        # Keep only recent window.
+        cutoff = now_s() - self.grab_verify_window_sec
+        self.z_samples = [(ts, z) for ts, z in self.z_samples if ts >= cutoff]
+
+    def maybe_sample_latest_z(self) -> None:
+        if self.latest_target_z_m is None or self.last_target_seen_time is None:
+            return
+        if now_s() - self.last_target_seen_time > self.grab_verify_max_lost_sec:
+            return
+        self.append_z_sample(self.last_target_seen_time, self.latest_target_z_m)
+
+    def update_grab_verify(self) -> None:
+        if self.z_before_pullback_m is None:
+            return
+        self.maybe_sample_latest_z()
+        if len(self.z_samples) < self.grab_verify_min_samples:
+            return
+        z_min = min(z for _, z in self.z_samples)
+        z_delta = self.z_before_pullback_m - z_min
+        if z_delta >= self.grab_verify_min_delta_z_m:
+            self.grab_verified = True
+
+    def current_z_delta(self) -> Optional[float]:
+        if self.z_before_pullback_m is None:
+            return None
+        z_ref = self.z_end_m if self.z_end_m is not None else self.latest_target_z_m
+        if z_ref is None:
+            return None
+        return self.z_before_pullback_m - z_ref
+
+    # ------------------------------------------------------------------
+    # Platform command/status publishing
+    # ------------------------------------------------------------------
+    def publish_platform_target(self, slide_x_mm: float, screw_x_mm: float, grab_mode: bool) -> None:
+        if self.actual_lift_z_mm is None:
+            return
+        msg = PlatformTarget()
+        # 抓取包不改升降：始终保持当前反馈高度。
+        msg.target_lift_z_mm = float(self.actual_lift_z_mm)
+        msg.target_slide_x_mm = float(clamp(slide_x_mm, self.slide_min_x_mm, self.slide_max_x_mm))
+        msg.target_screw_x_mm = float(clamp(screw_x_mm, self.screw_min_x_mm, self.screw_max_x_mm))
+        # 必须显式设置，不能依赖 bool 默认 false。
+        msg.target_grab_mode = bool(grab_mode)
+        self.last_cmd_slide_x_mm = msg.target_slide_x_mm
+        self.last_cmd_screw_x_mm = msg.target_screw_x_mm
+        self.last_cmd_grab_mode = bool(grab_mode)
+        self.platform_target_pub.publish(msg)
+
+    def gripper_feedback_matches(self, target_grab_mode: bool) -> bool:
+        # Board feedback semantic: current_grab_mode_bool False=open, True=close.
+        return bool(self.current_grab_mode_bool) == bool(target_grab_mode)
+
+    def gripper_feedback_confirmed(self, target_grab_mode: bool) -> bool:
+        if not self.platform_status_valid():
+            self.gripper_feedback_ok_since = None
+            return False
+
+        if not self.gripper_feedback_matches(target_grab_mode):
+            self.gripper_feedback_ok_since = None
+            return False
+
+        t = now_s()
+        if self.gripper_feedback_ok_since is None:
+            self.gripper_feedback_ok_since = t
+
+        return (t - self.gripper_feedback_ok_since) >= self.gripper_feedback_confirm_sec
+
+    def on_guided_pickup_request(self, msg: String) -> None:
+        # Do NOT stop hold-open when lift_align starts.
+        # Requirement: gripper must stay OPEN during search, approach, and lift_align.
+        # The oak_guided_pickup node is also patched to publish target_grab_mode=OPEN
+        # while it owns /platform/target for lift control.
+        if self.hold_open_active and self.hold_open_stop_on_guided_pickup_request:
+            self.get_logger().info(
+                '[hold_open] guided_pickup_request observed, but keep holding OPEN until real grab'
+            )
+        return
+
+    def start_hold_open(self, reason: str) -> None:
+        if not self.hold_open_after_open_gripper:
+            return
+        self.hold_open_active = True
+        self.hold_open_start_time = now_s()
+        self.hold_open_request_id = self.request_id
+        self.hold_open_last_log_time = 0.0
+        self.get_logger().info(
+            f"[hold_open] start request={self.hold_open_request_id} reason={reason} "
+            f"max_sec={self.hold_open_max_sec:.1f}"
+        )
+
+    def stop_hold_open(self, reason: str) -> None:
+        if not self.hold_open_active:
+            return
+        elapsed = now_s() - self.hold_open_start_time
+        self.get_logger().info(
+            f"[hold_open] stop request={self.hold_open_request_id} "
+            f"reason={reason} elapsed={elapsed:.2f}s"
+        )
+        self.hold_open_active = False
+        self.hold_open_request_id = ''
+
+    def tick_hold_open(self) -> None:
+        if not self.hold_open_active:
+            return
+
+        elapsed = now_s() - self.hold_open_start_time
+        if self.hold_open_max_sec > 0.0 and elapsed > self.hold_open_max_sec:
+            self.stop_hold_open('hold_open_max_sec_reached')
+            return
+
+        if not self.platform_status_valid():
+            return
+
+        # If chassis/platform is manual, do not spam automatic platform target.
+        # It will resume if the chassis goes back to auto within hold_open_max_sec.
+        if self.require_auto_mode and self.control_mode != 0:
+            return
+
+        # Keep mechanism retracted and gripper OPEN during search.
+        # This is only for search/scan/approach preparation.
+        # It must stop before lift-align so it does not fight oak_guided_pickup.
+        self.publish_platform_target(
+            self.slide_retract_x_mm,
+            self.screw_retract_x_mm,
+            self.grab_open_value,
+        )
+
+        t = now_s()
+        if self.debug_log and (t - self.hold_open_last_log_time) >= 1.0:
+            self.hold_open_last_log_time = t
+            self.get_logger().info(
+                f"[hold_open] publishing OPEN for search: "
+                f"slide={self.slide_retract_x_mm:.1f} screw={self.screw_retract_x_mm:.1f} "
+                f"grab=0 elapsed={elapsed:.1f}/{self.hold_open_max_sec:.1f}s"
+            )
+
+    def publish_status(self, *, status: str, stage: str, reason: str, request_id: Optional[str] = None,
+                       force: bool = False) -> None:
+        t = now_s()
+        if not force and status == 'running' and t - self.last_status_publish_time < self.log_status_period_sec:
+            return
+        self.last_status_publish_time = t
+
+        z_delta = self.current_z_delta()
+        payload = {
+            'status': status,
+            'stage': stage,
+            'reason': reason,
+            'request_id': request_id if request_id is not None else self.request_id,
+            'pickup_code': self.pickup_code,
+            'package_code': self.package_code,
+            'target_slide_x_mm': self.current_target_slide_for_stage(),
+            'target_screw_x_mm': self.current_target_screw_for_stage(),
+            'target_grab_mode': 1 if self.current_target_grab_for_stage() else 0,
+            'actual_lift_z_mm': self.actual_lift_z_mm,
+            'control_mode': self.control_mode,
+            'z_before_pullback_m': self.z_before_pullback_m,
+            'z_current_m': self.z_end_m if self.z_end_m is not None else self.latest_target_z_m,
+            'z_delta_m': z_delta,
+            'grab_verified': self.grab_verified,
+            'elapsed_sec': self.request_elapsed() if self.active else 0.0,
+        }
+        msg = String()
+        msg.data = json.dumps(payload, ensure_ascii=False)
+        self.status_pub.publish(msg)
+
+        if self.debug_log and (force or status != 'running'):
+            self.get_logger().info(f"[grabber_status] {msg.data}")
+
+    def publish_running(self, stage: str, reason: str, force: bool = False) -> None:
+        self.publish_status(status='running', stage=stage, reason=reason, force=force)
+
+    def succeed(self, reason: str) -> None:
+        self.publish_status(status='succeeded', stage='grab_pickup', reason=reason, force=True)
+        self.get_logger().info(f"[grabber] succeeded request={self.request_id} reason={reason}")
+        self.active = False
+        self.stage = 'IDLE'
+
+    def fail(self, reason: str) -> None:
+        self.publish_status(status='failed', stage='grab_pickup', reason=reason, force=True)
+        self.get_logger().error(f"[grabber] failed request={self.request_id} reason={reason}")
+        self.active = False
+        self.stage = 'IDLE'
+
+    def begin_fail_recovery(self, reason: str) -> None:
+        self.fail_reason = reason
+        self.goto('OPEN_GRIPPER_AFTER_FAIL')
+
+    def current_target_slide_for_stage(self) -> float:
+        if self.stage in ('EXTEND_SLIDE', 'EXTEND_SCREW', 'CLOSE_GRIPPER', 'PULLBACK_SCREW_WITH_Z_CHECK'):
+            return self.pickup_slide_extend_x_mm
+        return self.slide_retract_x_mm
+
+    def current_target_screw_for_stage(self) -> float:
+        if self.stage in ('EXTEND_SCREW', 'CLOSE_GRIPPER'):
+            return self.pickup_screw_extend_x_mm
+        return self.screw_retract_x_mm
+
+    def current_target_grab_for_stage(self) -> bool:
+        if self.stage in (
+            'CLOSE_GRIPPER',
+            'PULLBACK_SCREW_WITH_Z_CHECK',
+            'PULLBACK_SLIDE_WITH_Z_CHECK',
+            'SUCCESS_HOLD_CLOSED',
+            'DEBUG_CLOSE_GRIPPER',
+        ):
+            return self.grab_close_value
+        return self.grab_open_value
+
+    # ------------------------------------------------------------------
+    # Main state machine
+    # ------------------------------------------------------------------
+    def tick(self) -> None:
+        if not self.active:
+            self.tick_hold_open()
+            return
+
+        if self.request_elapsed() > self.timeout_sec:
+            # If timeout happens during/after closing, recover open/retract. Otherwise fail directly.
+            if self.stage in (
+                'CLOSE_GRIPPER',
+                'RECORD_Z_BEFORE_PULLBACK',
+                'PULLBACK_SCREW_WITH_Z_CHECK',
+                'PULLBACK_SLIDE_WITH_Z_CHECK',
+            ):
+                self.begin_fail_recovery('action_timeout_recovered_open_retracted')
+            else:
+                self.fail('action_timeout')
+            return
+
+        if self.stage == 'WAIT_PLATFORM_STATUS':
+            if not self.platform_status_valid():
+                self.publish_running('wait_platform_status', 'waiting_platform_current_status')
+                return
+            if self.command == 'grab_pickup':
+                self.goto('WAIT_AUTO_MODE')
+            elif self.command == 'open_gripper':
+                self.goto('DEBUG_OPEN_GRIPPER')
+            elif self.command == 'close_gripper':
+                self.goto('DEBUG_CLOSE_GRIPPER')
+            elif self.command == 'extend_slide':
+                self.goto('DEBUG_EXTEND_SLIDE')
+            elif self.command == 'extend_screw':
+                self.goto('DEBUG_EXTEND_SCREW')
+            elif self.command == 'retract_all':
+                self.goto('DEBUG_RETRACT_ALL')
+            else:
+                self.fail(f'unknown_command:{self.command}')
+            return
+
+        if self.require_auto_mode and self.stage in RUNNING_STAGES and self.stage != 'WAIT_AUTO_MODE':
+            if self.control_mode != 0:
+                self.publish_running(self.stage.lower(), 'paused_waiting_auto_mode')
+                return
+
+        if self.stage == 'WAIT_AUTO_MODE':
+            if not self.require_auto_mode or self.control_mode == 0:
+                self.goto('ENSURE_GRIPPER_OPEN')
+                return
+            self.publish_running('wait_auto_mode', 'waiting_auto_mode')
+            if self.stage_elapsed() > self.wait_auto_mode_timeout_sec:
+                self.fail('wait_auto_mode_timeout')
+            return
+
+        if self.stage == 'ENSURE_GRIPPER_OPEN':
+            # Requirement:
+            # - Before real grab extension, make sure gripper is commanded OPEN.
+            # - Do NOT block on /platform/current_status target_grab_mode feedback,
+            #   because the feedback can be stale while the command path is valid.
+            # - Keep publishing OPEN for open_wait_sec, then continue to EXTEND_SLIDE.
+            self.publish_platform_target(
+                self.actual_slide_x_mm,
+                self.actual_screw_x_mm,
+                self.grab_open_value,
+            )
+            self.publish_running(
+                'ensure_gripper_open',
+                'opening_gripper_before_extend_no_feedback_block'
+            )
+
+            if self.stage_elapsed() >= self.open_wait_sec:
+                self.goto('EXTEND_SLIDE')
+            return
+
+        if self.stage == 'EXTEND_SLIDE':
+            self.publish_platform_target(
+                self.pickup_slide_extend_x_mm,
+                self.screw_retract_x_mm,
+                self.grab_open_value,
+            )
+            self.publish_running('extend_slide', 'extending_slide_fixed_distance')
+            if self.stage_elapsed() >= self.slide_extend_wait_sec:
+                self.goto('EXTEND_SCREW')
+            return
+
+        if self.stage == 'EXTEND_SCREW':
+            self.publish_platform_target(
+                self.pickup_slide_extend_x_mm,
+                self.pickup_screw_extend_x_mm,
+                self.grab_open_value,
+            )
+            self.publish_running('extend_screw', 'extending_screw_fixed_distance')
+            if self.stage_elapsed() >= self.screw_extend_wait_sec:
+                self.goto('CLOSE_GRIPPER')
+            return
+
+        if self.stage == 'CLOSE_GRIPPER':
+            self.publish_platform_target(
+                self.pickup_slide_extend_x_mm,
+                self.pickup_screw_extend_x_mm,
+                self.grab_close_value,
+            )
+            self.publish_running('close_gripper', 'closing_gripper')
+            if self.stage_elapsed() >= self.close_wait_sec:
+                self.goto('RECORD_Z_BEFORE_PULLBACK')
+            return
+
+        if self.stage == 'RECORD_Z_BEFORE_PULLBACK':
+            if self.latest_target_z_m is None or self.last_target_seen_time is None:
+                if self.require_z_before_pullback:
+                    self.begin_fail_recovery('no_target_z_before_pullback')
+                    return
+            elif now_s() - self.last_target_seen_time > self.z_before_pullback_max_age_sec:
+                if self.require_z_before_pullback:
+                    self.begin_fail_recovery('target_z_before_pullback_too_old')
+                    return
+
+            self.z_before_pullback_m = self.latest_target_z_m
+            self.z_end_m = self.latest_target_z_m
+            self.z_samples.clear()
+            self.last_sample_time = None
+            self.grab_verified = False
+            self.publish_running('record_z_before_pullback', 'z_before_pullback_recorded', force=True)
+            self.goto('PULLBACK_SCREW_WITH_Z_CHECK')
+            return
+
+        if self.stage == 'PULLBACK_SCREW_WITH_Z_CHECK':
+            self.publish_platform_target(
+                self.pickup_slide_extend_x_mm,
+                self.screw_retract_x_mm,
+                self.grab_close_value,
+            )
+            self.update_grab_verify()
+            self.publish_running('pullback_screw_with_z_check', 'pulling_back_screw_and_checking_z')
+            if self.stage_elapsed() >= self.screw_pullback_wait_sec:
+                self.goto('PULLBACK_SLIDE_WITH_Z_CHECK')
+            return
+
+        if self.stage == 'PULLBACK_SLIDE_WITH_Z_CHECK':
+            self.publish_platform_target(
+                self.slide_retract_x_mm,
+                self.screw_retract_x_mm,
+                self.grab_close_value,
+            )
+            self.update_grab_verify()
+            self.publish_running('pullback_slide_with_z_check', 'pulling_back_slide_and_checking_z')
+            if self.stage_elapsed() >= self.slide_pullback_wait_sec:
+                self.goto('VERIFY_GRAB_RESULT')
+            return
+
+        if self.stage == 'VERIFY_GRAB_RESULT':
+            self.update_grab_verify()
+            if self.grab_verified:
+                self.goto('SUCCESS_HOLD_CLOSED')
+            else:
+                self.begin_fail_recovery('grab_failed_z_not_decreasing')
+            return
+
+        if self.stage == 'SUCCESS_HOLD_CLOSED':
+            self.publish_platform_target(
+                self.slide_retract_x_mm,
+                self.screw_retract_x_mm,
+                self.grab_close_value,
+            )
+            self.succeed('grab_verified_by_z_decrease')
+            return
+
+        if self.stage == 'OPEN_GRIPPER_AFTER_FAIL':
+            # 失败恢复第一步：先开夹，保持上一个机构目标位置，不要边开边收。
+            self.publish_platform_target(
+                self.last_cmd_slide_x_mm,
+                self.last_cmd_screw_x_mm,
+                self.grab_open_value,
+            )
+            self.publish_running('open_gripper_after_fail', self.fail_reason or 'opening_after_failed_grab')
+            if self.stage_elapsed() >= self.open_wait_sec:
+                self.goto('RETRACT_ALL_AFTER_FAIL')
+            return
+
+        if self.stage == 'RETRACT_ALL_AFTER_FAIL':
+            self.publish_platform_target(
+                self.slide_retract_x_mm,
+                self.screw_retract_x_mm,
+                self.grab_open_value,
+            )
+            self.publish_running('retract_all_after_fail', 'retracted_after_failed_grab')
+            if self.stage_elapsed() >= self.fail_recover_wait_sec:
+                reason = self.fail_reason or 'grab_failed_z_not_decreasing'
+                if 'opened_and_retracted' not in reason:
+                    reason += '_opened_and_retracted'
+                self.fail(reason)
+            return
+
+        # ---------------- Debug one-shot commands ----------------
+        if self.stage == 'DEBUG_OPEN_GRIPPER':
+            # Used by:
+            # - manual debug command: open_gripper
+            # - BT node ExecuteOakPackageOpenBeforeSearch
+            #
+            # Publish OPEN for open_wait_sec, report succeeded to BT,
+            # and then keep OPEN in the background during search.
+            self.publish_platform_target(
+                self.slide_retract_x_mm,
+                self.screw_retract_x_mm,
+                self.grab_open_value,
+            )
+            self.publish_running(
+                'debug_open_gripper',
+                'opening_gripper_debug_and_start_hold_open'
+            )
+
+            if self.stage_elapsed() >= self.open_wait_sec:
+                self.start_hold_open('open_gripper_succeeded')
+                self.succeed('debug_open_gripper_done_hold_open_started')
+            return
+
+        if self.stage == 'DEBUG_CLOSE_GRIPPER':
+            # Same rule as open: command close for close_wait_sec, then succeed.
+            # Do not block on feedback here.
+            self.publish_platform_target(
+                self.actual_slide_x_mm,
+                self.actual_screw_x_mm,
+                self.grab_close_value,
+            )
+            self.publish_running(
+                'debug_close_gripper',
+                'closing_gripper_debug_no_feedback_block'
+            )
+
+            if self.stage_elapsed() >= self.close_wait_sec:
+                self.succeed('debug_close_gripper_done')
+            return
+
+        if self.stage == 'DEBUG_EXTEND_SLIDE':
+            self.publish_platform_target(self.debug_target_slide_x_mm, self.actual_screw_x_mm, self.current_grab_mode_bool)
+            self.publish_running('debug_extend_slide', 'extending_slide_debug')
+            if self.stage_elapsed() >= self.slide_extend_wait_sec:
+                self.succeed('debug_extend_slide_done')
+            return
+
+        if self.stage == 'DEBUG_EXTEND_SCREW':
+            self.publish_platform_target(self.actual_slide_x_mm, self.debug_target_screw_x_mm, self.current_grab_mode_bool)
+            self.publish_running('debug_extend_screw', 'extending_screw_debug')
+            if self.stage_elapsed() >= self.screw_extend_wait_sec:
+                self.succeed('debug_extend_screw_done')
+            return
+
+        if self.stage == 'DEBUG_RETRACT_ALL':
+            # 调试缩回默认保持当前夹爪状态，不强制开/关。
+            self.publish_platform_target(self.slide_retract_x_mm, self.screw_retract_x_mm, self.current_grab_mode_bool)
+            self.publish_running('debug_retract_all', 'retracting_all_debug')
+            if self.stage_elapsed() >= max(self.screw_pullback_wait_sec, self.slide_pullback_wait_sec):
+                self.succeed('debug_retract_all_done')
+            return
+
+        self.fail(f'unknown_stage:{self.stage}')
+
+
+def main(args: Optional[List[str]] = None) -> None:
+    rclpy.init(args=args)
+    node = OakPackageGrabberNode()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()

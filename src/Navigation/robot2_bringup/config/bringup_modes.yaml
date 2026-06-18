@@ -356,6 +356,9 @@ modules:
       oak_guided_pickup_request_topic: /target_capture/oak_guided_pickup/request
       oak_guided_pickup_status_topic: /target_capture/oak_guided_pickup/status
       oak_guided_pickup_timeout_sec: 30.0
+      oak_package_grabber_request_topic: /target_capture/oak_package_grabber/request
+      oak_package_grabber_status_topic: /target_capture/oak_package_grabber/status
+      oak_package_grab_timeout_sec: 35.0
       anchor_detection_topic: /semantic/anchor_detection
       current_shelf_topic: /semantic/current_shelf
       map_frame: map
@@ -575,7 +578,7 @@ modules:
       video_width: '1920'
       video_height: '1080'
       fps: '10.0'
-      force_usb2: 'true'
+      force_usb2: 'false'
       focus_mode: manual
       manual_focus: '40'
       autofocus_mode: continuous_video
@@ -681,6 +684,20 @@ modules:
     parameters:
     - /host-home/src/target_capture/oak_guided_pickup/config/oak_guided_pickup.yaml
 
+  oak_package_grabber:
+    type: node
+    package: oak_package_grabber
+    executable: oak_package_grabber_node
+    name: oak_package_grabber_node
+    output: screen
+    delay: 10.8
+    wait_for_topic: /target_capture/oak_guided_pickup/startup_zero_done
+    wait_for_topic_type: std_msgs/msg/String
+    respawn: true
+    respawn_delay: 2.0
+    parameters:
+    - /host-home/src/target_capture/oak_package_grabber/config/oak_package_grabber.yaml
+
 modes:
   hardware:
     enable:
@@ -731,6 +748,7 @@ modes:
     - semantic_registrar
     - home_anchor_validator
     - semantic_marker_publisher
+    - oak_package_grabber
     - mission_bt
     - task_cancel_guard
     - bt_osd_overlay

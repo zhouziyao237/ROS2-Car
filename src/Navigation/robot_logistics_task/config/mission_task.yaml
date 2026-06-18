@@ -33,6 +33,9 @@ mission_btcpp_node:
     oak_guided_pickup_request_topic: /target_capture/oak_guided_pickup/request
     oak_guided_pickup_status_topic: /target_capture/oak_guided_pickup/status
     oak_guided_pickup_timeout_sec: 90.0
+    oak_package_grabber_request_topic: /target_capture/oak_package_grabber/request
+    oak_package_grabber_status_topic: /target_capture/oak_package_grabber/status
+    oak_package_grab_timeout_sec: 35.0
     package_search_timeout_sec: 25.0
     cmd_vel_topic: /cmd_vel
     datamatrix_result_json_topic: /oak/datamatrix_3d_result_json
