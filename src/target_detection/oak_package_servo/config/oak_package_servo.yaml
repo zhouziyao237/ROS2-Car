@@ -16,9 +16,9 @@ oak_package_servo_node:
     map_frame: map
 
     # Target distance: package should remain this far in front of OAK during pickup approach.
-    standoff_m: 0.65
-    min_standoff_m: 0.60
-    fine_standoff_m: 0.65
+    standoff_m: 0.45
+    min_standoff_m: 0.40
+    fine_standoff_m: 0.45
 
     # Controller gains in standard ROS/base_link Twist space after URDF rotation.
     kx: 2.0

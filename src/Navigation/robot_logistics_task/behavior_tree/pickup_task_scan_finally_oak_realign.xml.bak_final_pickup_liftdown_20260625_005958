@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="4" main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="PickupTask_WithScanFinallyOakRealign">
+      <ReceiveShelfGoal/>
+      <QueryShelfPose/>
+
+      <NavigateToShelf/>
+      <WaitNavArrive/>
+
+      <WaitNavSettle/>
+
+      <!-- 进入 OAK 搜索模式前先开夹，避免夹爪挡住包裹码 -->
+
+      <!-- 第一次 OAK 对正货架正面 -->
+            <!-- 搜索/对齐前只开爪，不推出，避免夹爪挡住包裹码 -->
+      <ExecuteOakPackageOpenBeforeSearch/>
+
+      <RequestOakPackageSearchAlign/>
+      <WaitAfterOakAlign/>
+
+      <!--
+        核心：
+        扫描成功：Scan -> OAK重新对正 -> Done
+        扫描失败：进入第二分支 -> OAK重新对正 -> AlwaysFailure
+      -->
+      <Fallback name="ScanThenFinallyOakRealign">
+        <Sequence name="ScanSuccess_ReAlign_ThenDone">
+          <ScanTargetPackageOnShelf/>
+
+          <!-- 扫描找到目标后，先缓存目标；不在扫描角度下取件 -->
+          <CacheFoundPackagePose/>
+
+          <!-- 二次货架平行对准：必须保留；不是重新搜索包裹。 -->
+          <RequestOakPackageSearchAlign/>
+          <WaitAfterOakAlign/>
+
+          <!-- 二次平行后靠近到约 50cm。 -->
+          <RequestOakServoApproach/>
+
+          <!-- 靠近后执行 OAK RGB 像素误差升降对齐：只负责升到可取件高度。 -->
+      <!--
+        Pickup finally block:
+        - Success path:
+            ExecuteOakGuidedPickup -> ExecuteOakPackageGrab -> ExecuteOakGuidedLiftDown -> PublishTaskDone
+        - Failure path:
+            If ExecuteOakGuidedPickup or ExecuteOakPackageGrab fails,
+            still execute ExecuteOakGuidedLiftDown once, then force FAILURE.
+        This guarantees the lift goes down regardless of pickup/grab result.
+      -->
+      <Fallback name="PickupGrabWithLiftDownFinally">
+        <Sequence name="PickupGrabMain">
+          <ExecuteOakGuidedPickup/>
+          <ExecuteOakPackageGrab/>
+        </Sequence>
+        <ForceFailure name="LiftDownOnPickupOrGrabFailure">
+          <ExecuteOakGuidedLiftDown/>
+        </ForceFailure>
+      </Fallback>
+
+      <!-- Success path lift-down after real grab succeeded -->
+      <ExecuteOakGuidedLiftDown/>
+
+          <PublishTaskDone/>
+        </Sequence>
+
+        <Sequence name="ScanFailure_ReAlign_ThenFail">
+          <RequestOakPackageSearchAlign/>
+          <WaitAfterOakAlign/>
+          <AlwaysFailure/>
+        </Sequence>
+      </Fallback>
+    </Sequence>
+  </BehaviorTree>
+</root>

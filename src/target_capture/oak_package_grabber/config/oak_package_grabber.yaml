@@ -14,16 +14,16 @@ oak_package_grabber_node:
     action_timeout_sec: 30.0
 
     # 第一节：平台手臂，距离由用户固定给定。
-    pickup_slide_extend_x_mm: 20.0
+    pickup_slide_extend_x_mm: 50.0
     slide_retract_x_mm: 0.0
     slide_min_x_mm: 0.0
-    slide_max_x_mm: 150.0
+    slide_max_x_mm: 60.0
 
     # 第二节：夹爪丝杆，距离由用户固定给定。
-    pickup_screw_extend_x_mm: 20.0
+    pickup_screw_extend_x_mm: 160.0
     screw_retract_x_mm: 0.0
     screw_min_x_mm: 0.0
-    screw_max_x_mm: 150.0
+    screw_max_x_mm: 180.0
 
     # 板端夹爪语义：0=open, 1=close。
     grab_open_value: true
@@ -47,8 +47,8 @@ oak_package_grabber_node:
     # 抓取判断：只在关夹后回拉阶段判断 z 是否变小。
     require_z_before_pullback: true
     z_before_pullback_max_age_sec: 1.0
-    grab_verify_min_delta_z_m: 0.06
-    grab_verify_min_samples: 4
+    grab_verify_min_delta_z_m: 0.01
+    grab_verify_min_samples: 3
     grab_verify_max_lost_sec: 0.8
     grab_verify_window_sec: 3.0
 

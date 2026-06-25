@@ -466,6 +466,20 @@ class OakGuidedPickupNode(Node):
             else:
                 msg.target_grab_mode = bool(self.last_platform_grab_mode)
 
+        # forced_keep_open_until_real_grab_final:
+        # While this node controls lift during pickup/lift_align, keep gripper OPEN.
+        # Real board semantic: true=OPEN, false=CLOSE.
+        # Exclude LIFT_DOWN_TO_ZERO so a successful grab can descend while keeping closed.
+        if hasattr(msg, 'target_grab_mode'):
+            if (
+                self.active
+                and self.state != 'LIFT_DOWN_TO_ZERO'
+                and self.pbool('keep_gripper_open_during_pickup')
+            ):
+                msg.target_grab_mode = bool(self.pbool('grab_open_value'))
+            else:
+                msg.target_grab_mode = bool(self.last_platform_grab_mode)
+
         self.platform_target_pub.publish(msg)
 
     def publish_hold_actual(self, reason: str) -> None:

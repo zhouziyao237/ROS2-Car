@@ -596,12 +596,11 @@ class OakPackageGrabberNode(Node):
 
     def on_guided_pickup_request(self, msg: String) -> None:
         # Do NOT stop hold-open when lift_align starts.
-        # Requirement: gripper must stay OPEN during search, approach, and lift_align.
-        # The oak_guided_pickup node is also patched to publish target_grab_mode=OPEN
-        # while it owns /platform/target for lift control.
-        if self.hold_open_active and self.hold_open_stop_on_guided_pickup_request:
+        # Requirement: gripper stays OPEN during search, scan, approach, and lift_align.
+        # It stops only when the real grab command starts.
+        if self.hold_open_active:
             self.get_logger().info(
-                '[hold_open] guided_pickup_request observed, but keep holding OPEN until real grab'
+                '[hold_open] guided_pickup_request observed; keep OPEN until real grab'
             )
         return
 
@@ -864,35 +863,48 @@ class OakPackageGrabberNode(Node):
             return
 
         if self.stage == 'PULLBACK_SCREW_WITH_Z_CHECK':
+            # Only this stage is valid for grab verification.
+            # OAK is mounted on the first slide, so first-slide motion moves OAK too.
+            # The useful relative z change is produced by the second screw pulling
+            # the grabbed package toward the OAK camera.
             self.publish_platform_target(
                 self.pickup_slide_extend_x_mm,
                 self.screw_retract_x_mm,
                 self.grab_close_value,
             )
             self.update_grab_verify()
-            self.publish_running('pullback_screw_with_z_check', 'pulling_back_screw_and_checking_z')
+            self.publish_running(
+                'pullback_screw_with_z_check',
+                'pulling_back_second_screw_and_checking_z_only'
+            )
             if self.stage_elapsed() >= self.screw_pullback_wait_sec:
-                self.goto('PULLBACK_SLIDE_WITH_Z_CHECK')
+                self.goto('VERIFY_GRAB_RESULT')
             return
 
         if self.stage == 'PULLBACK_SLIDE_WITH_Z_CHECK':
+            # First slide retracts the whole OAK + gripper assembly.
+            # Do NOT use z change here for grab verification.
+            # This stage only retracts the mechanism after screw-only verification succeeded.
             self.publish_platform_target(
                 self.slide_retract_x_mm,
                 self.screw_retract_x_mm,
                 self.grab_close_value,
             )
-            self.update_grab_verify()
-            self.publish_running('pullback_slide_with_z_check', 'pulling_back_slide_and_checking_z')
+            self.publish_running(
+                'pullback_slide_after_verified',
+                'retracting_first_slide_no_z_check_because_oak_moves_with_slide'
+            )
             if self.stage_elapsed() >= self.slide_pullback_wait_sec:
-                self.goto('VERIFY_GRAB_RESULT')
+                self.goto('SUCCESS_HOLD_CLOSED')
             return
 
         if self.stage == 'VERIFY_GRAB_RESULT':
-            self.update_grab_verify()
+            # Verification result is based ONLY on samples collected during
+            # PULLBACK_SCREW_WITH_Z_CHECK. Do not add slide-pullback samples here.
             if self.grab_verified:
-                self.goto('SUCCESS_HOLD_CLOSED')
+                self.goto('PULLBACK_SLIDE_WITH_Z_CHECK')
             else:
-                self.begin_fail_recovery('grab_failed_z_not_decreasing')
+                self.begin_fail_recovery('grab_failed_second_screw_z_not_decreasing')
             return
 
         if self.stage == 'SUCCESS_HOLD_CLOSED':
